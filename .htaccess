@@ -1,0 +1,154 @@
+# Wygenerowane przez scripts/produkcja.mjs – NIE edytować na serwerze (przy następnej wrzucie zniknie).
+# Źródło reguł 301: public/_redirects + scripts/przekierowania.mjs (te same co na Netlify).
+Options -Indexes -MultiViews
+DirectoryIndex index.html
+# katalog i strona o tej samej nazwie (np. /szkolenia-pabianice i szkolenia-pabianice/): bez dopisywania „/” przez Apache
+DirectorySlash Off
+ErrorDocument 404 /404.html
+AddDefaultCharset utf-8
+AddType application/manifest+json .webmanifest
+
+RewriteEngine On
+RewriteBase /
+
+# 0. OVH wdraża przez git clone – katalog .git leży w katalogu strony; nie udostępniamy go (ani innych plików z kropką poza .well-known)
+RewriteRule (^|/)\.(?!well-known/) - [F,L]
+
+# 1. ewa-gabinet.pl → www (jak na starej stronie), http → https (sposób z dokumentacji OVH: port 80)
+RewriteCond %{HTTP_HOST} ^ewa-gabinet\.pl$ [NC]
+RewriteRule ^(.*)$ https://www.ewa-gabinet.pl/$1 [R=301,L,NE]
+RewriteCond %{HTTP_HOST} ^www\.ewa-gabinet\.pl$ [NC]
+RewriteCond %{SERVER_PORT} ^80$
+RewriteRule ^(.*)$ https://www.ewa-gabinet.pl/$1 [R=301,L,NE]
+
+# 2. adresy innej domeny niż www.ewa-gabinet.pl (podgląd przed przepięciem, adres techniczny OVH): robots z Disallow
+RewriteCond %{HTTP_HOST} !^www\.ewa-gabinet\.pl$ [NC]
+RewriteRule ^robots\.txt$ robots-test.txt [L]
+
+# 3. przekierowania 301 ze starej strony WordPress (94 reguł)
+RewriteRule ^zabiegi-pabianice/wrastajace-paznokcie-kostka-arkady-2/?$ https://%{HTTP_HOST}/zabiegi-pabianice/wrastajace-paznokcie-kostka-arkady [R=301,L,NE]
+RewriteRule ^img/zabiegi/manicure-hybrydowy/manicure-hybrydowy-rozowy-z-drobinkami\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/paznokcie-zelowe/paznokcie-zelowe-rozowe-z-drobinkami.jpg [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/liporadiologia-vinci/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/lifting-rzes/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-kategorie/kolczyki/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-kategorie/swiecowanie-uszu/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-kategorie/gabinet-podologiczny/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
+RewriteRule ^zabiegi-kategorie/gabinet-kosmetyczny/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^produkty/arkada/?$ https://%{HTTP_HOST}/zabiegi-pabianice/wrastajace-paznokcie-kostka-arkady [R=301,L,NE]
+RewriteRule ^produkty/gehwol/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
+RewriteRule ^produkty/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
+RewriteRule ^feed/?$ https://%{HTTP_HOST}/rss.xml [R=301,L,NE]
+RewriteRule ^feed(/(.*))?$ https://%{HTTP_HOST}/rss.xml [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/feed/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
+RewriteRule ^author(/(.*))?$ https://%{HTTP_HOST}/o-nas [R=301,L,NE]
+RewriteRule ^wp-login\.php/?$ https://%{HTTP_HOST}/ [R=301,L,NE]
+RewriteRule ^wp-admin(/(.*))?$ https://%{HTTP_HOST}/ [R=301,L,NE]
+RewriteRule ^img/153391220_906384540190554_8341951263071868163_n-e1614194879496\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/dermapen/dermapen.jpg [R=301,L,NE]
+RewriteRule ^img/thumb29\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/grzybica-paznokci/grzybica-paznokci.jpg [R=301,L,NE]
+RewriteRule ^img/kobido-e1613478389739\.png/?$ https://%{HTTP_HOST}/img/zabiegi/kobido/kobido.png [R=301,L,NE]
+RewriteRule ^img/lunula-laser-full_ff39a3e77d8324de89287519dd051a1a-e1541415045352\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/laserowa-terapia-leczenia-grzybicy/laserowa-terapia-leczenia-grzybicy.jpg [R=301,L,NE]
+RewriteRule ^img/IMG_4885-201x300\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/laserowa-terapia-leczenia-grzybicy/laser-grzybica-paznokci-przed-i-po-4-przypadki-201x300.jpg [R=301,L,NE]
+RewriteRule ^img/IMG_4885\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/laserowa-terapia-leczenia-grzybicy/laser-grzybica-paznokci-przed-i-po-4-przypadki.jpg [R=301,L,NE]
+RewriteRule ^img/IMG_4890-288x300\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/laserowa-terapia-leczenia-grzybicy/laser-grzybica-paznokci-przed-i-po-oba-paluchy-288x300.jpg [R=301,L,NE]
+RewriteRule ^img/IMG_4890\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/laserowa-terapia-leczenia-grzybicy/laser-grzybica-paznokci-przed-i-po-oba-paluchy.jpg [R=301,L,NE]
+RewriteRule ^img/27460026_1656757987718438_3793780818286170752_n-e1517958326365\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/lifting-rzes/lifting-rzes.jpg [R=301,L,NE]
+RewriteRule ^img/27460026_1656757987718438_3793780818286170752_n-1-300x300\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/lifting-rzes/lifting-rzes-zabieg-i-efekt-300x300.jpg [R=301,L,NE]
+RewriteRule ^img/27460026_1656757987718438_3793780818286170752_n-1\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/lifting-rzes/lifting-rzes-zabieg-i-efekt.jpg [R=301,L,NE]
+RewriteRule ^img/27654787_1656757894385114_4208133253779474468_n-1-300x300\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/lifting-rzes/lifting-rzes-przed-i-po-1-300x300.jpg [R=301,L,NE]
+RewriteRule ^img/27654787_1656757894385114_4208133253779474468_n-1\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/lifting-rzes/lifting-rzes-przed-i-po-1.jpg [R=301,L,NE]
+RewriteRule ^img/27540810_1656758057718431_8337045655867133605_n-300x300\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/lifting-rzes/lifting-rzes-przed-i-po-2-300x300.jpg [R=301,L,NE]
+RewriteRule ^img/27540810_1656758057718431_8337045655867133605_n\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/lifting-rzes/lifting-rzes-przed-i-po-2.jpg [R=301,L,NE]
+RewriteRule ^img/liporadiologia\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/liporadiologia-vinci/liporadiologia-vinci.jpg [R=301,L,NE]
+RewriteRule ^img/654-300x101\.png/?$ https://%{HTTP_HOST}/img/zabiegi/liporadiologia-vinci/liporadiologia-cellulit-przed-i-po-300x101.png [R=301,L,NE]
+RewriteRule ^img/654\.png/?$ https://%{HTTP_HOST}/img/zabiegi/liporadiologia-vinci/liporadiologia-cellulit-przed-i-po.png [R=301,L,NE]
+RewriteRule ^img/thumb12\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/manicure-hybrydowy/manicure-hybrydowy.jpg [R=301,L,NE]
+RewriteRule ^img/manicure-tytanowe-e1765260942622\.png/?$ https://%{HTTP_HOST}/img/zabiegi/manicure-tytanowe/manicure-tytanowe.png [R=301,L,NE]
+RewriteRule ^img/thumb21\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/masaz-pojedrniajacy-antycellilutowy-z-bankami-chinskimi/masaz-pojedrniajacy-antycellilutowy-z-bankami-chinskimi.jpg [R=301,L,NE]
+RewriteRule ^img/thumb24\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/masaze-poprawiajace-zdrowie-i-kondycje-fizyczna/masaze-poprawiajace-zdrowie-i-kondycje-fizyczna.jpg [R=301,L,NE]
+RewriteRule ^img/thumb4\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/mikrodermabrazja/mikrodermabrazja.jpg [R=301,L,NE]
+RewriteRule ^img/thumb31\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/modzele/modzele.jpg [R=301,L,NE]
+RewriteRule ^img/ProFacial_okladka-e1728052607190\.jpeg/?$ https://%{HTTP_HOST}/img/zabiegi/oczyszczanie-wodorowe-pro-facial/oczyszczanie-wodorowe-pro-facial.jpeg [R=301,L,NE]
+RewriteRule ^img/thumb13\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/paznokcie-zelowe/paznokcie-zelowe.jpg [R=301,L,NE]
+RewriteRule ^img/thumb36\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/pedicure-kosmetyczny/pedicure-kosmetyczny.jpg [R=301,L,NE]
+RewriteRule ^img/05_1024x1024_800x_1024x1024_8a61b2d4-41d0-4b93-85ff-f9229ef65b4c_600x@2x-e1541516628564\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/pedicure-podologiczny/pedicure-podologiczny.jpg [R=301,L,NE]
+RewriteRule ^img/thumb1\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/peeling-kawitacyjny/peeling-kawitacyjny.jpg [R=301,L,NE]
+RewriteRule ^img/unnamed-e1612121170725\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/peeling-pq-age-evolution/peeling-pq-age-evolution.jpg [R=301,L,NE]
+RewriteRule ^img/thumb34\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/pekajace-piety/pekajace-piety.jpg [R=301,L,NE]
+RewriteRule ^img/384547468_1480373486131167_2463704543051435770_n-1-e1699199154165\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/pielegnacja-brwi/pielegnacja-brwi.jpg [R=301,L,NE]
+RewriteRule ^img/7edf8de4--169x300\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/pielegnacja-brwi/stylizacja-brwi-efekt-portret-169x300.jpg [R=301,L,NE]
+RewriteRule ^img/7edf8de4-\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/pielegnacja-brwi/stylizacja-brwi-efekt-portret.jpg [R=301,L,NE]
+RewriteRule ^img/008622c7--300x169\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/pielegnacja-brwi/stylizacja-brwi-efekt-zblizenie-300x169.jpg [R=301,L,NE]
+RewriteRule ^img/008622c7-\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/pielegnacja-brwi/stylizacja-brwi-efekt-zblizenie.jpg [R=301,L,NE]
+RewriteRule ^img/thumb-przeklowanie-dzieci\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/przekluwanie-uszu-dzieciom/przekluwanie-uszu-dzieciom.jpg [R=301,L,NE]
+RewriteRule ^img/384546133_829194718674897_6009536161261638331_n-e1696441164524\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/refleksoterapia/refleksoterapia.jpg [R=301,L,NE]
+RewriteRule ^img/thumb32\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/stopa-cukrzycowa/stopa-cukrzycowa.jpg [R=301,L,NE]
+RewriteRule ^img/thumb2\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/swiecowanie-uszu/swiecowanie-uszu.jpg [R=301,L,NE]
+RewriteRule ^img/facetaping\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/taping-twarzy/taping-twarzy.jpg [R=301,L,NE]
+RewriteRule ^img/thumb30\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/usuwanie-odciskow/usuwanie-odciskow.jpg [R=301,L,NE]
+RewriteRule ^img/kosta_arkady_pabianice\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/wrastajace-paznokcie-kostka-arkady/wrastajace-paznokcie-kostka-arkady.jpg [R=301,L,NE]
+RewriteRule ^img/logo\.png/?$ https://%{HTTP_HOST}/img/gabinet/logo.png [R=301,L,NE]
+RewriteRule ^img/plansza_informacyjna\.png/?$ https://%{HTTP_HOST}/img/gabinet/plansza-pfr.png [R=301,L,NE]
+RewriteRule ^img/thumb33\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/wrastajace-paznokcie-kostka-arkady/wrastajace-paznokcie-kostka-arkady.jpg [R=301,L,NE]
+RewriteRule ^img/logo-menu\.png/?$ https://%{HTTP_HOST}/img/gabinet/logo.png [R=301,L,NE]
+RewriteRule ^img/ewa\.png/?$ https://%{HTTP_HOST}/o-nas [R=301,L,NE]
+RewriteRule ^img/podstawy\.jpg/?$ https://%{HTTP_HOST}/szkolenia-pabianice/podstawy-podologii-wprowadzenie-do-zawodu [R=301,L,NE]
+RewriteRule ^wp-content/uploads/2014/02(/(.*))?$ https://%{HTTP_HOST}/img/$2 [R=301,L,NE]
+RewriteRule ^wp-content/uploads/2014/09(/(.*))?$ https://%{HTTP_HOST}/img/$2 [R=301,L,NE]
+RewriteRule ^wp-content/uploads/2014/12(/(.*))?$ https://%{HTTP_HOST}/img/$2 [R=301,L,NE]
+RewriteRule ^wp-content/uploads/2015/10(/(.*))?$ https://%{HTTP_HOST}/img/$2 [R=301,L,NE]
+RewriteRule ^wp-content/uploads(/(.*))?$ https://%{HTTP_HOST}/img/$2 [R=301,L,NE]
+RewriteRule ^wp-content/themes/wp_ewa/_img(/(.*))?$ https://%{HTTP_HOST}/img/$2 [R=301,L,NE]
+RewriteRule ^wp-content/themes/wp_ewa(/(.*))?$ https://%{HTTP_HOST}/img/$2 [R=301,L,NE]
+RewriteRule ^sitemap_index\.xml/?$ https://%{HTTP_HOST}/sitemap-index.xml [R=301,L,NE]
+RewriteRule ^sitemap\.xml/?$ https://%{HTTP_HOST}/sitemap-index.xml [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/oczyszczanie-wodorowe-pro-facial/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/dermapen/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/peeling-pq-age-evolution/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/mikrodermabrazja/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/peeling-kawitacyjny/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/pielegnacja-brwi/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/pedicure-kosmetyczny/?$ https://%{HTTP_HOST}/zabiegi-pabianice/pedicure-podologiczny [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/masaz-pojedrniajacy-antycellilutowy-z-bankami-chinskimi/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/refleksoterapia/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/masaze-poprawiajace-zdrowie-i-kondycje-fizyczna/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/przekluwanie-uszu-dzieciom/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/swiecowanie-uszu/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-kategorie/twarz/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-kategorie/dlonie/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-kategorie/stopy/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
+RewriteRule ^zabiegi-kategorie/masaze/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-kategorie/cialo/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+RewriteRule ^zabiegi-kategorie/upiekszanie-okolic-oka/?$ https://%{HTTP_HOST}/gabinet-kosmetyczny [R=301,L,NE]
+
+# 4. stare zakończenia: /index.html → /, /strona.html → /strona (tylko prośby z przeglądarki, nie wewnętrzne przepisanie)
+RewriteCond %{THE_REQUEST} ^[A-Z]+\s/(.*/)?index\.html[\s?]
+RewriteRule ^ https://%{HTTP_HOST}/%1 [R=301,L,NE]
+RewriteCond %{THE_REQUEST} ^[A-Z]+\s/([^?\s]+)\.html[\s?]
+RewriteRule ^ https://%{HTTP_HOST}/%1 [R=301,L,NE]
+
+# 5. bez końcowego „/” (trailingSlash: 'never' w astro.config.mjs – adresy jak na starej stronie)
+RewriteCond %{REQUEST_URI} ^/.+/$
+RewriteRule ^(.+)/$ https://%{HTTP_HOST}/$1 [R=301,L,NE]
+
+# 6. /o-nas → o-nas.html (wewnętrznie, adres w pasku bez .html)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME}.html -f
+RewriteRule ^(.+)$ $1.html [L]
+
+<IfModule mod_headers.c>
+  # podgląd i adres techniczny: nie indeksować
+  <If "tolower(%{HTTP_HOST}) != 'www.ewa-gabinet.pl'">
+    Header set X-Robots-Tag "noindex, nofollow"
+  </If>
+  # pliki z hashem w nazwie (CSS, JS, zdjęcia z astro:assets) – można trzymać w przeglądarce rok
+  <If "%{REQUEST_URI} =~ m#^/_astro/#">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+  </If>
+  # zdjęcia z public/img bez hasha (stare adresy z Google Grafiki) – 30 dni; OVH domyślnie dawało 15 min (Lighthouse 2026-11-14)
+  <If "%{REQUEST_URI} =~ m#^/img/#">
+    Header set Cache-Control "public, max-age=2592000"
+  </If>
+  Header set X-Content-Type-Options "nosniff"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>

@@ -1,0 +1,5 @@
+# Wersja TESTOWA (Bartek 2026-11-14): Netlify (ewa-gabinet-pabianice.netlify.app) zostaje na stałe stroną testową,
+# więc tu na stałe blokada indeksowania. Produkcja (ewa-gabinet.pl na OVH) dostaje robots.txt z Allow + Sitemap
+# z scripts/produkcja.mjs (npm run build:produkcja), a ten plik zostaje tam jako robots-test.txt dla adresów podglądu.
+User-agent: *
+Disallow: /
