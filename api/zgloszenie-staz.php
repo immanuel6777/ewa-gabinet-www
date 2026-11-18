@@ -18,16 +18,42 @@ const STRONA_FORMULARZA = '/szkolenia-pabianice/staz-podologiczny#zgloszenie';
 
 $konfigPlik = dirname(__DIR__, 2) . '/konfig/staz.php';
 
-// strona błędu bez Astro (PHP nie zna kontakt.yaml): numer = telefon „podologia” z src/data/kontakt.yaml – przy zmianie poprawić też tu
-function blad(int $kod, string $tekst): void {
+// formularz z JS (motion.ts) wysyła w tle i prosi o JSON – błędy wracają pod pola, wpisane dane zostają (2026-11-19)
+$json = stripos((string)($_SERVER['HTTP_ACCEPT'] ?? ''), 'application/json') !== false;
+
+function odpowiedzJson(int $kod, array $dane): void {
+    http_response_code($kod);
+    header('Content-Type: application/json; charset=utf-8');
+    header('X-Robots-Tag: noindex');
+    echo json_encode($dane, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+function sukces(): void {
+    global $json;
+    if ($json) odpowiedzJson(200, ['ok' => true, 'dalej' => STRONA_DZIEKUJEMY]);
+    header('Location: ' . STRONA_DZIEKUJEMY, true, 303);
+    exit;
+}
+
+// strona błędu bez JS (PHP nie zna Astro ani kontakt.yaml): kolory jak w src/styles/tokens.css, numer = telefon „podologia”
+// z src/data/kontakt.yaml – przy zmianie poprawić też tu. „Wróć” = przycisk Wstecz przeglądarki, który zwykle zachowuje wpisane dane.
+function blad(int $kod, string $tekst, array $bledy = []): void {
+    global $json;
+    if ($json) odpowiedzJson($kod, ['ok' => false, 'komunikat' => $tekst, 'bledy' => (object)$bledy]);
     http_response_code($kod);
     header('Content-Type: text/html; charset=utf-8');
     header('X-Robots-Tag: noindex');
     $t = htmlspecialchars($tekst, ENT_QUOTES, 'UTF-8');
+    $lista = $bledy ? '<ul>' . implode('', array_map(static fn($b) => '<li>' . htmlspecialchars($b, ENT_QUOTES, 'UTF-8') . '</li>', $bledy)) . '</ul>' : '';
     echo '<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-        . '<title>Zgłoszenie na staż</title><style>body{font:18px/1.6 sans-serif;max-width:640px;margin:48px auto;padding:0 20px;color:#1f3b36}'
-        . 'a{color:inherit}</style></head><body><h1>Nie udało się wysłać zgłoszenia</h1><p>' . $t . '</p>'
-        . '<p><a href="' . STRONA_FORMULARZA . '">Wróć do formularza</a> albo zadzwoń: <a href="tel:+48603129364">603 129 364</a>.</p></body></html>';
+        . '<meta name="robots" content="noindex"><title>Zgłoszenie na staż – Gabinet EWA</title><style>'
+        . 'body{margin:0;background:#EAF2EE;color:#17504B;font:18px/1.6 Lato,system-ui,sans-serif}'
+        . 'main{max-width:640px;margin:48px auto;padding:32px 24px;background:#fff;border-radius:24px}'
+        . 'h1{font-weight:300;font-size:30px;line-height:1.2;margin:0 0 16px}ul{padding-left:1.2em}'
+        . '.przycisk{display:inline-flex;align-items:center;min-height:52px;padding:0 28px;border-radius:999px;background:#236E66;color:#fff;font-weight:700;text-decoration:none}'
+        . 'a{color:inherit}</style></head><body><main><h1>Nie udało się wysłać zgłoszenia</h1><p>' . $t . '</p>' . $lista
+        . '<p><a class="przycisk" href="' . STRONA_FORMULARZA . '" onclick="if(history.length>1){history.back();return false}">Wróć do formularza</a></p>'
+        . '<p>Albo zadzwoń: <a href="tel:+48603129364">603 129 364</a>.</p></main></body></html>';
     exit;
 }
 
@@ -37,10 +63,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
 }
 
 // pułapka na boty: pole ukryte przed ludźmi; wypełnione = udajemy sukces, nic nie zapisujemy
-if (trim((string)($_POST['strona_www'] ?? '')) !== '') {
-    header('Location: ' . STRONA_DZIEKUJEMY, true, 303);
-    exit;
-}
+if (trim((string)($_POST['strona_www'] ?? '')) !== '') sukces();
 
 // --- pola (nazwy jak w FormularzStaz.astro i src/data/staz.ts → opcje) ---
 function pole(string $nazwa, int $max): string {
@@ -69,15 +92,19 @@ $d = [
     'zgoda_terminy' => isset($_POST['zgoda_terminy']),
 ];
 
-$braki = [];
-if ($d['imie'] === '') $braki[] = 'imię';
-if (!preg_match('/^[0-9 +()-]{9,30}$/', $d['telefon'])) $braki[] = 'numer telefonu';
-if (!filter_var($d['email'], FILTER_VALIDATE_EMAIL)) $braki[] = 'adres e-mail';
-if ($d['kurs'] === '') $braki[] = 'odpowiedź o kursie podologicznym';
-if (!$d['zgoda_kontakt']) $braki[] = 'zgodę na kontakt w sprawie zgłoszenia';
-if ($braki) blad(422, 'Uzupełnij: ' . implode(', ', $braki) . '.');
+// te same reguły i teksty co w motion.ts (formularz stażu); telefon: 9–15 cyfr, poza cyframi tylko spacje + - ( )
+$cyfry = strlen(preg_replace('/\D/', '', $d['telefon']) ?? '');
+$bledy = [];
+if ($d['imie'] === '') $bledy['imie'] = 'Wpisz imię.';
+if ($d['telefon'] === '') $bledy['telefon'] = 'Wpisz numer telefonu – oddzwonimy.';
+elseif ($cyfry < 9 || $cyfry > 15 || preg_match('/[^\d\s+()\-]/', $d['telefon'])) $bledy['telefon'] = 'Sprawdź numer – potrzebujemy co najmniej 9 cyfr, np. 600 123 456.';
+if ($d['email'] === '') $bledy['email'] = 'Wpisz adres e-mail.';
+elseif (!filter_var($d['email'], FILTER_VALIDATE_EMAIL)) $bledy['email'] = 'Sprawdź adres e-mail – np. imie@poczta.pl.';
+if ($d['kurs'] === '') $bledy['kurs'] = 'Zaznacz jedną odpowiedź.';
+if (!$d['zgoda_kontakt']) $bledy['zgoda_kontakt'] = 'Zaznacz zgodę – bez niej nie możemy się odezwać.';
+if ($bledy) blad(422, 'Popraw zaznaczone pola.', $bledy);
 
-if (!is_file($konfigPlik)) blad(500, 'Formularz nie jest jeszcze skonfigurowany.');
+if (!is_file($konfigPlik)) blad(500, 'Formularz nie jest jeszcze skonfigurowany. Zadzwoń: 603 129 364.');
 $k = require $konfigPlik;
 
 // --- 1. baza ---
@@ -152,6 +179,6 @@ $wyslano = @mail(implode(', ', $k['mail_do']), $temat, implode("\n", $linie), im
 if (!$wyslano) error_log('zgloszenie-staz: mail() nie wysłał powiadomienia');
 
 // nigdzie nie zapisane i nikt nie dostał maila – lepiej powiedzieć wprost niż udawać sukces
-if (!$zapisanoWBazie && !$zapisanoWCsv && !$wyslano) blad(500, 'Wystąpił błąd serwera.');
+if (!$zapisanoWBazie && !$zapisanoWCsv && !$wyslano) blad(500, 'Wystąpił błąd serwera. Spróbuj jeszcze raz za chwilę albo zadzwoń: 603 129 364.');
 
-header('Location: ' . STRONA_DZIEKUJEMY, true, 303);
+sukces();

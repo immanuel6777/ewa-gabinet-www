@@ -40,7 +40,7 @@
 <link rel="stylesheet" href="/_astro/TloHero.BwPrg9g-.css">
 <style>.naglowek-sekcji[data-astro-cid-crmztafn]{text-align:center;flex-direction:column;align-items:center;gap:10px;display:flex}h2[data-astro-cid-crmztafn]{font-size:var(--fs-h2-m);line-height:1.15;font-weight:var(--fw-light);margin:0}.lead[data-astro-cid-crmztafn]{font-size:var(--fs-body-m);color:var(--c-ink-muted);max-width:560px;margin:0}.d[data-astro-cid-crmztafn]{display:none}@media (width>=900px){.naglowek-sekcji[data-astro-cid-crmztafn]{gap:14px}h2[data-astro-cid-crmztafn]{font-size:var(--fs-h2)}.lead[data-astro-cid-crmztafn]{font-size:var(--fs-body)}.d[data-astro-cid-crmztafn]{display:inline}.m[data-astro-cid-crmztafn]{display:none}}
 </style>
-<link rel="stylesheet" href="/_astro/staz-podologiczny.Pyzo6srw.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script><script defer src="https://cloud.umami.is/script.js" data-website-id="db84da46-6eb8-4a3a-85e0-8a0481d5ea6d" data-domains="www.ewa-gabinet.pl,ewa-gabinet.pl"></script></head>
+<link rel="stylesheet" href="/_astro/staz-podologiczny.ChQNoimY.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script><script defer src="https://cloud.umami.is/script.js" data-website-id="db84da46-6eb8-4a3a-85e0-8a0481d5ea6d" data-domains="www.ewa-gabinet.pl,ewa-gabinet.pl"></script></head>
   <body>
     <a class="przeskocz" href="#tresc">Przejdź do treści</a>
     <header class="naglowek" data-naglowek data-astro-cid-isef26zo>
@@ -1210,21 +1210,26 @@
       <span class="eyebrow" data-astro-cid-zedojbgr><span class="kropka" aria-hidden="true" data-astro-cid-zedojbgr></span>Termin 12–16.01.2027 · 2 miejsca</span>
       <h2 id="zgl-t" data-astro-cid-gktzkqmc>Zgłoszenie na staż</h2>
       <p class="lead" data-astro-cid-gktzkqmc>Wypełnienie zajmie około dwóch minut. Na podstawie odpowiedzi sprawdzimy, czy staż jest dla Ciebie, i oddzwonimy, żeby omówić szczegóły i dofinansowanie. Zgłoszenie do niczego nie zobowiązuje.</p>
-      <form class="formularz" method="post" action="/api/zgloszenie-staz.php" accept-charset="utf-8" data-astro-cid-lfvrronx>
+      <form class="formularz" method="post" action="/api/zgloszenie-staz.php" accept-charset="utf-8" data-formularz-staz data-tel="603 129 364" data-astro-cid-lfvrronx>
+  <p class="komunikat" data-komunikat role="alert" hidden data-astro-cid-lfvrronx></p>
   <div class="rzad" data-astro-cid-lfvrronx>
     <label class="pole" data-astro-cid-lfvrronx>
       <span class="etykieta" data-astro-cid-lfvrronx>Imię</span>
-      <input name="imie" type="text" required maxlength="80" autocomplete="given-name" data-astro-cid-lfvrronx>
+      <input name="imie" type="text" required maxlength="80" autocomplete="given-name" aria-describedby="blad-imie" class="astro-lfvrronx" data-astro-cid-lfvrronx>
+      <span class="blad" id="blad-imie" hidden data-astro-cid-lfvrronx></span>
     </label>
     <label class="pole" data-astro-cid-lfvrronx>
       <span class="etykieta" data-astro-cid-lfvrronx>Telefon</span>
-      <input name="telefon" type="tel" required maxlength="30" pattern="[0-9 +()\-]{9,30}" autocomplete="tel" inputmode="tel" data-astro-cid-lfvrronx>
+      <!-- cyfry liczy JS i PHP (9–15); wzorca HTML nie ma: nawiasy w [ ] Safari z flagą v uznaje za błąd i pomija cały wzorzec -->
+      <input name="telefon" type="tel" required maxlength="30" autocomplete="tel" inputmode="tel" aria-describedby="blad-telefon" class="astro-lfvrronx" data-astro-cid-lfvrronx>
+      <span class="blad" id="blad-telefon" hidden data-astro-cid-lfvrronx></span>
     </label>
   </div>
   <div class="rzad" data-astro-cid-lfvrronx>
     <label class="pole" data-astro-cid-lfvrronx>
       <span class="etykieta" data-astro-cid-lfvrronx>E-mail</span>
-      <input name="email" type="email" required maxlength="120" autocomplete="email" data-astro-cid-lfvrronx>
+      <input name="email" type="email" required maxlength="120" autocomplete="email" aria-describedby="blad-email" class="astro-lfvrronx" data-astro-cid-lfvrronx>
+      <span class="blad" id="blad-email" hidden data-astro-cid-lfvrronx></span>
     </label>
     <label class="pole" data-astro-cid-lfvrronx>
       <span class="etykieta" data-astro-cid-lfvrronx>Miejscowość <span class="opcja" data-astro-cid-lfvrronx>(nieobowiązkowo)</span></span>
@@ -1232,9 +1237,10 @@
     </label>
   </div>
 
-  <fieldset class="wybory" data-astro-cid-lfvrronx>
+  <fieldset class="wybory" aria-describedby="blad-kurs" data-astro-cid-lfvrronx>
     <legend class="etykieta" data-astro-cid-lfvrronx>Czy masz za sobą kurs podologiczny?</legend>
     <label class="wybor" data-astro-cid-lfvrronx><input type="radio" name="kurs" value="tak" required data-astro-cid-lfvrronx><span data-astro-cid-lfvrronx>Tak, ukończyłam kurs podologiczny</span></label><label class="wybor" data-astro-cid-lfvrronx><input type="radio" name="kurs" value="w-trakcie" data-astro-cid-lfvrronx><span data-astro-cid-lfvrronx>Jestem w trakcie kursu lub studiów</span></label><label class="wybor" data-astro-cid-lfvrronx><input type="radio" name="kurs" value="nie" data-astro-cid-lfvrronx><span data-astro-cid-lfvrronx>Nie, jeszcze nie</span></label>
+    <span class="blad" id="blad-kurs" hidden data-astro-cid-lfvrronx></span>
   </fieldset>
   <label class="pole" data-astro-cid-lfvrronx>
     <span class="etykieta" data-astro-cid-lfvrronx>Jaki kurs i kiedy? <span class="opcja" data-astro-cid-lfvrronx>(nieobowiązkowo)</span></span>
@@ -1281,9 +1287,10 @@
 
   <div class="zgody" data-astro-cid-lfvrronx>
     <label class="zgoda" data-astro-cid-lfvrronx>
-      <input type="checkbox" name="zgoda_kontakt" required data-astro-cid-lfvrronx>
+      <input type="checkbox" name="zgoda_kontakt" required aria-describedby="blad-zgoda_kontakt" class="astro-lfvrronx" data-astro-cid-lfvrronx>
       <span data-astro-cid-lfvrronx>Zgadzam się na kontakt telefoniczny i mailowy w sprawie tego zgłoszenia. Zasady przetwarzania danych: <a href="/polityka-prywatnosci#staz" data-astro-cid-lfvrronx>polityka prywatności</a>.</span>
     </label>
+    <span class="blad" id="blad-zgoda_kontakt" hidden data-astro-cid-lfvrronx></span>
     <label class="zgoda" data-astro-cid-lfvrronx>
       <input type="checkbox" name="zgoda_terminy" data-astro-cid-lfvrronx>
       <span data-astro-cid-lfvrronx>Chcę dostawać informacje o kolejnych terminach stażu i szkoleń <span class="opcja" data-astro-cid-lfvrronx>(nieobowiązkowo, możesz wycofać w każdej chwili)</span>.</span>
@@ -1292,7 +1299,7 @@
 
   <!-- ten sam wygląd co Przycisk.astro (klasy z global.css), ale <button>, bo wysyła formularz -->
   <button class="przycisk lg z-ikona wyslij" type="submit" data-ikona="strzalka" data-astro-cid-lfvrronx>
-    <span class="tekst-1" data-astro-cid-lfvrronx>Wyślij zgłoszenie</span>
+    <span class="tekst-1" data-tekst data-astro-cid-lfvrronx>Wyślij zgłoszenie</span>
     <span class="kolo-ikony" aria-hidden="true" data-astro-cid-lfvrronx><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   
   
@@ -1868,6 +1875,6 @@ Beata M. Stażystka<span class="cudzyslow zam" aria-hidden="true" data-astro-cid
   <svg class="strzalka" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" data-astro-cid-kwdr2zt4><path d="M12 19V5M6 11l6-6 6 6" data-astro-cid-kwdr2zt4></path></svg>
 </button>
 
-    <script type="module" src="/_astro/Baza.astro_astro_type_script_index_0_lang.CdU1UrZh.js"></script>
+    <script type="module" src="/_astro/Baza.astro_astro_type_script_index_0_lang.sNbvsw38.js"></script>
   </body>
 </html>
