@@ -86,7 +86,8 @@ $d = [
     'zajecie' => wybor('zajecie', ['kosmetyczka', 'gabinet-podologiczny', 'pedicure', 'zmiana-zawodu', 'inne']),
     'zabiegi' => wybor('zabiegi', ['tak', 'czasem', 'nie']),
     'dofinansowanie' => wybor('dofinansowanie', ['kfs', 'bur-region', 'sama', 'nie-wiem']),
-    'termin' => wybor('termin', ['2027-01', 'kolejny']),
+    // termin: wartość z src/data/staz.ts (RRRR-MM) albo „kolejny”; checkbox – może go nie być (sam zapis na powiadomienia)
+    'termin' => preg_match('/^(\d{4}-\d{2}|kolejny)$/', (string)($_POST['termin'] ?? '')) ? (string)$_POST['termin'] : '',
     'wiadomosc' => pole('wiadomosc', 1000),
     'zgoda_kontakt' => isset($_POST['zgoda_kontakt']),
     'zgoda_terminy' => isset($_POST['zgoda_terminy']),
@@ -101,6 +102,8 @@ elseif ($cyfry < 9 || $cyfry > 15 || preg_match('/[^\d\s+()\-]/', $d['telefon'])
 if ($d['email'] === '') $bledy['email'] = 'Wpisz adres e-mail.';
 elseif (!filter_var($d['email'], FILTER_VALIDATE_EMAIL)) $bledy['email'] = 'Sprawdź adres e-mail – np. imie@poczta.pl.';
 if ($d['kurs'] === '') $bledy['kurs'] = 'Zaznacz jedną odpowiedź.';
+if ($d['termin'] === '' && !$d['zgoda_terminy']) $bledy['termin'] = 'Zaznacz termin albo powiadomienia o kolejnych terminach.';
+if ($d['termin'] === '') $d['termin'] = 'kolejny';
 if (!$d['zgoda_kontakt']) $bledy['zgoda_kontakt'] = 'Zaznacz zgodę – bez niej nie możemy się odezwać.';
 if ($bledy) blad(422, 'Popraw zaznaczone pola.', $bledy);
 
