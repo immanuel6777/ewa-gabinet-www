@@ -87,7 +87,8 @@ $d = [
     'zabiegi' => wybor('zabiegi', ['tak', 'czasem', 'nie']),
     'dofinansowanie' => wybor('dofinansowanie', ['kfs', 'bur-region', 'sama', 'nie-wiem']),
     // termin: wartość z src/data/staz.ts (RRRR-MM) albo „kolejny”; checkbox – może go nie być (sam zapis na powiadomienia)
-    'termin' => preg_match('/^(\d{4}-\d{2}|kolejny)$/', (string)($_POST['termin'] ?? '')) ? (string)$_POST['termin'] : '',
+    // „-rezerwa” = lista rezerwowa przy komplecie (src/data/staz.ts → komplet(), Bartek 2026-11-20)
+  'termin' => preg_match('/^(\d{4}-\d{2}(-rezerwa)?|kolejny)$/', (string)($_POST['termin'] ?? '')) ? (string)$_POST['termin'] : '',
     'wiadomosc' => pole('wiadomosc', 1000),
     'zgoda_kontakt' => isset($_POST['zgoda_kontakt']),
     'zgoda_terminy' => isset($_POST['zgoda_terminy']),
