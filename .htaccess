@@ -13,6 +13,8 @@ RewriteBase /
 
 # 0. OVH wdraża przez git clone – katalog .git leży w katalogu strony; nie udostępniamy go (ani innych plików z kropką poza .well-known)
 RewriteRule (^|/)\.(?!well-known/) - [F,L]
+# 0b. biblioteka backendu bonów (funkcje i scenariusze testowe PHP) – tylko do include, nie z przeglądarki
+RewriteRule ^api/bon/lib/ - [F,L]
 
 # 1. ewa-gabinet.pl → www (jak na starej stronie), http → https (sposób z dokumentacji OVH: port 80)
 RewriteCond %{HTTP_HOST} ^ewa-gabinet\.pl$ [NC]
