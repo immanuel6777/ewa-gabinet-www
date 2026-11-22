@@ -7,6 +7,7 @@
 declare(strict_types=1);
 
 const BON_PDF_ADRES_SPRAWDZ = 'https://www.ewa-gabinet.pl/bon?nr='; // QR na bonie – strona sprawdzania salda (etap 4, przed LIVE)
+const BON_REGULAMIN = 'https://www.ewa-gabinet.pl/regulamin#bony'; // pełne zasady bonu (§ 14) – w PDF i w mailu (Bartek 2026-11-22)
 const BON_PDF_INK = [23, 80, 75];        // --c-ink #17504B
 const BON_PDF_MUTED = [62, 104, 99];     // --c-ink-muted #3E6863
 
@@ -145,7 +146,7 @@ function bon_pdf(array $bon, array $k): string {
     $pdf->SetFont('lato', '', $pt(16));
     $pdf->Cell($w['w'] * $s + 10, $w['h'] * $s / 2, $waznosc, 0, 0, 'L', false, '', 0, false, 'T', 'M');
 
-    // --- pod kartami: dane bonu i zasady w skrócie (pełne zasady: regulamin bonów) ---
+    // --- pod kartami: dane bonu i zasady w skrócie (pełne zasady: BON_REGULAMIN) ---
     $y = $y0 + $obrazH + 8;
     $pdf->SetTextColor(...BON_PDF_INK);
     $pdf->SetFont('latob', '', 12);
@@ -170,5 +171,11 @@ function bon_pdf(array $bon, array $k): string {
         $pdf->SetX(25);
         $pdf->MultiCell(160, 5.4, '•  ' . $z, 0, 'L', false, 1);
     }
+    // pełne zasady: klikalny link pod listą
+    $pdf->SetTextColor(...BON_PDF_MUTED);
+    $pdf->SetXY(25, $pdf->GetY() + 3);
+    $adres = str_replace('https://', '', BON_REGULAMIN);
+    $pdf->Write(5.4, 'Pełne zasady bonu: ');
+    $pdf->Write(5.4, preg_replace('/#.*/', '', $adres), BON_REGULAMIN);
     return $pdf->Output('', 'S');
 }

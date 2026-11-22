@@ -48,10 +48,12 @@ function bon_mail_tresc(array $k, array $bony): array {
         "Niewykorzystana kwota zostaje na bonie na kolejną wizytę. Bon jest ważny $miesiace od dnia zakupu.",
         'Termin wizyty można zarezerwować przez Booksy albo telefonicznie: ' . $kontakt['telefon'] . '. Przy rezerwacji wystarczy podać numer bonu.',
     ];
+    // pełne zasady bonu: regulamin § 14 (BON_REGULAMIN w pdf.php)
+    $regulamin = 'Pełne zasady bonu: ' . BON_REGULAMIN;
 
     $tekst = "Dzień dobry,\n\n$wstep\n\n";
     foreach ($lista as $l) $tekst .= "Bon {$l['kod']}: {$l['kwota']}, ważny do {$l['do']}" . ($l['dla'] !== '' ? ", dla: {$l['dla']}" : '') . "\n";
-    $tekst .= "\n" . implode("\n", $zasady) . "\n\nPozdrawiamy serdecznie\nEWA Gabinet podologiczny\nhttps://www.ewa-gabinet.pl\n";
+    $tekst .= "\n" . implode("\n", $zasady) . "\n" . $regulamin . "\n\nPozdrawiamy serdecznie\nEWA Gabinet podologiczny\nhttps://www.ewa-gabinet.pl\n";
 
     $e = static fn(string $s) => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
     $wiersze = '';
@@ -65,6 +67,7 @@ function bon_mail_tresc(array $k, array $bony): array {
         . '<p>Dzień dobry,</p><p>' . $e($wstep) . '</p>'
         . '<table style="border-collapse:collapse;margin:8px 0 16px">' . $wiersze . '</table>'
         . '<ul style="padding-left:20px;color:#3E6863">' . implode('', array_map(static fn($z) => '<li>' . $e($z) . '</li>', $zasady)) . '</ul>'
+        . '<p style="color:#3E6863">Pełne zasady bonu: <a href="' . $e(BON_REGULAMIN) . '" style="color:#17504B">regulamin bonów</a></p>'
         . '<p>Pozdrawiamy serdecznie<br>EWA Gabinet podologiczny<br><a href="https://www.ewa-gabinet.pl" style="color:#17504B">www.ewa-gabinet.pl</a></p>'
         . '</div></body></html>';
     return [$temat, $tekst, $html];

@@ -108,7 +108,7 @@ RewriteRule ^wp-content/themes/wp_ewa/_img(/(.*))?$ https://%{HTTP_HOST}/img/$2 
 RewriteRule ^wp-content/themes/wp_ewa(/(.*))?$ https://%{HTTP_HOST}/img/$2 [R=301,L,NE]
 RewriteRule ^sitemap_index\.xml/?$ https://%{HTTP_HOST}/sitemap-index.xml [R=301,L,NE]
 RewriteRule ^sitemap\.xml/?$ https://%{HTTP_HOST}/sitemap-index.xml [R=301,L,NE]
-RewriteRule ^regulamin/?$ https://%{HTTP_HOST}/regulamin-bonow [R=301,L,NE]
+RewriteRule ^regulamin-bonow/?$ https://%{HTTP_HOST}/regulamin [R=301,L,NE]
 RewriteRule ^zabiegi-pabianice/oczyszczanie-wodorowe-pro-facial/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
 RewriteRule ^zabiegi-pabianice/dermapen/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
 RewriteRule ^zabiegi-pabianice/peeling-pq-age-evolution/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
