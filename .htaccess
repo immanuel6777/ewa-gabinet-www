@@ -27,7 +27,7 @@ RewriteRule ^(.*)$ https://www.ewa-gabinet.pl/$1 [R=301,L,NE]
 RewriteCond %{HTTP_HOST} !^www\.ewa-gabinet\.pl$ [NC]
 RewriteRule ^robots\.txt$ robots-test.txt [L]
 
-# 3. przekierowania 301 ze starej strony WordPress (103 reguł)
+# 3. przekierowania 301 ze starej strony WordPress (104 reguł)
 RewriteRule ^zabiegi-pabianice/wrastajace-paznokcie-kostka-arkady-2/?$ https://%{HTTP_HOST}/zabiegi-pabianice/wrastajace-paznokcie-kostka-arkady [R=301,L,NE]
 RewriteRule ^img/zabiegi/manicure-hybrydowy/manicure-hybrydowy-rozowy-z-drobinkami\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/paznokcie-zelowe/paznokcie-zelowe-rozowe-z-drobinkami.jpg [R=301,L,NE]
 RewriteRule ^zabiegi-pabianice/liporadiologia-vinci/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
@@ -108,6 +108,7 @@ RewriteRule ^wp-content/themes/wp_ewa/_img(/(.*))?$ https://%{HTTP_HOST}/img/$2 
 RewriteRule ^wp-content/themes/wp_ewa(/(.*))?$ https://%{HTTP_HOST}/img/$2 [R=301,L,NE]
 RewriteRule ^sitemap_index\.xml/?$ https://%{HTTP_HOST}/sitemap-index.xml [R=301,L,NE]
 RewriteRule ^sitemap\.xml/?$ https://%{HTTP_HOST}/sitemap-index.xml [R=301,L,NE]
+RewriteRule ^regulamin/?$ https://%{HTTP_HOST}/regulamin-bonow [R=301,L,NE]
 RewriteRule ^zabiegi-pabianice/oczyszczanie-wodorowe-pro-facial/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
 RewriteRule ^zabiegi-pabianice/dermapen/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
 RewriteRule ^zabiegi-pabianice/peeling-pq-age-evolution/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
@@ -143,9 +144,11 @@ RewriteCond %{REQUEST_URI} ^/.+/$
 RewriteRule ^(.+)/$ https://%{HTTP_HOST}/$1 [R=301,L,NE]
 
 # 6. /o-nas → o-nas.html (wewnętrznie, adres w pasku bez .html)
+# END zamiast L (2026-11-22): przy adresach typu /blog/cokolwiek Apache dopasowywał REQUEST_FILENAME do istniejącego
+# blog.html, dopisywał .html w kółko i kończył 500 (pętla, log OVH 21.11: /blog/wp-includes/... → 500). END = bez drugiej rundy.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME}.html -f
-RewriteRule ^(.+)$ $1.html [L]
+RewriteRule ^(.+)$ $1.html [END]
 
 <IfModule mod_headers.c>
   # podgląd i adres techniczny: nie indeksować
