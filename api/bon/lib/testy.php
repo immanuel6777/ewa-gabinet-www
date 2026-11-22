@@ -283,7 +283,10 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $pj = (string)json_encode($p, JSON_UNESCAPED_UNICODE);
     $t('powrót z kasy: klucze jawne, e-mail/imię/telefon ukryte, skrót id zamówienia', $p['klucze'] === ['order_id', 'email', 'customer_name', 'phone']
         && !str_contains($pj, 'jan@') && !str_contains($pj, 'Kowalski') && !str_contains($pj, '600100200')
-        && $p['skroty']['order_id'] === substr(hash('sha256', 'ord_TEST123'), 0, 16), $pj);
+        && $p['skroty']['order_id'] === bon_powrot_skrot('ord_TEST123'), $pj);
+    // skrót z długim ciągiem cyfr (3f956e5626535769) nie może zniknąć jako „telefon” przy odczycie w log.php
+    $sk = bon_powrot_skrot('sprawdzenie-wrzuty');
+    $t('powrót z kasy: skrót przeżywa ukrywanie w podglądzie logu', $sk === '3f95-6e56-2653-5769' && bon_log_ukryj(['skroty' => ['x' => $sk]])['skroty']['x'] === $sk, $sk);
     $t('podgląd: kod bonu zamaskowany', bon_kod_maska('EWA-7KQ4-M9TX') === 'EWA-****-M9TX');
     $t('podgląd: błąd bazy bez loginu', !str_contains(bon_opis_bledu(new PDOException("SQLSTATE[HY000] [1045] Access denied for user 'yppvggk'@'10.0.0.1' (using password: YES)"))['opis'], 'yppvggk'));
 
