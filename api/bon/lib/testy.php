@@ -278,6 +278,12 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $uSlownik = json_encode(bon_log_ukryj(['custom_fields' => ['bon-dla' => 'Mama Halina'], 'invoice_data' => ['name' => 'Firma Jana']]), JSON_UNESCAPED_UNICODE);
     $t('podgląd: pola własne jako słownik – klucz jawny; name w danych faktury ukryte', str_contains((string)$uSlownik, '"bon-dla":"***"')
         && !str_contains((string)$uSlownik, 'Halina') && !str_contains((string)$uSlownik, 'Firma Jana'), (string)$uSlownik);
+    // TYMCZASOWE (Krok 0 /bony/dziekujemy): parametry powrotu z kasy – klucze jawne, dane osobowe ukryte, id zamówienia jako skrót
+    $p = bon_powrot_dane(['order_id' => 'ord_TEST123', 'email' => 'jan@example.com', 'customer_name' => 'Jan Kowalski', 'phone' => '+48600100200'], 'x');
+    $pj = (string)json_encode($p, JSON_UNESCAPED_UNICODE);
+    $t('powrót z kasy: klucze jawne, e-mail/imię/telefon ukryte, skrót id zamówienia', $p['klucze'] === ['order_id', 'email', 'customer_name', 'phone']
+        && !str_contains($pj, 'jan@') && !str_contains($pj, 'Kowalski') && !str_contains($pj, '600100200')
+        && $p['skroty']['order_id'] === substr(hash('sha256', 'ord_TEST123'), 0, 16), $pj);
     $t('podgląd: kod bonu zamaskowany', bon_kod_maska('EWA-7KQ4-M9TX') === 'EWA-****-M9TX');
     $t('podgląd: błąd bazy bez loginu', !str_contains(bon_opis_bledu(new PDOException("SQLSTATE[HY000] [1045] Access denied for user 'yppvggk'@'10.0.0.1' (using password: YES)"))['opis'], 'yppvggk'));
 

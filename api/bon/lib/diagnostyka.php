@@ -177,3 +177,14 @@ function bon_diagnostyka(array $k, int $ile = 10, int $dni = 2, int $bony = 20, 
     $wynik['blad_php'] = bon_log_php();
     return $wynik;
 }
+
+/** TYMCZASOWE (Krok 0 strony /bony/dziekujemy, Bartek 2026-11-22): parametry powrotu z kasy Easytools do dziennika zdarzeń,
+ *  żeby po zakupie testowym ustalić, który parametr niesie id zamówienia (= easytools_order_id z webhooka). Wartości przez
+ *  bon_log_ukryj (e-maile, długie liczby, klucze osobowe → ***), a obok skrót sha256 (16 znaków) każdej wartości – zamówienie
+ *  porównuje się po skrócie, bez zapisywania danych wprost. Po ustaleniu parametru usunąć razem z api/bon/powrot.php. */
+function bon_powrot_dane(array $get, string $qs): array {
+    $get = array_slice($get, 0, 30, true);
+    $skroty = [];
+    foreach ($get as $kl => $w) if (is_string($w) && $w !== '') $skroty[(string)$kl] = substr(hash('sha256', $w), 0, 16);
+    return ['klucze' => array_map('strval', array_keys($get)), 'parametry' => bon_log_ukryj($get), 'skroty' => $skroty, 'dlugosc' => strlen($qs)];
+}
