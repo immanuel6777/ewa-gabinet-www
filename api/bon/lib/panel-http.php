@@ -13,11 +13,13 @@ function bon_http_start(array $metody): array {
         bon_json(405, ['ok' => false, 'blad' => 'zła metoda']);
         exit;
     }
+    $k = null;
     try {
         $k = bon_panel_konfig(bon_konfig());
         $pdo = bon_pdo($k);
     } catch (Throwable $e) {
         error_log('bony/panel: ' . $e->getMessage());
+        if ($k) bon_zdarzenie($k, 'blad', ['plik' => basename((string)($_SERVER['SCRIPT_NAME'] ?? '')), 'etap' => 'baza'] + bon_opis_bledu($e));
         bon_json(500, ['ok' => false, 'blad' => 'Błąd serwera. Spróbuj za chwilę.']);
         exit;
     }

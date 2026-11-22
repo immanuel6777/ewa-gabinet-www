@@ -121,12 +121,12 @@ function bon_wyslij_zamowienie(array $k, PDO $pdo, string $zamowienie): array {
     $tab = bon_tabela($k, 'vouchers');
     // skrót, bo GET_LOCK przyjmuje najwyżej 64 znaki, a order_id z Easytools może mieć do 64
     $blokada = 'bon_mail_' . md5($tab . '|' . $zamowienie);
-    if (!bon_blokada($pdo, $blokada)) return ['wyslane' => 0, 'blad' => null, 'pominieto' => 'wysyłka w toku'];
+    if (!bon_blokada($pdo, $blokada)) return ['zamowienie' => $zamowienie, 'wyslane' => 0, 'blad' => null, 'pominieto' => 'wysyłka w toku'];
     try {
         $st = $pdo->prepare("SELECT * FROM $tab WHERE easytools_order_id = ? AND status = 'valid' AND mail_wyslany_at IS NULL ORDER BY nr_w_zamowieniu");
         $st->execute([$zamowienie]);
         $bony = $st->fetchAll();
-        if (!$bony) return ['wyslane' => 0, 'blad' => null, 'pominieto' => 'nic do wysłania'];
+        if (!$bony) return ['zamowienie' => $zamowienie, 'wyslane' => 0, 'blad' => null, 'pominieto' => 'nic do wysłania'];
 
         // bony tego zamówienia wysłane we wcześniejszej próbie (np. 1. paczka przeszła, 2. nie) – powiadomienie o sprzedaży i tak idzie
         $wczesniej = (int)$pdo->query("SELECT COUNT(*) FROM $tab WHERE easytools_order_id = " . $pdo->quote($zamowienie) . ' AND mail_wyslany_at IS NOT NULL')->fetchColumn();
@@ -154,7 +154,7 @@ function bon_wyslij_zamowienie(array $k, PDO $pdo, string $zamowienie): array {
                 . 'Kupujący dostał PDF mailem (' . (string)$bony[0]['buyer_email'] . ").\n"
                 . ($wczesniej ? "Dokończona wysyłka: $wczesniej bon(y) z tego zamówienia poszły we wcześniejszej próbie.\n" : ''));
         }
-        return ['wyslane' => $wyslane, 'blad' => $blad, 'pominieto' => null];
+        return ['zamowienie' => $zamowienie, 'wyslane' => $wyslane, 'blad' => $blad, 'pominieto' => null];
     } finally {
         bon_zwolnij($pdo, $blokada);
     }

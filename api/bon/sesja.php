@@ -19,6 +19,8 @@ try {
         $d = bon_http_json_body(null, false);
         [$kod, $odp, $ciastko] = bon_panel_zaloguj($k, $pdo, (string)($d['login'] ?? ''), (string)($d['haslo'] ?? ''), !empty($d['zapamietaj']),
             (string)($_SERVER['REMOTE_ADDR'] ?? '')) + [2 => null];
+        $login = strtolower(trim((string)($d['login'] ?? '')));
+        bon_zdarzenie($k, 'logowanie', ['http' => $kod, 'login' => isset($k['panel_konta'][$login]) ? $login : 'nieznany', 'zapamietaj' => !empty($d['zapamietaj'])]);
         if ($ciastko) {
             bon_panel_wyloguj($k, $pdo, $token); // stara sesja z tej przeglądarki przestaje działać
             bon_http_ciastko($ciastko['wartosc'], $ciastko['wygasa']);
@@ -33,5 +35,6 @@ try {
     }
 } catch (Throwable $e) {
     error_log('bony/sesja: ' . $e->getMessage());
+    bon_zdarzenie($k, 'blad', ['plik' => 'sesja'] + bon_opis_bledu($e));
     bon_json(500, ['ok' => false, 'blad' => 'Błąd serwera. Spróbuj za chwilę.']);
 }

@@ -8,6 +8,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/mail.php';
 require_once __DIR__ . '/panel.php';
 require_once __DIR__ . '/testy-panel.php';
+require_once __DIR__ . '/diagnostyka.php';
 
 /** Payload jak w dokumentacji Easytools (single_product_bought), z nadpisaniami. */
 function bon_test_payload(array $nadpisz = []): array {
@@ -259,6 +260,26 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $w = $zadanie ? $zadanie() : [];
     $b = bon_test_bony($k, $pdo, $p['order_id']);
     $t('Mailjet błąd → ponowiony webhook dokańcza wysyłkę', ($odp['powtorzony'] ?? false) && ($w['wyslane'] ?? 0) === 1 && $b[0]['mail_wyslany_at'] !== null, json_encode($w));
+
+    // --- podgląd diagnostyczny (log.php): dane osobowe nigdy nie wychodzą ---
+    $p = bon_test_payload(['customer_email' => 'jan.kowalski@example.com', 'customer_name' => 'Jan Kowalski', 'promo_code' => 'TEST99',
+        'invoice_data' => ['nip' => '7311314632', 'company' => 'Firma Jana', 'street' => 'ul. Prosta 1'], 'customer_phone' => '+48 600 100 200',
+        'custom_fields' => [['name' => 'bon-dla', 'value' => 'Mama Halina'], ['name' => 'bon-od', 'value' => 'Zosia']], 'uwaga' => 'kontakt: jan@example.org, tel. 600100200']);
+    $u = json_encode(bon_log_ukryj(['naglowki' => ['x-webhook-signature' => str_repeat('a', 64), 'remote-ip' => '203.0.113.7', 'x-forwarded-for' => '203.0.113.7', 'user-agent' => 'Easytools'],
+        'body' => $p]), JSON_UNESCAPED_UNICODE);
+    $wyciek = array_filter(['jan.kowalski', 'Kowalski', 'TEST99', '7311314632', 'Firma Jana', 'Prosta', '600 100 200', 'Halina', 'Zosia', 'jan@example.org', '600100200', str_repeat('a', 64), '203.0.113.7'],
+        static fn($s) => str_contains((string)$u, $s));
+    $t('podgląd: e-mail, imię, NIP, adres, telefon, Dla/Od, kod rabatowy, podpis i IP ukryte', !$wyciek, implode(', ', $wyciek));
+    $t('podgląd: zostaje to, co potrzebne do diagnozy (zdarzenie, kwota, waluta, wariant, order_id, user-agent, puste pola)',
+        str_contains((string)$u, 'single_product_bought') && str_contains((string)$u, '"amount_paid":200') && str_contains((string)$u, '"price_custom_id":"bon-200"')
+        && str_contains((string)$u, '"order_id":' . $p['order_id']) && str_contains((string)$u, 'Easytools') && str_contains((string)$u, '"customer_email":"***"'), (string)$u);
+    $t('podgląd: nazwy pól własnych (lista {name,value}) jawne, wartości ukryte', str_contains((string)$u, '"name":"bon-dla"') && str_contains((string)$u, '"name":"bon-od"')
+        && !str_contains((string)$u, 'Halina'), (string)$u);
+    $uSlownik = json_encode(bon_log_ukryj(['custom_fields' => ['bon-dla' => 'Mama Halina'], 'invoice_data' => ['name' => 'Firma Jana']]), JSON_UNESCAPED_UNICODE);
+    $t('podgląd: pola własne jako słownik – klucz jawny; name w danych faktury ukryte', str_contains((string)$uSlownik, '"bon-dla":"***"')
+        && !str_contains((string)$uSlownik, 'Halina') && !str_contains((string)$uSlownik, 'Firma Jana'), (string)$uSlownik);
+    $t('podgląd: kod bonu zamaskowany', bon_kod_maska('EWA-7KQ4-M9TX') === 'EWA-****-M9TX');
+    $t('podgląd: błąd bazy bez loginu', !str_contains(bon_opis_bledu(new PDOException("SQLSTATE[HY000] [1045] Access denied for user 'yppvggk'@'10.0.0.1' (using password: YES)"))['opis'], 'yppvggk'));
 
     // --- verify ---
     $ip = '192.0.2.' . random_int(1, 250);

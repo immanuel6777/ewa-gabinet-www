@@ -17,8 +17,12 @@ try {
     [$kod, $odp, $doMaila] = bon_panel_admin($k, $pdo, $sesja, $d) + [2 => null];
     if ($doMaila) $odp['mail'] = 'wysyłam PDF do kupującego';
     bon_json($kod, $odp);
+    // bez „opis”: zawiera wpisany powód (wolny tekst)
+    bon_zdarzenie($k, 'admin', ['http' => $kod, 'kto' => $sesja['login'], 'akcja' => (string)($d['akcja'] ?? ''),
+        'kod' => bon_kod_maska((string)(bon_normalizuj_kod((string)($d['kod'] ?? ''), (string)$k['kod_prefix']) ?? ''))] + array_intersect_key($odp, array_flip(['blad'])));
 } catch (Throwable $e) {
     error_log('bony/admin: ' . $e->getMessage());
+    bon_zdarzenie($k, 'blad', ['plik' => 'admin'] + bon_opis_bledu($e));
     bon_json(500, ['ok' => false, 'blad' => 'Błąd serwera. Spróbuj za chwilę.']);
 }
 
@@ -28,9 +32,10 @@ if ($doMaila) {
     ignore_user_abort(true);
     @set_time_limit(120);
     try {
-        bon_wyslij_zamowienie($k, $pdo, $doMaila);
+        bon_zdarzenie($k, 'mail', ['po' => 'zatwierdzenie'] + bon_wyslij_zamowienie($k, $pdo, $doMaila));
     } catch (Throwable $e) {
         error_log('bony/admin (wysyłka): ' . $e->getMessage());
+        bon_zdarzenie($k, 'blad', ['plik' => 'admin (wysyłka)'] + bon_opis_bledu($e));
         try { bon_powiadom($k, 'Bon: błąd wysyłki PDF po zatwierdzeniu', 'Zamówienie ' . $doMaila . ': ' . $e->getMessage()); } catch (Throwable) {}
     }
 }

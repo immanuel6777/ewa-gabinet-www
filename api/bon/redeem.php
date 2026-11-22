@@ -14,7 +14,10 @@ try {
     $d = bon_http_json_body($sesja);
     [$kod, $odp] = bon_panel_realizuj($k, $pdo, $sesja, $d);
     bon_json($kod, $odp);
+    bon_zdarzenie($k, $kod === 200 ? 'realizacja' : 'realizacja_odmowa', ['http' => $kod, 'kto' => $sesja['login'], 'kod' => bon_kod_maska((string)($odp['kod'] ?? ''))]
+        + array_intersect_key($odp, array_flip(['zdjeto', 'doplata', 'saldo', 'status', 'powtorzona', 'blad'])));
 } catch (Throwable $e) {
     error_log('bony/redeem: ' . $e->getMessage());
+    bon_zdarzenie($k, 'blad', ['plik' => 'redeem'] + bon_opis_bledu($e));
     bon_json(500, ['ok' => false, 'blad' => 'Błąd serwera – sprawdź saldo bonu, zanim spróbujesz ponownie.']);
 }

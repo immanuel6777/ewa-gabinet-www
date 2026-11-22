@@ -175,6 +175,34 @@ function bon_log_webhooka(array $k, string $raw, array $naglowki, ?bool $podpisO
     @file_put_contents($plik, $wpis . "\n", FILE_APPEND | LOCK_EX);
 }
 
+// --- dziennik zdarzeń (2026-11-22): co backend ZROBIŁ – wynik webhooka, wysyłka PDF, błędy, logowania, realizacje, zmiany admina.
+// Bez danych osobowych (e-maile wycinane także z treści błędów). konfig/bony-zdarzenia/RRRR-MM-DD.log (JSONL), czyta api/bon/log.php.
+// Pliki starsze niż 90 dni usuwane przy okazji. Błąd zapisu nigdy nie psuje obsługi żądania.
+function bon_zdarzenie(array $k, string $typ, array $dane = []): void {
+    try {
+        if ((string)($k['_katalog'] ?? '') === '') return;
+        $katalog = $k['_katalog'] . '/bony-zdarzenia';
+        if (!is_dir($katalog) && !@mkdir($katalog, 0700, true)) return;
+        $plik = $katalog . '/' . bon_teraz()->format('Y-m-d') . '.log';
+        if (is_file($plik) && filesize($plik) > 5 * 1024 * 1024) return;
+        $json = json_encode(['czas' => bon_teraz()->format('c'), 'typ' => $typ] + $dane, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+        $json = preg_replace('/[^\s@"]+@[^\s@"]+\.[^\s@"]+/', '***', (string)$json) ?? '';
+        @file_put_contents($plik, $json . "\n", FILE_APPEND | LOCK_EX);
+        if (random_int(1, 100) === 1) foreach (glob($katalog . '/*.log') ?: [] as $stary) if ((int)filemtime($stary) < time() - 90 * 86400) @unlink($stary);
+    } catch (Throwable) {}
+}
+
+/** Wyjątek do dziennika: klasa, kod (przy bazie numer błędu MySQL, np. 1045 = złe hasło), treść bez 'użytkownik'@'host'. */
+function bon_opis_bledu(Throwable $e): array {
+    $opis = preg_replace("/'[^']*'@'[^']*'/", "'***'@'***'", $e->getMessage()) ?? '';
+    return ['wyjatek' => get_class($e), 'kod' => $e instanceof PDOException ? ($e->errorInfo[1] ?? $e->getCode()) : $e->getCode(), 'opis' => mb_substr($opis, 0, 300)];
+}
+
+// kod bonu w dzienniku: EWA-****-AB12 (pełny numer pozwala sprawdzić saldo)
+function bon_kod_maska(string $kod): string {
+    return $kod === '' ? '' : 'EWA-****-' . substr($kod, -4);
+}
+
 // --- webhook Easytools ---
 // Dokumentacja (2026-11-21): nagłówek X-Webhook-Signature = hex HMAC-SHA256 surowego body kluczem podpisu
 // (https://easy.tools/docs/generate-webhook-signing-key). Zdarzenie z kwotą: single_product_bought

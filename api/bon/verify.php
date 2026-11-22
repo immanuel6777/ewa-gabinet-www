@@ -17,6 +17,7 @@ try {
     [$kod, $odp] = bon_obsluz_verify($k, (string)($_GET['kod'] ?? $_GET['code'] ?? ''), (string)($_SERVER['REMOTE_ADDR'] ?? ''));
 } catch (Throwable $e) {
     error_log('bony/verify: ' . $e->getMessage());
+    if (isset($k)) bon_zdarzenie($k, 'blad', ['plik' => 'verify'] + bon_opis_bledu($e));
     [$kod, $odp] = [500, ['ok' => false, 'blad' => 'błąd serwera']];
 }
 bon_json($kod, $odp);

@@ -13,5 +13,6 @@ try {
     bon_json($kod, $odp);
 } catch (Throwable $e) {
     error_log('bony/historia: ' . $e->getMessage());
+    bon_zdarzenie($k, 'blad', ['plik' => 'historia'] + bon_opis_bledu($e));
     bon_json(500, ['ok' => false, 'blad' => 'Błąd serwera. Spróbuj za chwilę.']);
 }

@@ -27,9 +27,11 @@ $poOdpowiedzi = null;
 try {
     $k = bon_konfig();
     [$kod, $odp, $poOdpowiedzi] = bon_obsluz_webhook($k, $raw, $naglowki) + [2 => null];
+    bon_zdarzenie($k, 'webhook', ['tryb' => $k['webhook_tryb'], 'http' => $kod, 'wynik' => $odp]);
 } catch (Throwable $e) {
     // 500 → sklep może ponowić; idempotencja po order_id nie dopuści do podwójnego bonu
     error_log('bony/webhook: ' . $e->getMessage());
+    if (isset($k)) bon_zdarzenie($k, 'blad', ['plik' => 'webhook'] + bon_opis_bledu($e));
     [$kod, $odp] = [500, ['ok' => false, 'blad' => 'błąd serwera']];
 }
 bon_json($kod, $odp);
@@ -40,9 +42,10 @@ if ($poOdpowiedzi) {
     ignore_user_abort(true);
     @set_time_limit(120);
     try {
-        $poOdpowiedzi();
+        bon_zdarzenie($k, 'mail', ['po' => 'webhook'] + $poOdpowiedzi());
     } catch (Throwable $e) {
         error_log('bony/webhook (wysyłka): ' . $e->getMessage());
+        bon_zdarzenie($k, 'blad', ['plik' => 'webhook (wysyłka)'] + bon_opis_bledu($e));
         try { bon_powiadom($k, 'Bon: błąd przy wysyłce PDF', 'Wyjątek: ' . $e->getMessage() . "\nPonowny webhook dokończy wysyłkę."); } catch (Throwable) {}
     }
 }
