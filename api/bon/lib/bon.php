@@ -26,10 +26,10 @@ function bon_konfig(): array {
         'kwota_jednostka' => 'pln',
         'prog_wstrzymania' => 0.8,
         'min_dowolna_pln' => 180,
-        'waznosc_miesiecy' => 12,
+        'waznosc_miesiecy' => 6,
         'kod_prefix' => 'EWA',
-        'pole_dla' => ['bon_dla', 'dla kogo (imię na bonie)'],
-        'pole_od' => ['bon_od', 'od kogo'],
+        'pole_dla' => ['bon-dla', 'bon_dla', 'dla kogo (imię na bonie)'], // Easytools zamienia „_” na „-” w nazwie pola (2026-11-21)
+        'pole_od' => ['bon-od', 'bon_od', 'od kogo'],
         'ceny' => ['bon-200' => 200, 'bon-300' => 300, 'bon-500' => 500, 'bon-dowolna' => 'dowolna'],
         'verify_limit_na_minute' => 20,
         'mail_tryb' => 'mail',
@@ -186,7 +186,8 @@ function bon_podpis_ok(array $k, string $raw, string $podpis): bool {
 }
 
 /**
- * Obsługa webhooka. Zwraca [kod HTTP, tablica odpowiedzi JSON]. Bez wyjścia na ekran – testowalne.
+ * Obsługa webhooka. Zwraca [kod HTTP, odpowiedź JSON, ?callable zadanie po odpowiedzi (wysyłka PDF, lib/mail.php)].
+ * Bez wyjścia na ekran – testowalne.
  * $naglowki: nazwy nagłówków małymi literami.
  */
 function bon_obsluz_webhook(array $k, string $raw, array $naglowki, ?callable $pdoFabryka = null): array {
@@ -308,7 +309,8 @@ function bon_obsluz_webhook(array $k, string $raw, array $naglowki, ?callable $p
             if (($e->errorInfo[0] ?? $e->getCode()) !== '23000') throw $e;
             $ile = $pdo->prepare("SELECT COUNT(*) FROM $tab WHERE easytools_order_id = ?");
             $ile->execute([$zamowienie]);
-            if ((int)$ile->fetchColumn() > 0) return [200, ['ok' => true, 'powtorzony' => true]];
+            // powtórzony webhook: bony już są; jeśli poprzednia wysyłka maila się nie udała – dokończ ją (po odpowiedzi)
+            if ((int)$ile->fetchColumn() > 0) return [200, ['ok' => true, 'powtorzony' => true], static fn() => bon_wyslij_zamowienie($k, $pdo, $zamowienie)];
             if ($proba === 3) throw $e; // trzy kolizje kodu z rzędu – nie powinno się zdarzyć
         }
     }
@@ -322,7 +324,9 @@ function bon_obsluz_webhook(array $k, string $raw, array $naglowki, ?callable $p
             'Zapłacono razem: ' . bon_zl($zaplaconoRazem) . ' zł, sztuk: ' . $ilosc,
         ]));
     }
-    return [200, ['ok' => true, 'bonow' => count($kody), 'status' => $status]];
+    // trzeci element: zadanie PO odpowiedzi 200 (PDF + mail) – webhook.php woła je po fastcgi_finish_request; wstrzymane bez maila
+    $poOdpowiedzi = $status === 'valid' ? static fn() => bon_wyslij_zamowienie($k, $pdo, $zamowienie) : null;
+    return [200, ['ok' => true, 'bonow' => count($kody), 'status' => $status], $poOdpowiedzi];
 }
 
 // --- verify (publiczny) ---

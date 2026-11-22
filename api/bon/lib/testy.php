@@ -5,6 +5,9 @@
 // Zwraca listę [nazwa, ok, szczegół]. Nic nie wypisuje. Katalog lib/ zablokowany w .htaccess produkcji.
 
 declare(strict_types=1);
+require_once __DIR__ . '/mail.php';
+require_once __DIR__ . '/panel.php';
+require_once __DIR__ . '/testy-panel.php';
 
 /** Payload jak w dokumentacji Easytools (single_product_bought), z nadpisaniami. */
 function bon_test_payload(array $nadpisz = []): array {
@@ -24,7 +27,7 @@ function bon_test_payload(array $nadpisz = []): array {
         'price_id' => 'price_test_200',
         'price_custom_id' => 'bon-200',
         'promo_code' => null,
-        'custom_fields' => ['bon_dla' => 'Mama', 'bon_od' => 'Ania'],
+        'custom_fields' => ['bon-dla' => 'Mama', 'bon-od' => 'Ania'], // nazwy pól jak w sklepie (Easytools: „_” → „-”)
         'invoice_data' => null,
     ], $nadpisz);
 }
@@ -37,12 +40,41 @@ function bon_test_konfig(array $k): array {
         'ceny' => ['bon-200' => 200, 'bon-300' => 300, 'bon-500' => 500, 'bon-dowolna' => 'dowolna'],
         'prog_wstrzymania' => 0.8,
         'min_dowolna_pln' => 180,
-        'waznosc_miesiecy' => 12,
+        'waznosc_miesiecy' => 6,
         'kod_prefix' => 'EWA',
-        'pole_dla' => ['bon_dla', 'Dla kogo (imię na bonie)'],
-        'pole_od' => ['bon_od', 'Od kogo'],
+        'pole_dla' => ['bon-dla', 'bon_dla', 'Dla kogo (imię na bonie)'],
+        'pole_od' => ['bon-od', 'bon_od', 'Od kogo'],
         'verify_limit_na_minute' => 1000,
+        // wysyłka NIGDY prawdziwa w testach (też na OVH): treść maila do pliku bony-mailjet.jsonl obok konfigu
+        'mail_tryb' => 'plik',
+        'mail_nadawca' => 'Gabinet EWA <powiadomienia@ewa-gabinet.pl>',
+        'mailjet_test_blad' => false,
+        // etap 3: konta panelu (hasła tylko testowe, hash liczony przy starcie) i lista usług z pliku obok konfigu
+        'panel_konta' => [
+            'ewa' => ['haslo' => password_hash('haslo-ewy-test', PASSWORD_DEFAULT), 'imie' => 'Ewa', 'rola' => 'realizacja'],
+            'bartek' => ['haslo' => password_hash('haslo-bartka-test', PASSWORD_DEFAULT), 'imie' => 'Bartek', 'rola' => 'admin'],
+        ],
+        'uslugi_plik' => bon_test_uslugi((string)($k['_katalog'] ?? sys_get_temp_dir())),
+        'kontakt_plik' => bon_test_kontakt((string)($k['_katalog'] ?? sys_get_temp_dir())),
     ]);
+}
+
+/** Kontakt jak z buildu (src/pages/api/bon/lib/kontakt.json.ts), zapisany obok konfigu – wartości celowo testowe. */
+function bon_test_kontakt(string $katalog): string {
+    $plik = $katalog . '/bony-test-kontakt.json';
+    file_put_contents($plik, json_encode(['telefon' => '600 000 001', 'ulica' => 'ul. Testowa 1', 'miasto' => 'Pabianice'], JSON_UNESCAPED_UNICODE));
+    return $plik;
+}
+
+/** Lista usług jak z buildu (src/pages/api/bon/lib/uslugi.json.ts), zapisana obok konfigu. */
+function bon_test_uslugi(string $katalog): string {
+    $plik = $katalog . '/bony-test-uslugi.json';
+    file_put_contents($plik, json_encode(['grupy' => [['nazwa' => 'Testowe', 'pozycje' => [
+        ['id' => 'pedicure~0', 'nazwa' => 'Pedicure podologiczny podstawowy', 'cena' => 180],
+        ['id' => 'klamra~0', 'nazwa' => 'Klamra podologiczna', 'cena' => 180, 'od' => true],
+        ['id' => 'wkladka~0', 'nazwa' => 'Wkładka indywidualna', 'cena' => 180, 'cena_do' => 250],
+    ]]]], JSON_UNESCAPED_UNICODE));
+    return $plik;
 }
 
 /** Wysyła webhook przez bon_obsluz_webhook; $podpis null = poprawny podpis. */
@@ -82,10 +114,10 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $p = bon_test_payload();
     [$kodHttp, $odp] = bon_test_webhook($k, $pdo, $p);
     $b = bon_test_bony($k, $pdo, $p['order_id']);
-    $oczekWaznosc = bon_waznosc(bon_teraz(), 12);
+    $oczekWaznosc = bon_waznosc(bon_teraz(), 6);
     $t('webhook poprawny: 200 i jeden bon', $kodHttp === 200 && count($b) === 1, json_encode($odp));
     $t('webhook poprawny: saldo = wartość = zapłacono = 200.00', $b && $zl($b[0]['initial_pln']) === '200.00' && $zl($b[0]['balance_pln']) === '200.00' && $zl($b[0]['paid_pln']) === '200.00');
-    $t('webhook poprawny: status valid, ważność = zakup + 12 mies.', $b && $b[0]['status'] === 'valid' && substr((string)$b[0]['expires_at'], 0, 10) === $oczekWaznosc, $b ? $b[0]['expires_at'] . ' vs ' . $oczekWaznosc : '');
+    $t('webhook poprawny: status valid, ważność = zakup + 6 mies.', $b && $b[0]['status'] === 'valid' && substr((string)$b[0]['expires_at'], 0, 10) === $oczekWaznosc, $b ? $b[0]['expires_at'] . ' vs ' . $oczekWaznosc : '');
     $t('webhook poprawny: Dla/Od z pól własnych, e-mail', $b && $b[0]['dla'] === 'Mama' && $b[0]['od'] === 'Ania' && $b[0]['buyer_email'] === 'test@example.com');
     $kodBonu = $b[0]['code'] ?? '';
 
@@ -174,6 +206,60 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $b = bon_test_bony($k, $pdo, $p['order_id']);
     $t('pola własne jako lista {name,value}: Dla/Od odczytane', $b && $b[0]['dla'] === 'Tata' && $b[0]['od'] === 'Zosia');
 
+    // --- PDF i mail (etap 2) ---
+    $nb = "\u{00A0}";
+    $t('kwota na bonie: 250 zł / 237,50 zł / 1 200 zł', bon_kwota_tekst(25000) === "250{$nb}zł" && bon_kwota_tekst(23750) === "237,50{$nb}zł" && bon_kwota_tekst(120000) === "1{$nb}200{$nb}zł");
+    $t('kolor wstążki: 200 czerwona, 300 złota, 500 zielona', bon_pdf_prog(20000) === 'czerwony' && bon_pdf_prog(30000) === 'zloty' && bon_pdf_prog(50000) === 'zielen' && bon_pdf_prog(23750) === 'czerwony');
+    $t('ważność słownie: 1 miesiąc, 3 miesiące, 6 miesięcy, 12 miesięcy, 22 miesiące', bon_miesiace_tekst(1) === '1 miesiąc' && bon_miesiace_tekst(3) === '3 miesiące'
+        && bon_miesiace_tekst(6) === '6 miesięcy' && bon_miesiace_tekst(12) === '12 miesięcy' && bon_miesiace_tekst(22) === '22 miesiące');
+    $pdfBajty = bon_pdf(['code' => 'EWA-TEST-2345', 'initial_pln' => '300.00', 'expires_at' => '2027-11-21', 'dla' => 'Żaneta Ćwik', 'od' => null], $k);
+    $t('PDF: powstaje, poprawny nagłówek, < 1,5 MB', str_starts_with($pdfBajty, '%PDF-') && strlen($pdfBajty) < 1500000 && str_contains($pdfBajty, '%%EOF'), strlen($pdfBajty) . ' B');
+    $jsonl = $k['_katalog'] . '/bony-mailjet.jsonl';
+    $maile = static function () use ($jsonl): array {
+        return is_file($jsonl) ? array_values(array_map(static fn($l) => json_decode($l, true), array_filter(explode("\n", (string)file_get_contents($jsonl))))) : [];
+    };
+    $przed = count($maile());
+    $p = bon_test_payload(['customer_email' => 'kupujacy@example.com']);
+    [, , $zadanie] = bon_test_webhook($k, $pdo, $p);
+    $t('webhook valid: zwraca zadanie wysyłki', is_callable($zadanie));
+    $w = $zadanie ? $zadanie() : [];
+    $m = array_slice($maile(), $przed);
+    $b = bon_test_bony($k, $pdo, $p['order_id']);
+    $t('mail: 1 wiadomość do kupującego, 1 PDF, nadawca z konfigu', ($w['wyslane'] ?? 0) === 1 && count($m) === 1 && $m[0]['To'][0]['Email'] === 'kupujacy@example.com'
+        && count($m[0]['Attachments']) === 1 && $m[0]['Attachments'][0]['pdf'] === true && $m[0]['From']['Email'] === 'powiadomienia@ewa-gabinet.pl', json_encode($w));
+    $t('mail: treść z numerem bonu, bez wykrzykników', $m && $b && str_contains($m[0]['TextPart'], $b[0]['code']) && !str_contains($m[0]['TextPart'] . strip_tags($m[0]['HTMLPart']), '!'));
+    $t('mail: mail_wyslany_at ustawione', $b && $b[0]['mail_wyslany_at'] !== null);
+    $t('mail: telefon, adres i ważność z kontakt.json i konfigu (nie na sztywno)', $m && str_contains($m[0]['TextPart'], '600 000 001') && str_contains($m[0]['TextPart'], 'ul. Testowa 1')
+        && str_contains($m[0]['TextPart'], 'ważny ' . bon_miesiace_tekst((int)$k['waznosc_miesiecy'])));
+    $w = $zadanie ? $zadanie() : [];
+    $t('mail: drugie wywołanie nic nie wysyła', ($w['pominieto'] ?? '') === 'nic do wysłania' && count($maile()) === $przed + 1);
+    [, , $zadanie] = bon_test_webhook($k, $pdo, $p);
+    $w = $zadanie ? $zadanie() : [];
+    $t('mail: powtórzony webhook po udanej wysyłce nie wysyła drugi raz', ($w['wyslane'] ?? -1) === 0 && count($maile()) === $przed + 1);
+
+    $p = bon_test_payload(['price_custom_id' => 'bon-300', 'amount_paid' => 100]);
+    [, , $zadanie] = bon_test_webhook($k, $pdo, $p);
+    $t('mail: bon wstrzymany (held) – bez wysyłki', $zadanie === null);
+
+    $przed = count($maile());
+    $p = bon_test_payload(['quantity' => 12, 'amount_paid' => 2400]);
+    [, , $zadanie] = bon_test_webhook($k, $pdo, $p);
+    $w = $zadanie ? $zadanie() : [];
+    $m = array_slice($maile(), $przed);
+    $t('quantity 12: dwa maile (10 + 2 PDF), 12 bonów oznaczonych', ($w['wyslane'] ?? 0) === 12 && count($m) === 2 && count($m[0]['Attachments']) === 10 && count($m[1]['Attachments']) === 2
+        && !array_filter(bon_test_bony($k, $pdo, $p['order_id']), static fn($b) => $b['mail_wyslany_at'] === null), json_encode($w));
+
+    $kBlad = array_replace($k, ['mailjet_test_blad' => true]);
+    $p = bon_test_payload();
+    [, , $zadanie] = bon_test_webhook($kBlad, $pdo, $p);
+    $w = $zadanie ? $zadanie() : [];
+    $b = bon_test_bony($k, $pdo, $p['order_id']);
+    $t('Mailjet błąd: zwraca błąd, mail_wyslany_at puste', ($w['blad'] ?? null) !== null && $b && $b[0]['mail_wyslany_at'] === null);
+    [, $odp, $zadanie] = bon_test_webhook($k, $pdo, $p);
+    $w = $zadanie ? $zadanie() : [];
+    $b = bon_test_bony($k, $pdo, $p['order_id']);
+    $t('Mailjet błąd → ponowiony webhook dokańcza wysyłkę', ($odp['powtorzony'] ?? false) && ($w['wyslane'] ?? 0) === 1 && $b[0]['mail_wyslany_at'] !== null, json_encode($w));
+
     // --- verify ---
     $ip = '192.0.2.' . random_int(1, 250);
     [$kodHttp, $odp] = bon_obsluz_verify($k, $kodBonu, $ip, static fn() => $pdo);
@@ -217,5 +303,5 @@ function bon_testy(array $kBaza, PDO $pdo): array {
         $tz = $pdo->query("SELECT NOW() AS n, @@session.time_zone AS s, @@system_time_zone AS sys")->fetch();
         $t('MySQL: strefa czasu (informacyjnie – daty liczy PHP)', true, "NOW()={$tz['n']} session={$tz['s']} system={$tz['sys']} PHP=" . bon_teraz()->format('Y-m-d H:i:s'));
     }
-    return $wyniki;
+    return array_merge($wyniki, bon_testy_panel($k, $pdo));
 }
