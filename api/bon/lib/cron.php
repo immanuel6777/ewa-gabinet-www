@@ -15,6 +15,13 @@ try {
     [$raport, $zadania] = bon_synchronizuj($k, $pdo, 'cron');
     bon_zdarzenie($k, 'synchronizacja', $raport);
     bon_synchronizuj_wyslij($k, $zadania, 'cron');
+    // kontrola dostarczenia wysłanych maili po MessageID (lib/mail.php); błąd tu nie przerywa crona
+    try {
+        $kontrola = bon_mail_kontrola($k);
+        if ($kontrola['sprawdzono'] > 0) bon_zdarzenie($k, 'mail-kontrola', $kontrola);
+    } catch (Throwable $e) {
+        bon_zdarzenie($k, 'blad', ['plik' => 'cron (kontrola dostarczenia)'] + bon_opis_bledu($e));
+    }
     echo json_encode($raport, JSON_UNESCAPED_UNICODE), "\n";
 } catch (Throwable $e) {
     error_log('bony/cron: ' . $e->getMessage());

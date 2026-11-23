@@ -51,6 +51,7 @@ function bon_test_konfig(array $k): array {
         'mail_tryb' => 'plik',
         'mail_nadawca' => 'Gabinet EWA <powiadomienia@ewa-gabinet.pl>',
         'mailjet_test_blad' => false,
+        'mail_ponow_przerwy_s' => [0, 0], // testy: ponawianie bez czekania
         // etap 3: konta panelu (hasła tylko testowe, hash liczony przy starcie) i lista usług z pliku obok konfigu
         'panel_konta' => [
             'ewa' => ['haslo' => password_hash('haslo-ewy-test', PASSWORD_DEFAULT), 'imie' => 'Ewa', 'rola' => 'realizacja'],
@@ -275,6 +276,69 @@ function bon_testy(array $kBaza, PDO $pdo): array {
         && bon_powiadomienie_bledu_czas($k, 'ord_doba', true, 0));
     $w = bon_wyslij_zamowienie($k, $pdo, $p['order_id']);
     $t('po udanej wysyłce znacznik błędu usunięty', ($w['wyslane'] ?? 0) === 1 && !is_file($k['_katalog'] . '/bony-mail-bledy/' . md5($p['order_id']) . '.txt'));
+
+    // ponawianie przy zerwanym połączeniu (SSL_ERROR_SYSCALL z OVH): tylko błąd sprzed wysłania treści, najwyżej 3 próby
+    $ileMaili = static fn(): int => count(file($k['_katalog'] . '/bony-mailjet.jsonl') ?: []);
+    $p = bon_test_payload(['order_id' => 'ord_ponow_ok']);
+    $przed = $ileMaili();
+    $GLOBALS['bon_test_zerwania'] = 2;
+    [, , $zadanie] = bon_test_webhook($k, $pdo, $p);
+    $w = $zadanie ? $zadanie() : [];
+    $b = bon_test_bony($k, $pdo, $p['order_id']);
+    $t('2 zerwania połączenia → 3. próba wysyła, jeden mail', ($w['wyslane'] ?? 0) === 1 && ($w['mailjet'][0]['proby'] ?? 0) === 3
+        && $ileMaili() === $przed + 1 && $b[0]['mail_wyslany_at'] !== null, json_encode($w));
+    $t('odpowiedź Mailjeta zapisana: HTTP, Status, MessageID', ($w['mailjet'][0]['http'] ?? 0) === 200 && ($w['mailjet'][0]['status'] ?? '') === 'success'
+        && count($w['mailjet'][0]['id'] ?? []) === 1);
+    $p = bon_test_payload(['order_id' => 'ord_ponow_zle']);
+    $GLOBALS['bon_test_zerwania'] = 5;
+    [, , $zadanie] = bon_test_webhook($k, $pdo, $p);
+    $w = $zadanie ? $zadanie() : [];
+    $b = bon_test_bony($k, $pdo, $p['order_id']);
+    $t('3 zerwania z rzędu → błąd po 3 próbach, mail_wyslany_at puste', ($w['blad'] ?? null) !== null && ($w['mailjet'][0]['proby'] ?? 0) === 3
+        && $b[0]['mail_wyslany_at'] === null, json_encode($w));
+    $GLOBALS['bon_test_zerwania'] = 0;
+    $p = bon_test_payload(['order_id' => 'ord_http_blad']);
+    [, , $zadanie] = bon_test_webhook($kBlad, $pdo, $p);
+    $w = $zadanie ? $zadanie() : [];
+    $t('błąd HTTP Mailjeta → bez ponawiania (1 próba)', ($w['blad'] ?? null) !== null && ($w['mailjet'][0]['proby'] ?? 0) === 1, json_encode($w));
+
+    // kontrola dostarczenia po MessageID (cron) – we własnym katalogu tymczasowym, nigdy w prawdziwym konfig/ (test-ovh.php)
+    $kOrg = $k;
+    $kat0 = sys_get_temp_dir() . '/bony-kontrola-' . bin2hex(random_bytes(4));
+    @mkdir($kat0, 0700, true);
+    $k = array_replace($k, ['_katalog' => $kat0]);
+    $plikPow = $kat0 . '/bony-powiadomienia.txt';
+    $kat = $kat0 . '/bony-mail-wysylki';
+    bon_mail_zapisz_wysylke($k, 'ord_kontrola_ok', ['EWA-TEST-0001'], [111]);
+    bon_mail_zapisz_wysylke($k, 'ord_kontrola_zle', ['EWA-TEST-0002'], [222]);
+    $r = bon_mail_kontrola($k, 0, 600);
+    $t('kontrola: świeża wysyłka (< 10 min) jeszcze niesprawdzana', $r['sprawdzono'] === 0, json_encode($r));
+    $r = bon_mail_kontrola($k, 0, 0);
+    $t('kontrola: status sent → dostarczone', $r['dostarczone'] === 2 && $r['problem'] === 0, json_encode($r));
+    $r = bon_mail_kontrola($k, 0, 0);
+    $t('kontrola: zamknięta wysyłka nie jest sprawdzana drugi raz', $r['sprawdzono'] === 0, json_encode($r));
+    array_map('unlink', glob($kat . '/*.json') ?: []);
+    $ilePowDost = static fn(): int => substr_count(is_file($plikPow) ? (string)file_get_contents($plikPow) : '', 'mail NIE dotarł – zamówienie ord_kontrola_blok');
+    bon_mail_zapisz_wysylke($k, 'ord_kontrola_blok', ['EWA-TEST-0003'], [333]);
+    $kBlok = array_replace($k, ['mailjet_test_status' => 'blocked']);
+    $r = bon_mail_kontrola($kBlok, 0, 0);
+    bon_mail_kontrola($kBlok, 0, 0);
+    $t('kontrola: blocked → problem i jedno powiadomienie gabinetu', $r['problem'] === 1 && $ilePowDost() === 1, json_encode($r) . ' / ' . $ilePowDost());
+    array_map('unlink', glob($kat . '/*.json') ?: []);
+    bon_mail_zapisz_wysylke($k, 'ord_kontrola_kolejka', ['EWA-TEST-0004'], [444]);
+    $kKolejka = array_replace($k, ['mailjet_test_status' => 'queued']);
+    $r1 = bon_mail_kontrola($kKolejka, 0, 0);
+    $r2 = bon_mail_kontrola($kKolejka, time() + 86400 + 60, 0);
+    $niepotw = substr_count(is_file($plikPow) ? (string)file_get_contents($plikPow) : '', 'brak potwierdzenia dostarczenia – zamówienie ord_kontrola_kolejka');
+    $t('kontrola: queued czeka, po 24 h jedno powiadomienie „niepotwierdzone”', $r1['czeka'] === 1 && $r2['czeka'] === 1 && $niepotw === 1, json_encode([$r1, $r2, $niepotw]));
+    array_map('unlink', glob($kat . '/*.json') ?: []);
+    @rmdir($kat);
+    @unlink($plikPow);
+    foreach (glob($kat0 . '/bony-zdarzenia/*') ?: [] as $f) @unlink($f);
+    @rmdir($kat0 . '/bony-zdarzenia');
+    @rmdir($kat0);
+    $k = $kOrg;
+    $t('tryb plik (testy, test-ovh): wysyłka nie trafia do kontroli dostarczenia', !glob($kOrg['_katalog'] . '/bony-mail-wysylki/*.json'));
 
     // --- podgląd diagnostyczny (log.php): dane osobowe nigdy nie wychodzą ---
     $p = bon_test_payload(['customer_email' => 'jan.kowalski@example.com', 'customer_name' => 'Jan Kowalski', 'promo_code' => 'TEST99',
