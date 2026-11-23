@@ -85,13 +85,42 @@ function bon_mail_tresc(array $k, array $bony): array {
 function bon_mailjet_wyslij(array $k, string $do, string $temat, string $tekst, string $html, array $zalaczniki): array {
     $przerwy = (array)($k['mail_ponow_przerwy_s'] ?? [1, 3]); // przerwy przed 2. i 3. próbą
     $wynik = ['blad' => null, 'http' => 0, 'status' => null, 'id' => [], 'proby' => 0];
+    $zerwania = [];
     for ($proba = 0; $proba <= count($przerwy); $proba++) {
         if ($proba > 0 && (float)$przerwy[$proba - 1] > 0) usleep((int)(1e6 * (float)$przerwy[$proba - 1]));
         $wynik = ['proby' => $proba + 1] + bon_mailjet_proba($k, $do, $temat, $tekst, $html, $zalaczniki);
         if (empty($wynik['ponow'])) break;
+        $zerwania[] = (string)$wynik['blad'];
     }
+    if ($zerwania) bon_mailjet_zerwanie($k, 'wysylka', $wynik['proby'], count($zerwania), $zerwania, !empty($wynik['ponow']));
     unset($wynik['ponow']);
     return $wynik;
+}
+
+/**
+ * Zerwanie połączenia z API Mailjeta (2026-11-23, wpis doradcy 22:15): jedno zdarzenie `mailjet-zerwanie` na operację,
+ * łatwe do policzenia (częstotliwość, długość okien). Gdy padły WSZYSTKIE próby – od razu krótka sonda:
+ * TCP 443 api.mailjet.com, HTTPS api.mailjet.com, SMTP in-v3.mailjet.com:587 (do TLS), HTTPS www.google.com.
+ * Limit 3 s na krok (najwyżej ok. 12 s). Wysyłka i kontrola idą zawsze PO odpowiedzi (fastcgi_finish_request) albo
+ * w cronie, więc sonda nie wydłuża czekania klienta – dlatego działa na obu drogach.
+ */
+function bon_mailjet_zerwanie(array $k, string $operacja, int $proby, int $zerwanych, array $bledy, bool $wszystkie): void {
+    $dane = ['operacja' => $operacja, 'proby' => $proby, 'zerwane' => $zerwanych, 'wszystkie' => $wszystkie,
+        'blad' => mb_substr((string)end($bledy), 0, 160)];
+    if ($wszystkie) $dane['sonda'] = bon_mailjet_sonda($k);
+    bon_zdarzenie($k, 'mailjet-zerwanie', $dane);
+}
+
+function bon_mailjet_sonda(array $k): array {
+    if ($k['mail_tryb'] === 'plik') return ['pominieta' => 'tryb plik'];
+    require_once __DIR__ . '/diagnostyka-sieci.php';
+    $skrot = static fn(array $w) => array_intersect_key($w, array_flip(['ok', 'http', 'ms', 'tcp_ms', 'tls_ms', 'blad_nr', 'blad', 'etap']));
+    return [
+        'tcp_443_api' => $skrot(bon_siec_tcp('api.mailjet.com', 443, 3)),
+        'https_api' => $skrot(bon_siec_https('https://api.mailjet.com/v3/REST/sender', [CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => 3])),
+        'smtp_587' => $skrot(bon_siec_smtp('in-v3.mailjet.com', 587, 3)),
+        'https_google' => $skrot(bon_siec_https('https://www.google.com', [CURLOPT_CONNECTTIMEOUT => 3, CURLOPT_TIMEOUT => 3])),
+    ];
 }
 
 /** Jedna próba wysyłki. 'ponow' => true tylko przy błędzie połączenia sprzed wysłania treści. */
@@ -259,7 +288,27 @@ function bon_mail_zapisz_wysylke(array $k, string $zamowienie, array $kody, arra
  * – http i blad trafiają do dziennika (mail-kontrola), żeby „czeka” dało się wyjaśnić. Bez treści odpowiedzi (adresy).
  */
 function bon_mailjet_status(array $k, int|string $id): array {
+    // ponawianie jak przy wysyłce (1 s, 3 s), ale przy KAŻDYM błędzie połączenia – GET niczego nie wysyła
+    $przerwy = (array)($k['mail_ponow_przerwy_s'] ?? [1, 3]);
+    $zerwania = [];
+    for ($proba = 0; $proba <= count($przerwy); $proba++) {
+        if ($proba > 0 && (float)$przerwy[$proba - 1] > 0) usleep((int)(1e6 * (float)$przerwy[$proba - 1]));
+        $wynik = ['proby' => $proba + 1] + bon_mailjet_status_proba($k, $id);
+        if (empty($wynik['zerwane'])) break;
+        $zerwania[] = (string)$wynik['blad'];
+    }
+    if ($zerwania) bon_mailjet_zerwanie($k, 'status', $wynik['proby'], count($zerwania), $zerwania, !empty($wynik['zerwane']));
+    unset($wynik['zerwane']);
+    return $wynik;
+}
+
+/** Jedno zapytanie o status. 'zerwane' => true = błąd połączenia (cURL), Mailjet nic nie odpowiedział. */
+function bon_mailjet_status_proba(array $k, int|string $id): array {
     if ($k['mail_tryb'] === 'plik') {
+        if (($GLOBALS['bon_test_zerwania_status'] ?? 0) > 0) {
+            $GLOBALS['bon_test_zerwania_status']--;
+            return ['status' => null, 'http' => 0, 'blad' => 'cURL 35: symulowane SSL_ERROR_SYSCALL', 'zerwane' => true];
+        }
         $http = (int)($k['mailjet_test_status_http'] ?? 200);
         return ['status' => $http === 200 ? (isset($k['mailjet_test_status']) ? (string)$k['mailjet_test_status'] : 'sent') : null,
             'http' => $http, 'blad' => $http === 200 ? null : 'HTTP ' . $http];
@@ -275,7 +324,7 @@ function bon_mailjet_status(array $k, int|string $id): array {
     $kod = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $bladCurl = $odp === false ? 'cURL ' . curl_errno($ch) . ': ' . curl_error($ch) : null;
     curl_close($ch);
-    if ($bladCurl !== null) return ['status' => null, 'http' => $kod, 'blad' => $bladCurl];
+    if ($bladCurl !== null) return ['status' => null, 'http' => $kod, 'blad' => $bladCurl, 'zerwane' => true];
     $j = json_decode((string)$odp, true);
     if ($kod !== 200) {
         $opis = is_array($j) ? (string)($j['ErrorMessage'] ?? $j['ErrorInfo'] ?? '') : '';
@@ -290,7 +339,8 @@ function bon_mailjet_status(array $k, int|string $id): array {
  * Kontrola dostarczenia (cron): wysyłki sprzed co najmniej 10 min bez ostatecznego statusu.
  * - wszystkie wiadomości sent/opened/clicked → zamknięte;
  * - którakolwiek bounce/spam/blocked… → zdarzenie + JEDNO powiadomienie gabinetu;
- * - po 24 h nadal bez statusu (queued, deferred, nieznany) → zdarzenie + jedno powiadomienie „niepotwierdzone”.
+ * - po 24 h Mailjet nadal podaje status niedostarczenia (queued, deferred…) → zdarzenie + jedno powiadomienie „niepotwierdzone”;
+ * - zapytania nie przechodzą (zerwanie, błąd HTTP) → czeka; po 72 h jedno powiadomienie „nie da się sprawdzić”, kontrola trwa dalej.
  * Zwraca podsumowanie do dziennika.
  */
 function bon_mail_kontrola(array $k, int $teraz = 0, int $minWiekS = 600): array {
@@ -329,7 +379,19 @@ function bon_mail_kontrola(array $k, int $teraz = 0, int $minWiekS = 600): array
             $wynik['dostarczone']++;
         } else {
             $wynik['czeka']++;
-            if ($wiek >= 86400) {
+            // „niepotwierdzone” tylko, gdy Mailjet ODPOWIEDZIAŁ statusem dla każdej wiadomości (queued, deferred…).
+            // Gdy zapytanie się nie udało (zerwanie, błąd HTTP), to nie jest informacja o mailu: kontrola czeka dalej,
+            // a po 72 h idzie jedno powiadomienie „nie da się sprawdzić” (wpis doradcy 2026-11-23 22:15).
+            $odpowiedzial = $statusy && !in_array(null, $statusy, true);
+            if (!$odpowiedzial && $wiek >= 3 * 86400 && empty($w['powiadomiono_brak_odpowiedzi'])) {
+                bon_zdarzenie($k, 'mail-dostarczenie', ['zamowienie' => $w['zamowienie'], 'status' => 'nie da się sprawdzić (72 h)', 'id' => $w['id'],
+                    'blad' => (string)($odpowiedzi[0]['blad'] ?? '')]);
+                bon_powiadom($k, 'Bon: nie da się sprawdzić dostarczenia – zamówienie ' . $w['zamowienie'], "Od 72 h serwer nie może zapytać Mailjeta o status maila z bonem.\n"
+                    . 'Ostatni błąd: ' . (string)($odpowiedzi[0]['blad'] ?? '?') . "\nBony: $kody\n"
+                    . "To nie znaczy, że mail nie doszedł. Sprawdź w Mailjecie (Statystyki → wiadomość) albo u kupującego.");
+                $w['powiadomiono_brak_odpowiedzi'] = true;
+            }
+            if ($odpowiedzial && $wiek >= 86400) {
                 $w['status'] = 'niepotwierdzone: ' . implode(',', array_map(static fn($s) => $s ?? 'brak', $statusy));
                 bon_zdarzenie($k, 'mail-dostarczenie', ['zamowienie' => $w['zamowienie'], 'status' => $w['status'], 'id' => $w['id']]);
                 if (!$w['powiadomiono']) {

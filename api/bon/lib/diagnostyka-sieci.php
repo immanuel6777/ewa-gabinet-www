@@ -64,9 +64,9 @@ function bon_siec_proby(string $url, array $opcje = [], int $ile = BON_SIEC_PROB
 }
 
 /** Połączenie TCP (bez TLS). */
-function bon_siec_tcp(string $host, int $port): array {
+function bon_siec_tcp(string $host, int $port, int $limitS = 6): array {
     $start = microtime(true);
-    $s = @fsockopen($host, $port, $nr, $opis, 6);
+    $s = @fsockopen($host, $port, $nr, $opis, $limitS);
     $ms = (int)round(1000 * (microtime(true) - $start));
     if (!$s) return ['ok' => false, 'ms' => $ms, 'blad' => "$nr $opis"];
     fclose($s);
@@ -74,11 +74,11 @@ function bon_siec_tcp(string $host, int $port): array {
 }
 
 /** SMTP: powitanie, EHLO, STARTTLS i uzgodnienie TLS (bez logowania i bez wysyłki). */
-function bon_siec_smtp(string $host, int $port): array {
+function bon_siec_smtp(string $host, int $port, int $limitS = 6): array {
     $wynik = ['port' => $port];
-    $s = @stream_socket_client("tcp://$host:$port", $nr, $opis, 6);
+    $s = @stream_socket_client("tcp://$host:$port", $nr, $opis, $limitS);
     if (!$s) return $wynik + ['ok' => false, 'etap' => 'tcp', 'blad' => "$nr $opis"];
-    stream_set_timeout($s, 6);
+    stream_set_timeout($s, $limitS);
     $czytaj = static function () use ($s): string {
         $odp = '';
         while (($l = fgets($s, 512)) !== false) { $odp .= $l; if (strlen($l) < 4 || $l[3] === ' ') break; }
@@ -98,6 +98,29 @@ function bon_siec_smtp(string $host, int $port): array {
         if ($tls !== true) return $wynik + ['ok' => false, 'etap' => 'tls', 'blad' => error_get_last()['message'] ?? '?'];
         fwrite($s, "QUIT\r\n");
         return $wynik + ['ok' => true, 'etap' => 'tls ok (bez logowania)'];
+    } finally {
+        fclose($s);
+    }
+}
+
+/** SMTP z TLS od początku (port 465): uzgodnienie TLS, powitanie, EHLO – bez logowania i bez wysyłki. */
+function bon_siec_smtps(string $host, int $port = 465, int $limitS = 6): array {
+    $wynik = ['port' => $port];
+    $start = microtime(true);
+    $s = @stream_socket_client("ssl://$host:$port", $nr, $opis, $limitS);
+    $wynik['ms'] = (int)round(1000 * (microtime(true) - $start));
+    if (!$s) return $wynik + ['ok' => false, 'etap' => 'tcp/tls', 'blad' => "$nr $opis " . (error_get_last()['message'] ?? '')];
+    stream_set_timeout($s, $limitS);
+    try {
+        $powitanie = '';
+        while (($l = fgets($s, 512)) !== false) { $powitanie .= $l; if (strlen($l) < 4 || $l[3] === ' ') break; }
+        $wynik['powitanie'] = mb_substr(strtok(trim($powitanie), "\n") ?: '', 0, 80);
+        if (!str_starts_with($powitanie, '220')) return $wynik + ['ok' => false, 'etap' => 'powitanie'];
+        fwrite($s, "EHLO ewa-gabinet.pl\r\n");
+        $ehlo = '';
+        while (($l = fgets($s, 512)) !== false) { $ehlo .= $l; if (strlen($l) < 4 || $l[3] === ' ') break; }
+        fwrite($s, "QUIT\r\n");
+        return $wynik + ['ok' => str_starts_with($ehlo, '250'), 'etap' => 'tls + ehlo (bez logowania)', 'auth' => preg_match('/^250[ -]AUTH (.*)$/mi', $ehlo, $m) ? trim($m[1]) : null];
     } finally {
         fclose($s);
     }
@@ -147,6 +170,8 @@ function bon_diagnostyka_sieci(): array {
         'www.google.com' => bon_siec_proby('https://www.google.com', [], 1),
     ];
     $wynik['mailjet_smtp'] = [bon_siec_smtp('in-v3.mailjet.com', 587), bon_siec_smtp('in-v3.mailjet.com', 2525)];
+    // zapasowa droga wysyłki (wpis doradcy 22:20): serwer SMTP poczty OVH domeny – sprawdzenie portów przed wdrożeniem
+    $wynik['ovh_smtp'] = ['ssl0.ovh.net' => [bon_siec_smtps('ssl0.ovh.net', 465), bon_siec_smtp('ssl0.ovh.net', 587)], 'dns' => bon_siec_dns('ssl0.ovh.net')];
     $wynik['jak_czytac'] = 'HTTP 401 z Mailjeta = połączenie i TLS działają (brak kluczy w teście jest celowy). '
         . 'Błąd przy tcp = blokada po drodze; tcp ok, a TLS zrywa się zawsze = Mailjet odrzuca IP; działa tylko w jednym wariancie = ustawienie cURL.';
     return $wynik;

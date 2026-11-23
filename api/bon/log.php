@@ -27,7 +27,7 @@ if (strlen($token) < 32 || !hash_equals($token, (string)($_SERVER['HTTP_X_LOG_TO
 
 // ?siec=1: test połączenia z Mailjetem z tego serwera (lib/diagnostyka-sieci.php), trwa do ok. 2 min
 if (($_GET['siec'] ?? '') === '1') {
-    require __DIR__ . '/lib/diagnostyka-sieci.php';
+    require_once __DIR__ . '/lib/diagnostyka-sieci.php';
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(bon_diagnostyka_sieci(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE);
     exit;

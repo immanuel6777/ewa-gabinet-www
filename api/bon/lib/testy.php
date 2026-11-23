@@ -339,6 +339,37 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $o = $r['mailjet'][0]['odpowiedzi'][0] ?? [];
     $t('kontrola: błąd HTTP zapytania o status → czeka z kodem i opisem błędu', $r['czeka'] === 1 && ($o['http'] ?? 0) === 404 && array_key_exists('status', $o) && $o['status'] === null && str_contains((string)($o['blad'] ?? ''), '404'), json_encode($r));
     array_map('unlink', glob($kat . '/*.json') ?: []);
+    $zerwaniaZdarzenia = static function () use ($kat0): array { // najnowsze pierwsze
+        $linie = [];
+        foreach (glob($kat0 . '/bony-zdarzenia/*.log') ?: [] as $f) $linie = array_merge($linie, file($f, FILE_IGNORE_NEW_LINES) ?: []);
+        $z = array_map(static fn($l) => json_decode($l, true), $linie);
+        return array_reverse(array_values(array_filter($z, static fn($e) => ($e['typ'] ?? '') === 'mailjet-zerwanie')));
+    };
+    $przedZ = count($zerwaniaZdarzenia());
+    bon_mail_zapisz_wysylke($k, 'ord_kontrola_zerw2', ['EWA-TEST-0006'], [666]);
+    $GLOBALS['bon_test_zerwania_status'] = 2;
+    $r = bon_mail_kontrola($k, 0, 0);
+    $o = $r['mailjet'][0]['odpowiedzi'][0] ?? [];
+    $zz = $zerwaniaZdarzenia();
+    $t('status: 2 zerwania → 3. próba odpowiada, dostarczone; jedno zdarzenie mailjet-zerwanie bez sondy',
+        $r['dostarczone'] === 1 && ($o['proby'] ?? 0) === 3 && count($zz) === $przedZ + 1 && ($zz[0]['operacja'] ?? '') === 'status'
+        && ($zz[0]['wszystkie'] ?? true) === false && !isset($zz[0]['sonda']), json_encode([$r, $zz[0] ?? null]));
+    array_map('unlink', glob($kat . '/*.json') ?: []);
+    $ileBrakOdp = static fn(): int => substr_count(is_file($plikPow) ? (string)file_get_contents($plikPow) : '', 'nie da się sprawdzić dostarczenia – zamówienie ord_kontrola_zerw');
+    $ileNiepotw = static fn(): int => substr_count(is_file($plikPow) ? (string)file_get_contents($plikPow) : '', 'brak potwierdzenia dostarczenia – zamówienie ord_kontrola_zerw');
+    bon_mail_zapisz_wysylke($k, 'ord_kontrola_zerw', ['EWA-TEST-0007'], [777]);
+    $GLOBALS['bon_test_zerwania_status'] = 3;
+    $r1 = bon_mail_kontrola($k, time() + 86400 + 60, 0);
+    $zz = $zerwaniaZdarzenia();
+    $GLOBALS['bon_test_zerwania_status'] = 3;
+    $r2 = bon_mail_kontrola($k, time() + 3 * 86400 + 60, 0);
+    $GLOBALS['bon_test_zerwania_status'] = 3;
+    $r3 = bon_mail_kontrola($k, time() + 3 * 86400 + 3600, 0);
+    $GLOBALS['bon_test_zerwania_status'] = 0;
+    $t('status: 3 zerwania → zdarzenie z sondą (wszystkie próby)', ($zz[0]['wszystkie'] ?? false) === true && ($zz[0]['proby'] ?? 0) === 3 && isset($zz[0]['sonda']), json_encode($zz[0] ?? null));
+    $t('kontrola: zerwania po 24 h → bez „niepotwierdzone”, dalej czeka', $r1['czeka'] === 1 && $ileNiepotw() === 0, json_encode($r1));
+    $t('kontrola: zerwania po 72 h → jedno powiadomienie „nie da się sprawdzić”, kontrola trwa', $r2['czeka'] === 1 && $r3['sprawdzono'] === 1 && $ileBrakOdp() === 1, json_encode([$r2, $r3, $ileBrakOdp()]));
+    array_map('unlink', glob($kat . '/*.json') ?: []);
     @rmdir($kat);
     @unlink($plikPow);
     foreach (glob($kat0 . '/bony-zdarzenia/*') ?: [] as $f) @unlink($f);
