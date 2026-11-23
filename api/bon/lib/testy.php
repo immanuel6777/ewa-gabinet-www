@@ -9,6 +9,7 @@ require_once __DIR__ . '/mail.php';
 require_once __DIR__ . '/panel.php';
 require_once __DIR__ . '/testy-panel.php';
 require_once __DIR__ . '/diagnostyka.php';
+require_once __DIR__ . '/testy-sync.php';
 
 /** Payload jak w dokumentacji Easytools (single_product_bought), z nadpisaniami. */
 function bon_test_payload(array $nadpisz = []): array {
@@ -333,5 +334,5 @@ function bon_testy(array $kBaza, PDO $pdo): array {
         $tz = $pdo->query("SELECT NOW() AS n, @@session.time_zone AS s, @@system_time_zone AS sys")->fetch();
         $t('MySQL: strefa czasu (informacyjnie – daty liczy PHP)', true, "NOW()={$tz['n']} session={$tz['s']} system={$tz['sys']} PHP=" . bon_teraz()->format('Y-m-d H:i:s'));
     }
-    return array_merge($wyniki, bon_testy_panel($k, $pdo));
+    return array_merge($wyniki, bon_testy_panel($k, $pdo), bon_testy_sync($k, $pdo));
 }

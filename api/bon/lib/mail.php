@@ -48,6 +48,9 @@ function bon_mail_tresc(array $k, array $bony): array {
         "Niewykorzystana kwota zostaje na bonie na kolejną wizytę. Bon jest ważny $miesiace od dnia zakupu.",
         'Termin wizyty można zarezerwować przez Booksy albo telefonicznie: ' . $kontakt['telefon'] . '. Przy rezerwacji wystarczy podać numer bonu.',
     ];
+    // bon z API Easytools nie ma Dla/Od (API ich nie podaje, Bartek 2026-11-23): na PDF zostają puste linie do wpisania ręcznie
+    $puste = array_filter($bony, static fn($b) => trim((string)($b['dla'] ?? '')) === '' || trim((string)($b['od'] ?? '')) === '');
+    if ($puste) array_unshift($zasady, ($n === 1 ? 'Na bonie są' : 'Na bonach są') . ' puste linie „Dla” i „Od” – można je wpisać ręcznie po wydrukowaniu.');
     // pełne zasady bonu: regulamin § 14 (BON_REGULAMIN w pdf.php)
     $regulamin = 'Pełne zasady bonu: ' . BON_REGULAMIN;
 

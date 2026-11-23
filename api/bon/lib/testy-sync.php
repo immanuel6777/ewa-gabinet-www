@@ -1,0 +1,170 @@
+<?php
+// Testy synchronizacji zamówień z API Easytools (bony bez webhooka, 2026-11-23). API podstawione ($k['easytools_http']) –
+// żadnych prawdziwych wywołań ani maili (mail_tryb = plik z bon_test_konfig). Woła je bon_testy() w lib/testy.php.
+
+declare(strict_types=1);
+require_once __DIR__ . '/easytools.php';
+
+/** Udawane API: zamówienia i transakcje jak w dokumentacji (kwoty w groszach). Zwraca [callable, &licznik wywołań]. */
+function bon_test_api(array &$zamowienia, array &$transakcje, array &$wywolania): callable {
+    return static function (string $metoda, string $sciezka, array $q, ?array $body) use (&$zamowienia, &$transakcje, &$wywolania): array {
+        $wywolania[] = "$metoda $sciezka";
+        if ($sciezka === '/orders') {
+            $lista = array_values(array_filter($zamowienia, static fn($z) => $z['_produkt'] === ($q['product'] ?? '') && $z['status'] === ($q['status'] ?? $z['status'])));
+            usort($lista, static fn($a, $b) => strcmp($b['created_at'], $a['created_at']));
+            return [200, ['items' => array_map(static fn($z) => array_intersect_key($z, array_flip(['id', 'status', 'amount', 'currency', 'quantity', 'product_name', 'customer_email', 'created_at'])), $lista),
+                'pagination' => ['current_page' => 1, 'total_pages' => 1, 'per_page' => 100, 'total' => count($lista)]]];
+        }
+        if (preg_match('#^/orders/([0-9a-f-]+)$#', $sciezka, $m)) {
+            $z = $zamowienia[$m[1]] ?? null;
+            if (!$z) return [404, ['message' => 'not found']];
+            unset($z['_produkt']);
+            return [200, $z];
+        }
+        if ($sciezka === '/transactions') return [200, ['items' => array_values(array_map(static fn($t) => array_diff_key($t, ['order' => 1]), $transakcje))]];
+        if (preg_match('#^/transactions/([0-9a-f-]+)$#', $sciezka, $m)) return isset($transakcje[$m[1]]) ? [200, $transakcje[$m[1]]] : [404, []];
+        return [404, ['message' => 'nieznana ścieżka w teście']];
+    };
+}
+
+function bon_test_uuid(): string {
+    $h = bin2hex(random_bytes(16));
+    return substr($h, 0, 8) . '-' . substr($h, 8, 4) . '-4' . substr($h, 13, 3) . '-a' . substr($h, 17, 3) . '-' . substr($h, 20, 12);
+}
+
+function bon_testy_sync(array $k, PDO $pdo): array {
+    $wyniki = [];
+    $t = static function (string $nazwa, bool $ok, string $szczegol = '') use (&$wyniki) { $wyniki[] = [$nazwa, $ok, $szczegol]; };
+    $produkt = 'e12be4ae-2d3a-47f3-b220-437fc5b46277';
+    $teraz = bon_teraz();
+    $zamowienia = $transakcje = $wywolania = [];
+    $dodaj = static function (array $z = []) use (&$zamowienia, &$transakcje, $produkt, $teraz): array {
+        $id = bon_test_uuid();
+        $z = array_replace_recursive([
+            'id' => $id, 'status' => 'completed', 'amount' => 20000, 'currency' => 'pln', 'quantity' => 1,
+            'product_name' => 'Bon podarunkowy na zabiegi podologiczne', 'customer_email' => 'sync@example.com',
+            'created_at' => $teraz->modify('-5 minutes')->format('c'), '_produkt' => $produkt,
+            'line_items' => [['product_name' => 'Bon podarunkowy na zabiegi podologiczne', 'variant_name' => 'Bon 200 zł', 'amount' => 20000,
+                'amount_total' => 20000, 'currency' => 'pln', 'quantity' => 1, 'is_order_bump' => false, 'access' => []]],
+            'customer' => ['id' => bon_test_uuid(), 'email' => 'sync@example.com', 'name' => 'Sync Testowy'],
+        ], $z);
+        $z['id'] = $id;
+        $zamowienia[$id] = $z;
+        $tid = bon_test_uuid();
+        $transakcje[$tid] = ['id' => $tid, 'total' => $z['amount'], 'currency' => 'pln', 'customer_email' => $z['customer_email'],
+            'product_name' => $z['product_name'], 'date' => $z['created_at'], 'remaining_refundable' => $z['amount'], 'order' => ['id' => $id]];
+        return ['id' => $id, 'transakcja' => $tid];
+    };
+    $ks = array_replace($k, [
+        'easytools_api_key' => 'klucz-testowy', 'easytools_produkt_uuid' => $produkt, 'sync_tryb' => 'bon',
+        'sync_od' => $teraz->modify('-1 day')->format('Y-m-d H:i:s'), 'sync_odstep_s' => 20,
+        'easytools_http' => bon_test_api($zamowienia, $transakcje, $wywolania),
+    ]);
+    $ile = static function (string $zam) use ($k, $pdo): int {
+        $st = $pdo->prepare('SELECT COUNT(*) FROM ' . bon_tabela($k, 'vouchers') . ' WHERE easytools_order_id = ?');
+        $st->execute([$zam]);
+        return (int)$st->fetchColumn();
+    };
+    $plikOdstepu = $k['_katalog'] . '/bony-sync-strona.txt';
+    @unlink($plikOdstepu);
+
+    // tryb raport: nic nie powstaje
+    $a = $dodaj();
+    [$r, $zad] = bon_synchronizuj(array_replace($ks, ['sync_tryb' => 'raport']), $pdo, 'cron');
+    $t('sync raport: bon nie powstaje, zamówienie w raporcie', $ile($a['id']) === 0 && !$zad && count($r['nowe'] ?? []) >= 1, json_encode($r, JSON_UNESCAPED_UNICODE));
+    $t('sync bez sync_od: pominięte', (bon_synchronizuj(array_replace($ks, ['sync_od' => '']), $pdo, 'cron')[0]['pominieto'] ?? '') === 'brak sync_od');
+    $t('sync bez klucza API: pominięte', (bon_synchronizuj(array_replace($ks, ['easytools_api_key' => 'WKLEJ_KLUCZ']), $pdo, 'cron')[0]['pominieto'] ?? '') === 'brak easytools_api_key');
+
+    // tryb bon: bon z API
+    [$r, $zad] = bon_synchronizuj($ks, $pdo, 'cron');
+    $b = bon_test_bony($k, $pdo, $a['id']);
+    $t('sync: bon z zamówienia z API (200 zł, valid, bez Dla/Od)', count($b) === 1 && $b[0]['status'] === 'valid' && $b[0]['initial_pln'] == 200 && $b[0]['paid_pln'] == 200
+        && $b[0]['dla'] === null && $b[0]['od'] === null && $b[0]['buyer_email'] === 'sync@example.com' && $b[0]['price_id'] === 'Bon 200 zł', json_encode($r, JSON_UNESCAPED_UNICODE));
+    $t('sync: id transakcji zapisane przy bonie', $b && $b[0]['easytools_transaction_id'] === $a['transakcja']);
+    $t('sync: zadanie wysyłki PDF', count($zad) >= 1);
+    foreach ($zad as $z) $z();
+    $b = bon_test_bony($k, $pdo, $a['id']);
+    $t('sync: po wysyłce mail_wyslany_at ustawione', $b && $b[0]['mail_wyslany_at'] !== null);
+    [, $tekstMaila] = bon_mail_tresc($k, $b);
+    $t('mail bonu bez Dla/Od: informacja o pustych liniach do wpisania', str_contains($tekstMaila, 'puste linie „Dla” i „Od”'));
+    [, $tekstMaila] = bon_mail_tresc($k, [array_replace($b[0], ['dla' => 'Mama', 'od' => 'Ania'])]);
+    $t('mail bonu z Dla/Od: bez informacji o pustych liniach', !str_contains($tekstMaila, 'puste linie'));
+
+    // drugi przebieg: bez duplikatu i bez ponownego pobierania szczegółów
+    $wywolania = [];
+    [$r, $zad] = bon_synchronizuj($ks, $pdo, 'cron');
+    $t('sync drugi przebieg: nadal 1 bon, bez GET zamówienia i bez wysyłki', $ile($a['id']) === 1 && !in_array('GET /orders/' . $a['id'], $wywolania, true) && !isset($zad[$a['id']]), implode(', ', $wywolania));
+
+    // webhook z tym samym order_uuid po synchronizacji → bez duplikatu
+    [$kodHttp, $odp] = bon_test_webhook($k, $pdo, bon_test_payload(['order_uuid' => $a['id']]));
+    $t('webhook po synchronizacji (ten sam order_uuid): powtórzony, 1 bon', $kodHttp === 200 && ($odp['powtorzony'] ?? false) && $ile($a['id']) === 1, json_encode($odp));
+    $b = bon_test_bony($k, $pdo, $a['id']);
+    $t('webhook po synchronizacji: puste Dla/Od uzupełnione z webhooka', $b && $b[0]['dla'] === 'Mama' && $b[0]['od'] === 'Ania');
+    $jsonl = $k['_katalog'] . '/bony-mailjet.jsonl';
+    $przed = is_file($jsonl) ? count(file($jsonl)) : 0;
+    [, , $zadanie] = bon_test_webhook($k, $pdo, bon_test_payload(['order_uuid' => $a['id'], 'custom_fields' => ['bon-dla' => 'Inna', 'bon-od' => 'Inny']]));
+    $w = $zadanie ? $zadanie() : [];
+    $b = bon_test_bony($k, $pdo, $a['id']);
+    $t('webhook powtórzony: wpisanych Dla/Od nie nadpisuje, maila nie wysyła ponownie', $b && $b[0]['dla'] === 'Mama' && ($w['wyslane'] ?? 0) === 0
+        && (is_file($jsonl) ? count(file($jsonl)) : 0) === $przed, json_encode($w));
+
+    // webhook pierwszy, synchronizacja później → bez duplikatu, uzupełnia id transakcji
+    $c = $dodaj();
+    bon_test_webhook($k, $pdo, bon_test_payload(['order_uuid' => $c['id'], 'customer_email' => 'sync@example.com']));
+    bon_synchronizuj($ks, $pdo, 'cron');
+    $b = bon_test_bony($k, $pdo, $c['id']);
+    $t('webhook przed synchronizacją: 1 bon, id transakcji uzupełnione', count($b) === 1 && $b[0]['easytools_transaction_id'] === $c['transakcja'] && $b[0]['dla'] === 'Mama');
+
+    // inne produkty i zamówienia sprzed sync_od pomijane
+    $testowy = $dodaj(['_produkt' => bon_test_uuid(), 'product_name' => 'TEST webhook – nie kupować']);
+    $stare = $dodaj(['created_at' => $teraz->modify('-2 days')->format('c')]);
+    bon_synchronizuj($ks, $pdo, 'cron');
+    $t('sync: produkt „TEST webhook” i zamówienie sprzed sync_od bez bonu', $ile($testowy['id']) === 0 && $ile($stare['id']) === 0);
+
+    // rabat (zapłacono < 80% nominału) i nieznany wariant → wstrzymany, bez maila
+    $rabat = $dodaj(['amount' => 800, 'line_items' => [['amount' => 800, 'amount_total' => 800]]]);
+    $nieznany = $dodaj(['line_items' => [['variant_name' => 'Bon 250 zł']]]);
+    [, $zad] = bon_synchronizuj($ks, $pdo, 'cron');
+    $br = bon_test_bony($k, $pdo, $rabat['id']);
+    $bn = bon_test_bony($k, $pdo, $nieznany['id']);
+    $t('sync: kod rabatowy (8 zł za 200) → held, paid 8.00', $br && $br[0]['status'] === 'held' && $br[0]['paid_pln'] == 8 && $br[0]['initial_pln'] == 200);
+    $t('sync: nieznany wariant → held z uwagą o „warianty”', $bn && $bn[0]['status'] === 'held' && str_contains((string)$bn[0]['status_uwagi'], 'warianty'));
+    $t('sync: wstrzymane bez zadania wysyłki', !isset($zad[$rabat['id']]) && !isset($zad[$nieznany['id']]));
+
+    // dowolna kwota i 2 sztuki
+    $dow = $dodaj(['amount' => 25000, 'line_items' => [['variant_name' => 'Dowolna kwota (od 180 zł)', 'amount' => 25000, 'amount_total' => 25000]]]);
+    $dwa = $dodaj(['amount' => 40000, 'quantity' => 2, 'line_items' => [['quantity' => 2, 'amount_total' => 40000]]]);
+    bon_synchronizuj($ks, $pdo, 'cron');
+    $bd = bon_test_bony($k, $pdo, $dow['id']);
+    $b2 = bon_test_bony($k, $pdo, $dwa['id']);
+    $t('sync: dowolna kwota 250 zł → bon 250 zł valid', $bd && $bd[0]['initial_pln'] == 250 && $bd[0]['status'] === 'valid');
+    $t('sync: 2 sztuki → 2 bony po 200 zł', count($b2) === 2 && $b2[0]['initial_pln'] == 200 && $b2[1]['paid_pln'] == 200);
+
+    // nieudana wcześniej wysyłka: kolejny przebieg ją dokańcza
+    $pdo->prepare('UPDATE ' . bon_tabela($k, 'vouchers') . ' SET mail_wyslany_at = NULL WHERE easytools_order_id = ?')->execute([$dow['id']]);
+    [, $zad] = bon_synchronizuj($ks, $pdo, 'cron');
+    $t('sync: bon ważny bez maila → zadanie wysyłki w kolejnym przebiegu', isset($zad[$dow['id']]));
+    foreach ($zad as $z) $z();
+
+    // odstęp minimalny dla wywołań ze strony
+    @unlink($plikOdstepu);
+    $r1 = bon_synchronizuj($ks, $pdo, 'strona')[0];
+    $r2 = bon_synchronizuj($ks, $pdo, 'strona')[0];
+    $r3 = bon_synchronizuj($ks, $pdo, 'panel')[0];
+    $t('sync ze strony: drugie wywołanie w 20 s pominięte, panel bez odstępu', !isset($r1['pominieto']) && ($r2['pominieto'] ?? '') === 'odstęp' && !isset($r3['pominieto']));
+    @unlink($plikOdstepu);
+
+    // błąd API → wyjątek (endpoint loguje), nic nie powstaje
+    $zle = array_replace($ks, ['easytools_http' => static fn() => [401, ['message' => 'Unauthenticated.']]]);
+    $wyjatek = '';
+    try { bon_synchronizuj($zle, $pdo, 'cron'); } catch (RuntimeException $e) { $wyjatek = $e->getMessage(); }
+    $t('sync: API 401 → wyjątek z kodem, bez klucza w treści', str_contains($wyjatek, 'HTTP 401') && !str_contains($wyjatek, 'klucz-testowy'), $wyjatek);
+
+    // raport dla panelu: bez e-maili
+    [$r] = bon_synchronizuj(array_replace($ks, ['sync_tryb' => 'raport']), $pdo, 'panel');
+    $p = bon_synchronizuj_dla_panelu($r);
+    $t('raport panelu: tekst, bez e-maili', isset($p['tekst']) && !str_contains(json_encode($p, JSON_UNESCAPED_UNICODE), '@'), json_encode($p, JSON_UNESCAPED_UNICODE));
+    $t('nominał po nazwie wariantu: wielkość liter i twarda spacja bez znaczenia', bon_et_nominal($k, "bon 300\u{00A0}ZŁ") === 300 && bon_et_nominal($k, 'Bon 999 zł') === null);
+
+    return $wyniki;
+}

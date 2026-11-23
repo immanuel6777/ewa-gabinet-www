@@ -2503,4 +2503,4 @@
   </body>
 </html>
 
-<script type="module">location.search.length>1&&fetch(`/api/bon/powrot.php`+location.search,{method:`GET`,keepalive:!0,cache:`no-store`}).catch(()=>{});</script>
+<script type="module">if(new URLSearchParams(location.search).has(`ec_order_id`)){let e=()=>fetch(`/api/bon/synchronizuj.php`,{method:`POST`,keepalive:!0,cache:`no-store`}).catch(()=>{});for(let t of[0,22,50,100])setTimeout(e,t*1e3)}</script>

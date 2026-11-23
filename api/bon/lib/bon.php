@@ -33,6 +33,11 @@ function bon_konfig(): array {
         'ceny' => ['bon-200' => 200, 'bon-300' => 300, 'bon-500' => 500, 'bon-dowolna' => 'dowolna'],
         'verify_limit_na_minute' => 20,
         'mail_tryb' => 'mail',
+        // synchronizacja z API Easytools (lib/easytools.php, 2026-11-23): nazwa wariantu z API → nominał
+        'warianty' => ['Bon 200 zł' => 200, 'Bon 300 zł' => 300, 'Bon 500 zł' => 500, 'Dowolna kwota (od 180 zł)' => 'dowolna'],
+        'sync_tryb' => 'raport',
+        'sync_dni' => 7,
+        'sync_odstep_s' => 20,
     ];
 }
 
@@ -237,24 +242,65 @@ function bon_obsluz_webhook(array $k, string $raw, array $naglowki, ?callable $p
     if ($zdarzenie !== 'single_product_bought') return [200, ['ok' => true, 'pominieto' => $zdarzenie]];
     if (($d['success'] ?? null) !== true) return [200, ['ok' => true, 'pominieto' => 'success != true']];
 
-    $zamowienie = $d['order_id'] ?? null;
+    // id zamówienia: order_uuid (ten sam UUID, który zwraca API Easytools i parametr ec_order_id powrotu z kasy) –
+    // dzięki temu bon z synchronizacji (lib/easytools.php) i bon z webhooka trafiają na ten sam klucz unikalny i się nie dublują.
+    // order_id (liczba) tylko awaryjnie, gdy webhook nie niesie UUID.
+    $zamowienie = $d['order_uuid'] ?? null;
+    if (!is_string($zamowienie) || !preg_match('/^[0-9a-f-]{36}$/i', $zamowienie) || $zamowienie === '00000000-0000-0000-0000-000000000000') {
+        $zamowienie = $d['order_id'] ?? null;
+    }
     if (!is_int($zamowienie) && !(is_string($zamowienie) && $zamowienie !== '')) return [400, ['ok' => false, 'blad' => 'brak order_id']];
-    $zamowienie = mb_substr((string)$zamowienie, 0, 64);
 
     $email = bon_tekst((string)($d['customer_email'] ?? ''), 190);
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) return [400, ['ok' => false, 'blad' => 'brak e-maila']];
 
-    if (strtolower((string)($d['currency'] ?? '')) !== 'pln') {
-        bon_powiadom($k, 'Bon: zamówienie w innej walucie', "Zamówienie $zamowienie, waluta: " . ($d['currency'] ?? '?') . ". Bon NIE powstał – sprawdź w Easytools.");
+    $priceId = bon_tekst((string)($d['price_id'] ?? ''), 100);
+    $nip = is_array($d['invoice_data'] ?? null) ? bon_tekst((string)($d['invoice_data']['nip'] ?? ''), 20) : '';
+    $pdo = $pdoFabryka ? $pdoFabryka($k) : bon_pdo($k);
+    return bon_utworz_bony($k, $pdo, [
+        'zrodlo' => 'webhook',
+        'zamowienie' => (string)$zamowienie,
+        'transakcja' => null,
+        'email' => $email,
+        'imie' => (string)($d['customer_name'] ?? ''),
+        'nip' => $nip,
+        'waluta' => (string)($d['currency'] ?? ''),
+        'ilosc' => $d['quantity'] ?? 1,
+        'zaplacono' => bon_grosze($d['amount_paid'] ?? null, (string)$k['kwota_jednostka']),
+        'wariant' => $priceId,
+        'nominal' => $k['ceny'][$priceId] ?? ($k['ceny'][(string)($d['price_custom_id'] ?? '')] ?? null),
+        'promo' => is_scalar($d['promo_code'] ?? null) ? (string)$d['promo_code'] : '',
+        'dla' => bon_pole_wlasne($d['custom_fields'] ?? null, (array)$k['pole_dla']),
+        'od' => bon_pole_wlasne($d['custom_fields'] ?? null, (array)$k['pole_od']),
+    ]);
+}
+
+/**
+ * Bony z jednego opłaconego zamówienia – wspólne dla webhooka i synchronizacji z API Easytools (2026-11-23).
+ * $z (już znormalizowane przez wołającego):
+ *   zrodlo 'webhook'|'api', zamowienie (UUID), transakcja (?UUID transakcji Easytools), email, imie, nip, waluta,
+ *   ilosc (surowa wartość), zaplacono (?int grosze za całe zamówienie), wariant (identyfikator do kolumny price_id),
+ *   nominal (z mapy: liczba zł | 'dowolna' | null = nieznany wariant), promo, dla, od.
+ * Zwraca [200, odpowiedź, ?callable wysyłka PDF po odpowiedzi]. Powtórka (klucz unikalny zamówienie+nr) niczego nie dubluje,
+ * a jej callable dokańcza nieudaną wcześniej wysyłkę.
+ */
+function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
+    $zamowienie = mb_substr((string)$z['zamowienie'], 0, 64);
+    $email = bon_tekst((string)$z['email'], 190);
+    $transakcja = is_string($z['transakcja'] ?? null) && $z['transakcja'] !== '' ? mb_substr($z['transakcja'], 0, 64) : null;
+    $tab = bon_tabela($k, 'vouchers');
+
+    if (strtolower((string)$z['waluta']) !== 'pln') {
+        bon_powiadom($k, 'Bon: zamówienie w innej walucie', "Zamówienie $zamowienie, waluta: " . ($z['waluta'] ?: '?') . ". Bon NIE powstał – sprawdź w Easytools.");
         return [200, ['ok' => true, 'pominieto' => 'waluta']];
     }
 
     // ilość: pieniądze już wpłynęły, więc nic nie odrzucamy – dziwna ilość = bon wstrzymany do sprawdzenia
     $uwagi = [];
-    $ilosc = $d['quantity'] ?? 1;
+    $ilosc = $z['ilosc'] ?? 1;
     if (is_string($ilosc) && ctype_digit($ilosc)) $ilosc = (int)$ilosc;
     if (!is_int($ilosc) || $ilosc < 1) {
-        $uwagi[] = 'zła ilość (quantity: ' . json_encode($d['quantity'] ?? null) . ') – utworzono 1 bon, sprawdź zamówienie';
+        $uwagi[] = 'zła ilość (quantity: ' . json_encode($z['ilosc'] ?? null) . ') – utworzono 1 bon, sprawdź zamówienie';
         $ilosc = 1;
     } elseif ($ilosc > 50) {
         $uwagi[] = "ilość $ilosc > 50 – utworzono 50 bonów, resztę dodaj ręcznie";
@@ -262,12 +308,12 @@ function bon_obsluz_webhook(array $k, string $raw, array $naglowki, ?callable $p
     }
 
     // --- wartość bonu: nominał wariantu z konfigu; „dowolna” = kwota zapłacona ---
-    $zaplaconoRazem = bon_grosze($d['amount_paid'] ?? null, (string)$k['kwota_jednostka']);
-    if ($zaplaconoRazem === null) { $uwagi[] = 'brak lub zła kwota amount_paid'; $zaplaconoRazem = 0; }
+    $zaplaconoRazem = $z['zaplacono'];
+    if (!is_int($zaplaconoRazem) || $zaplaconoRazem < 0) { $uwagi[] = 'brak lub zła kwota zapłacona'; $zaplaconoRazem = 0; }
     $zaplaconoJedn = intdiv($zaplaconoRazem, $ilosc);
 
-    $priceId = bon_tekst((string)($d['price_id'] ?? ''), 100);
-    $wariant = $k['ceny'][$priceId] ?? ($k['ceny'][(string)($d['price_custom_id'] ?? '')] ?? null);
+    $wariantId = bon_tekst((string)$z['wariant'], 100);
+    $wariant = $z['nominal'];
     if ($wariant === 'dowolna') {
         $wartosc = $zaplaconoJedn;
         if ($wartosc < (int)$k['min_dowolna_pln'] * 100) $uwagi[] = 'dowolna kwota poniżej minimum ' . $k['min_dowolna_pln'] . ' zł';
@@ -276,44 +322,45 @@ function bon_obsluz_webhook(array $k, string $raw, array $naglowki, ?callable $p
         if ($zaplaconoJedn < (int)round($wartosc * (float)$k['prog_wstrzymania'])) {
             $uwagi[] = 'zapłacono ' . bon_zl($zaplaconoJedn) . ' zł przy nominale ' . bon_zl($wartosc) . ' zł (próg ' . ((float)$k['prog_wstrzymania'] * 100) . '%)';
         } elseif ($zaplaconoJedn > $wartosc) {
-            // np. ilość nie doszła albo amount_paid to coś innego niż suma zamówienia – mogło przepaść kilka bonów
+            // np. ilość nie doszła albo kwota to coś innego niż suma zamówienia – mogło przepaść kilka bonów
             $uwagi[] = 'zapłacono ' . bon_zl($zaplaconoJedn) . ' zł za bon przy nominale ' . bon_zl($wartosc) . ' zł – więcej niż nominał, sprawdź ilość';
         }
     } else {
         $wartosc = $zaplaconoJedn;
-        $uwagi[] = 'nieznany wariant ceny (price_id: ' . ($priceId ?: 'brak') . ') – dopisz go w konfigu w „ceny”';
+        $uwagi[] = $z['zrodlo'] === 'api'
+            ? 'nieznany wariant ceny („' . ($wariantId ?: 'brak') . '”) – dopisz nazwę wariantu w konfigu w „warianty”'
+            : 'nieznany wariant ceny (price_id: ' . ($wariantId ?: 'brak') . ') – dopisz go w konfigu w „ceny”';
     }
     if ($wartosc <= 0) $uwagi[] = 'wartość bonu 0 zł';
     $status = $uwagi ? 'held' : 'valid';
 
     $teraz = bon_teraz();
-    $promo = bon_tekst(is_scalar($d['promo_code'] ?? null) ? (string)$d['promo_code'] : '', 100);
-    $nip = is_array($d['invoice_data'] ?? null) ? bon_tekst((string)($d['invoice_data']['nip'] ?? ''), 20) : '';
+    $promo = bon_tekst((string)($z['promo'] ?? ''), 100);
+    $nip = bon_tekst((string)($z['nip'] ?? ''), 20);
     $wspolne = [
         'initial_pln' => bon_zl($wartosc),
         'balance_pln' => bon_zl($wartosc),
-        'price_id' => $priceId,
+        'price_id' => $wariantId,
         'promo_code' => $promo === '' ? null : $promo,
         'buyer_email' => $email,
-        'buyer_name' => bon_tekst((string)($d['customer_name'] ?? ''), 120) ?: null,
+        'buyer_name' => bon_tekst((string)($z['imie'] ?? ''), 120) ?: null,
         'buyer_nip' => $nip === '' ? null : $nip,
-        'dla' => bon_pole_wlasne($d['custom_fields'] ?? null, (array)$k['pole_dla']),
-        'od' => bon_pole_wlasne($d['custom_fields'] ?? null, (array)$k['pole_od']),
+        'dla' => $z['dla'] ?? null,
+        'od' => $z['od'] ?? null,
         'status' => $status,
         'status_uwagi' => $uwagi ? mb_substr(implode('; ', $uwagi), 0, 255) : null,
         'easytools_order_id' => $zamowienie,
+        'easytools_transaction_id' => $transakcja,
         'created_at' => $teraz->format('Y-m-d H:i:s'),
         'expires_at' => bon_waznosc($teraz, (int)$k['waznosc_miesiecy']),
     ];
 
-    $pdo = $pdoFabryka ? $pdoFabryka($k) : bon_pdo($k);
-    $tab = bon_tabela($k, 'vouchers');
     $sql = "INSERT INTO $tab (code, initial_pln, balance_pln, paid_pln, price_id, promo_code, buyer_email, buyer_name, buyer_nip, dla, od,
-              status, status_uwagi, easytools_order_id, nr_w_zamowieniu, created_at, expires_at)
+              status, status_uwagi, easytools_order_id, easytools_transaction_id, nr_w_zamowieniu, created_at, expires_at)
             VALUES (:code, :initial_pln, :balance_pln, :paid_pln, :price_id, :promo_code, :buyer_email, :buyer_name, :buyer_nip, :dla, :od,
-              :status, :status_uwagi, :easytools_order_id, :nr, :created_at, :expires_at)";
+              :status, :status_uwagi, :easytools_order_id, :easytools_transaction_id, :nr, :created_at, :expires_at)";
 
-    // idempotencja: UNIQUE (easytools_order_id, nr_w_zamowieniu); powtórzony webhook → 23000 → nic nowego nie powstaje
+    // idempotencja: UNIQUE (easytools_order_id, nr_w_zamowieniu); powtórka (webhook, synchronizacja) → 23000 → nic nowego nie powstaje
     for ($proba = 1; $proba <= 3; $proba++) {
         $kody = [];
         try {
@@ -337,8 +384,22 @@ function bon_obsluz_webhook(array $k, string $raw, array $naglowki, ?callable $p
             if (($e->errorInfo[0] ?? $e->getCode()) !== '23000') throw $e;
             $ile = $pdo->prepare("SELECT COUNT(*) FROM $tab WHERE easytools_order_id = ?");
             $ile->execute([$zamowienie]);
-            // powtórzony webhook: bony już są; jeśli poprzednia wysyłka maila się nie udała – dokończ ją (po odpowiedzi)
-            if ((int)$ile->fetchColumn() > 0) return [200, ['ok' => true, 'powtorzony' => true], static fn() => bon_wyslij_zamowienie($k, $pdo, $zamowienie)];
+            if ((int)$ile->fetchColumn() > 0) {
+                // bony już są; uzupełnij id transakcji (webhook go nie niesie) i dokończ ewentualną nieudaną wysyłkę (po odpowiedzi)
+                if ($transakcja !== null) {
+                    $pdo->prepare("UPDATE $tab SET easytools_transaction_id = ? WHERE easytools_order_id = ? AND easytools_transaction_id IS NULL")
+                        ->execute([$transakcja, $zamowienie]);
+                }
+                // webhook po synchronizacji: bon z API nie ma Dla/Od – uzupełnij puste (Bartek 2026-11-23). Maila NIE wysyłamy ponownie:
+                // zadanie niżej wysyła tylko bony z mail_wyslany_at = NULL. Wpisanych wartości nie nadpisujemy.
+                foreach (['dla', 'od'] as $pole) {
+                    $w = $z[$pole] ?? null;
+                    if (is_string($w) && trim($w) !== '') {
+                        $pdo->prepare("UPDATE $tab SET $pole = ? WHERE easytools_order_id = ? AND ($pole IS NULL OR $pole = '')")->execute([$w, $zamowienie]);
+                    }
+                }
+                return [200, ['ok' => true, 'powtorzony' => true], static fn() => bon_wyslij_zamowienie($k, $pdo, $zamowienie)];
+            }
             if ($proba === 3) throw $e; // trzy kolizje kodu z rzędu – nie powinno się zdarzyć
         }
     }
@@ -348,11 +409,11 @@ function bon_obsluz_webhook(array $k, string $raw, array $naglowki, ?callable $p
             'Bon(y) czekają na ręczne zatwierdzenie (status held).',
             'Powód: ' . implode('; ', $uwagi),
             'Kody: ' . implode(', ', $kody),
-            'Zamówienie Easytools: ' . $zamowienie . ', wariant: ' . ($priceId ?: 'brak') . ', kod rabatowy: ' . ($promo ?: 'brak'),
-            'Zapłacono razem: ' . bon_zl($zaplaconoRazem) . ' zł, sztuk: ' . $ilosc,
+            'Zamówienie Easytools: ' . $zamowienie . ', wariant: ' . ($wariantId ?: 'brak') . ', kod rabatowy: ' . ($promo ?: ($z['zrodlo'] === 'api' ? 'nieznany (API go nie podaje)' : 'brak')),
+            'Zapłacono razem: ' . bon_zl($zaplaconoRazem) . ' zł, sztuk: ' . $ilosc . ', źródło: ' . $z['zrodlo'],
         ]));
     }
-    // trzeci element: zadanie PO odpowiedzi 200 (PDF + mail) – webhook.php woła je po fastcgi_finish_request; wstrzymane bez maila
+    // trzeci element: zadanie PO odpowiedzi (PDF + mail) – woła je po fastcgi_finish_request; wstrzymane bez maila
     $poOdpowiedzi = $status === 'valid' ? static fn() => bon_wyslij_zamowienie($k, $pdo, $zamowienie) : null;
     return [200, ['ok' => true, 'bonow' => count($kody), 'status' => $status], $poOdpowiedzi];
 }
