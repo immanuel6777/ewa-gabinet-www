@@ -11,6 +11,7 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/pdf.php';
+require_once __DIR__ . '/smtp.php';
 
 const BON_PDF_NA_MAIL = 10;
 
@@ -93,6 +94,8 @@ function bon_mailjet_wyslij(array $k, string $do, string $temat, string $tekst, 
         $zerwania[] = (string)$wynik['blad'];
     }
     if ($zerwania) bon_mailjet_zerwanie($k, 'wysylka', $wynik['proby'], count($zerwania), $zerwania, !empty($wynik['ponow']));
+    // 'polaczenie' = ostatnia próba padła przed wysłaniem treści (Mailjet nic nie dostał) – tylko wtedy wolno użyć zapasu SMTP
+    $wynik['polaczenie'] = !empty($wynik['ponow']);
     unset($wynik['ponow']);
     return $wynik;
 }
@@ -126,16 +129,21 @@ function bon_mailjet_sonda(array $k): array {
 /** Jedna próba wysyłki. 'ponow' => true tylko przy błędzie połączenia sprzed wysłania treści. */
 function bon_mailjet_proba(array $k, string $do, string $temat, string $tekst, string $html, array $zalaczniki): array {
     $zly = static fn(string $blad, bool $ponow = false, int $http = 0) => ['blad' => $blad, 'http' => $http, 'status' => null, 'id' => [], 'ponow' => $ponow];
-    if (!preg_match('/^(.*)<([^>]+)>\s*$/', (string)($k['mail_nadawca'] ?? ''), $m)) return $zly('zły mail_nadawca w konfigu (wzór: Nazwa <adres@domena>)');
+    $w = bon_mail_wiadomosc($k, $do, $temat, $tekst, $html, $zalaczniki);
+    if ($w === null) return $zly('zły mail_nadawca w konfigu (wzór: Nazwa <adres@domena>)');
     $wiadomosc = [
-        'From' => ['Email' => trim($m[2]), 'Name' => trim($m[1])],
-        'To' => [['Email' => $do]],
-        'Subject' => $temat,
-        'TextPart' => $tekst,
-        'HTMLPart' => $html,
-        'Attachments' => array_map(static fn($z) => ['ContentType' => 'application/pdf', 'Filename' => $z['nazwa'], 'Base64Content' => base64_encode($z['dane'])], $zalaczniki),
+        'From' => ['Email' => $w['od'], 'Name' => $w['od_nazwa']],
+        'To' => [['Email' => $w['do']]],
+        'Subject' => $w['temat'],
+        'TextPart' => $w['tekst'],
+        'HTMLPart' => $w['html'],
+        'Attachments' => array_map(static fn($z) => ['ContentType' => 'application/pdf', 'Filename' => $z['nazwa'], 'Base64Content' => base64_encode($z['dane'])], $w['zalaczniki']),
+        // bez śledzenia otwarć i kliknięć (2026-11-23): mail z Mailjeta = mail z zapasu SMTP (bez piksela i przepisanych linków);
+        // kontrola dostarczenia zamyka zapis już na statusie „sent”
+        'TrackOpens' => 'disabled',
+        'TrackClicks' => 'disabled',
     ];
-    if (!empty($k['mail_odpowiedz'])) $wiadomosc['ReplyTo'] = ['Email' => (string)$k['mail_odpowiedz']];
+    if ($w['odpowiedz'] !== '') $wiadomosc['ReplyTo'] = ['Email' => $w['odpowiedz']];
 
     if ($k['mail_tryb'] === 'plik') {
         $zapis = $wiadomosc;
@@ -227,15 +235,44 @@ function bon_wyslij_zamowienie(array $k, PDO $pdo, string $zamowienie): array {
         foreach (array_chunk($bony, BON_PDF_NA_MAIL) as $paczka) {
             [$temat, $tekst, $html] = bon_mail_tresc($k, $paczka);
             $zalaczniki = array_map(static fn($b) => ['nazwa' => 'bon-' . $b['code'] . '.pdf', 'dane' => bon_pdf($b, $k)], $paczka);
-            $odp = bon_mailjet_wyslij($k, (string)$paczka[0]['buyer_email'], $temat, $tekst, $html, $zalaczniki);
+            $do = (string)$paczka[0]['buyer_email'];
+            $wymus = bon_zapas_wymuszony($k);
+            $odp = $wymus
+                ? ['blad' => 'test zapasu (mail_zapas_test_do)', 'http' => 0, 'status' => null, 'id' => [], 'proby' => 0, 'polaczenie' => true]
+                : bon_mailjet_wyslij($k, $do, $temat, $tekst, $html, $zalaczniki);
+            $wpis = ['droga' => 'mailjet', 'http' => $odp['http'], 'status' => $odp['status'], 'id' => $odp['id'], 'proby' => $odp['proby']];
+            $mozliwe = false;
+            // zapas SMTP OVH (22:20): tylko gdy Mailjet nic nie dostał (błąd połączenia przed treścią); błąd HTTP = bez zapasu
+            if ($odp['blad'] !== null && !empty($odp['polaczenie']) && bon_zapas_wlaczony($k)) {
+                $w = bon_mail_wiadomosc($k, $do, $temat, $tekst, $html, $zalaczniki);
+                $s = $w === null ? ['blad' => 'SMTP: zły mail_nadawca', 'kod' => 0, 'odp' => '', 'mozliwe_wyslane' => false] : bon_smtp_wyslij($k, $w);
+                $wpis = ['droga' => 'smtp-ovh', 'mailjet_blad' => mb_substr((string)$odp['blad'], 0, 160), 'smtp_kod' => $s['kod'], 'smtp_odp' => $s['odp']];
+                if ($wymus) $wpis['test_zapasu'] = true;
+                $mozliwe = $s['mozliwe_wyslane'];
+                $odp['blad'] = $s['blad'] === null ? null : $odp['blad'] . ' | zapas ' . $s['blad'];
+            }
             unset($zalaczniki);
-            $mailjet[] = ['http' => $odp['http'], 'status' => $odp['status'], 'id' => $odp['id'], 'proby' => $odp['proby']];
+            $mailjet[] = $wpis;
             $blad = $odp['blad'];
+            if ($mozliwe) {
+                // SMTP zerwał się po przesłaniu treści: serwer mógł mail przyjąć. Bez automatycznej ponownej wysyłki (bez dubli):
+                // bon oznaczony jako wysłany, gabinet dostaje jedno powiadomienie do sprawdzenia u kupującego.
+                $teraz = bon_teraz()->format('Y-m-d H:i:s');
+                foreach ($paczka as $b) $oznacz->execute([$teraz, $b['id']]);
+                bon_zdarzenie($k, 'mail-niepewny', ['zamowienie' => $zamowienie, 'kody' => array_map('bon_kod_maska', array_column($paczka, 'code')), 'blad' => $blad]);
+                bon_powiadom($k, 'Bon: mail MOŻE nie dotrzeć – zamówienie ' . $zamowienie, "Zapasowa wysyłka (SMTP OVH) zerwała się po przesłaniu treści – serwer mógł mail przyjąć.\n"
+                    . 'Bony: ' . implode(', ', array_column($paczka, 'code')) . "\nBłąd: $blad\n"
+                    . "Wysyłka NIE będzie ponawiana automatycznie (żeby kupujący nie dostał dwóch maili). Sprawdź u kupującego; w razie potrzeby wyślij bon ponownie.");
+                $blad = null;
+                $wyslane += count($paczka);
+                continue;
+            }
             if ($blad !== null) break;
             $teraz = bon_teraz()->format('Y-m-d H:i:s');
             foreach ($paczka as $b) { $oznacz->execute([$teraz, $b['id']]); $wyslane++; }
-            // tryb „plik” (testy, też test-ovh.php na produkcji): bez zapisu do kontroli – zmyślone MessageID nie mogą trafić do crona
-            if ($k['mail_tryb'] !== 'plik') bon_mail_zapisz_wysylke($k, $zamowienie, array_column($paczka, 'code'), $odp['id']);
+            // tryb „plik” (testy, też test-ovh.php na produkcji): bez zapisu do kontroli – zmyślone MessageID nie mogą trafić do crona;
+            // droga SMTP: bez kontroli po MessageID (zapis „przyjęte przez serwer OVH” w zdarzeniu mail)
+            if ($k['mail_tryb'] !== 'plik' && $wpis['droga'] === 'mailjet') bon_mail_zapisz_wysylke($k, $zamowienie, array_column($paczka, 'code'), $odp['id']);
         }
 
         $kody = implode(', ', array_column($bony, 'code'));
@@ -252,6 +289,7 @@ function bon_wyslij_zamowienie(array $k, PDO $pdo, string $zamowienie): array {
             $suma = array_sum(array_map(static fn($b) => (int)bon_grosze($b['initial_pln']), $bony));
             bon_powiadom($k, 'Sprzedano bon – ' . bon_kwota_tekst($suma), "Zamówienie Easytools: $zamowienie\nBony: $kody\n"
                 . 'Kupujący dostał PDF mailem (' . (string)$bony[0]['buyer_email'] . ").\n"
+                . (in_array('smtp-ovh', array_column($mailjet, 'droga'), true) ? "Droga: zapasowa (SMTP OVH) – Mailjet był nieosiągalny.\n" : '')
                 . ($wczesniej ? "Dokończona wysyłka: $wczesniej bon(y) z tego zamówienia poszły we wcześniejszej próbie.\n" : ''));
         }
         return ['zamowienie' => $zamowienie, 'wyslane' => $wyslane, 'blad' => $blad, 'pominieto' => null, 'mailjet' => $mailjet];

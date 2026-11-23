@@ -301,6 +301,63 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     [, , $zadanie] = bon_test_webhook($kBlad, $pdo, $p);
     $w = $zadanie ? $zadanie() : [];
     $t('błąd HTTP Mailjeta → bez ponawiania (1 próba)', ($w['blad'] ?? null) !== null && ($w['mailjet'][0]['proby'] ?? 0) === 1, json_encode($w));
+    $ostatniMailjet = json_decode((string)(array_slice(file($k['_katalog'] . '/bony-mailjet.jsonl') ?: [''], -1)[0]), true);
+    $t('Mailjet: śledzenie otwarć i kliknięć wyłączone w wiadomości', ($ostatniMailjet['TrackOpens'] ?? '') === 'disabled' && ($ostatniMailjet['TrackClicks'] ?? '') === 'disabled');
+
+    // zapas SMTP OVH (22:20) – we własnym katalogu tymczasowym (test-ovh.php działa na prawdziwym konfig/)
+    $kOrgZ = $k;
+    $katZ = sys_get_temp_dir() . '/bony-zapas-' . bin2hex(random_bytes(4));
+    @mkdir($katZ, 0700, true);
+    $kZ = array_replace($k, ['_katalog' => $katZ, 'mail_zapas' => true, 'mail_smtp_host' => 'ssl0.ovh.net', 'mail_smtp_port' => 465,
+        'mail_smtp_user' => 'powiadomienia@ewa-gabinet.pl', 'mail_smtp_haslo' => 'tajne-haslo-smtp-123', 'mail_odpowiedz' => 'kontakt@ewa-gabinet.pl']);
+    $ileSmtp = static fn(): int => count(is_file($katZ . '/bony-smtp.jsonl') ? (file($katZ . '/bony-smtp.jsonl') ?: []) : []);
+    $ileMj = static fn(): int => count(is_file($katZ . '/bony-mailjet.jsonl') ? (file($katZ . '/bony-mailjet.jsonl') ?: []) : []);
+    $wyslijZ = static function (array $kk, string $zam, int $zerwania) use ($pdo): array {
+        $GLOBALS['bon_test_zerwania'] = $zerwania;
+        [, , $zadanie] = bon_test_webhook($kk, $pdo, bon_test_payload(['order_id' => $zam]));
+        $w = $zadanie ? $zadanie() : [];
+        $GLOBALS['bon_test_zerwania'] = 0;
+        return [$w, bon_test_bony($kk, $pdo, $zam)];
+    };
+    [$w, $b] = $wyslijZ($kZ, 'ord_zapas_ok', 3);
+    $t('zapas: 3 zerwania Mailjeta → ten sam mail przez SMTP OVH, bon wysłany', array_key_exists('blad', $w) && $w['blad'] === null && ($w['mailjet'][0]['droga'] ?? '') === 'smtp-ovh'
+        && $ileSmtp() === 1 && $b[0]['mail_wyslany_at'] !== null, json_encode([$w, $ileSmtp(), $b[0]['mail_wyslany_at'], glob($katZ . '/*')]));
+    $smtp = json_decode((string)(file($katZ . '/bony-smtp.jsonl') ?: [''])[0], true);
+    $nagl = implode("\n", (array)($smtp['naglowki'] ?? []));
+    $t('zapas: wiadomość MIME – nadawca z nazwą, Reply-To, temat, PDF, multipart', str_contains($nagl, '<powiadomienia@ewa-gabinet.pl>') && str_contains($nagl, '=?UTF-8?B?')
+        && str_contains($nagl, 'Reply-To: <kontakt@ewa-gabinet.pl>') && str_contains($nagl, 'multipart/mixed') && str_contains($nagl, 'Message-ID: <')
+        && count($smtp['zalaczniki'] ?? []) === 1 && str_ends_with((string)$smtp['zalaczniki'][0], '.pdf'), $nagl);
+    $mime = bon_mail_mime(bon_mail_wiadomosc($kZ, 'jan@example.com', 'Twój bon podarunkowy – Gabinet EWA', ".kropka\nlinia", '<p>x</p>', [['nazwa' => 'bon-A.pdf', 'dane' => '%PDF-1.4 test']]));
+    $t('zapas: MIME z CRLF, tekst i HTML w multipart/alternative, temat w UTF-8 do odczytania', !preg_match("/[^\r]\n/", $mime) && str_contains($mime, 'multipart/alternative')
+        && str_contains($mime, 'filename="bon-A.pdf"') && mb_decode_mimeheader(preg_match('/^Subject: (.*(?:\r\n[ \t].*)*)/m', $mime, $m) ? $m[1] : '') === 'Twój bon podarunkowy – Gabinet EWA');
+    [$w, $b] = $wyslijZ(array_replace($kZ, ['mailjet_test_blad' => true]), 'ord_zapas_http', 0);
+    $t('zapas: błąd HTTP Mailjeta → bez zapasu (Mailjet dostał treść)', ($w['blad'] ?? null) !== null && $ileSmtp() === 1 && ($w['mailjet'][0]['droga'] ?? '') === 'mailjet', json_encode($w));
+    [$w, $b] = $wyslijZ(array_replace($kZ, ['mail_zapas' => false]), 'ord_zapas_wyl', 3);
+    $t('zapas wyłączony (bez konfiguracji) → błąd jak dotąd, bez SMTP', ($w['blad'] ?? null) !== null && $ileSmtp() === 1 && $b[0]['mail_wyslany_at'] === null, json_encode($w));
+    [$w, $b] = $wyslijZ(array_replace($kZ, ['smtp_test_blad' => 'polaczenie']), 'ord_zapas_smtp_zle', 3);
+    $t('zapas: SMTP też nie działa → błąd, bon czeka na cron', str_contains((string)($w['blad'] ?? ''), 'zapas') && $b[0]['mail_wyslany_at'] === null, json_encode($w));
+    $ileNiepewny = static fn(): int => substr_count(is_file($katZ . '/bony-powiadomienia.txt') ? (string)file_get_contents($katZ . '/bony-powiadomienia.txt') : '', 'MOŻE nie dotrzeć – zamówienie ord_zapas_po_danych');
+    [$w, $b] = $wyslijZ(array_replace($kZ, ['smtp_test_blad' => 'po_danych']), 'ord_zapas_po_danych', 3);
+    [$w2] = $wyslijZ(array_replace($kZ, ['smtp_test_blad' => 'po_danych']), 'ord_zapas_po_danych', 3);
+    $t('zapas: SMTP zerwany po treści → bez ponownej wysyłki (bez dubli), jedno powiadomienie', array_key_exists('blad', $w) && $w['blad'] === null && $b[0]['mail_wyslany_at'] !== null
+        && ($w2['pominieto'] ?? '') === 'nic do wysłania' && $ileNiepewny() === 1, json_encode([$w, $w2, $ileNiepewny(), $b[0]['mail_wyslany_at']]));
+    $waw = static fn(int $s): string => (new DateTimeImmutable('@' . (time() + $s)))->setTimezone(new DateTimeZone('Europe/Warsaw'))->format('Y-m-d H:i');
+    $przedMj = $ileMj();
+    [$w, $b] = $wyslijZ(array_replace($kZ, ['mail_zapas_test_do' => $waw(3600)]), 'ord_zapas_test', 0);
+    $t('test zapasu (mail_zapas_test_do za 1 h) → od razu SMTP, bez Mailjeta', ($w['mailjet'][0]['droga'] ?? '') === 'smtp-ovh' && !empty($w['mailjet'][0]['test_zapasu'])
+        && $ileMj() === $przedMj && $b[0]['mail_wyslany_at'] !== null, json_encode($w));
+    $t('test zapasu sam wygasa: termin miniony albo dalej niż 6 h → bez wymuszenia',
+        !bon_zapas_wymuszony(array_replace($kZ, ['mail_zapas_test_do' => $waw(-60)]))
+        && !bon_zapas_wymuszony(array_replace($kZ, ['mail_zapas_test_do' => $waw(7 * 3600)]))
+        && !bon_zapas_wymuszony(array_replace($kZ, ['mail_zapas_test_do' => $waw(3600), 'mail_zapas' => false])));
+    $diag = json_encode(bon_diagnostyka($kZ, 1, 1, 1, 1, $pdo), JSON_UNESCAPED_UNICODE);
+    $t('log.php: zapas SMTP widoczny (host, port), login i hasło nigdy', str_contains($diag, '"zapas_smtp"') && str_contains($diag, 'ssl0.ovh.net')
+        && !str_contains($diag, 'tajne-haslo-smtp-123') && !str_contains($diag, 'powiadomienia@'));
+    $t('odpowiedź serwera SMTP w dzienniku bez adresów', bon_smtp_odp_jawna("250 2.0.0 Ok: queued as ABC <jan@example.com>\r\n") === '250 2.0.0 Ok: queued as ABC <***>');
+    foreach (['bony-smtp.jsonl', 'bony-mailjet.jsonl', 'bony-powiadomienia.txt'] as $f) @unlink($katZ . '/' . $f);
+    foreach (['bony-zdarzenia', 'bony-mail-bledy', 'bony-mail-wysylki'] as $d) { foreach (glob("$katZ/$d/*") ?: [] as $f) @unlink($f); @rmdir("$katZ/$d"); }
+    @rmdir($katZ);
+    $k = $kOrgZ;
 
     // kontrola dostarczenia po MessageID (cron) – we własnym katalogu tymczasowym, nigdy w prawdziwym konfig/ (test-ovh.php)
     $kOrg = $k;

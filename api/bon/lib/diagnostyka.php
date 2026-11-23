@@ -11,9 +11,10 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/bon.php';
+require_once __DIR__ . '/smtp.php';
 
 // klucze, których wartości są ukrywane (w całym poddrzewie); wyjątki poniżej
-const BON_LOG_KLUCZE_OSOBOWE = '/(mail|name|nip|vat|tax|phone|tel|addr|street|city|zip|post|company|firma|token|secret|sign|pass|auth|customer|buyer|invoice|billing|shipping|custom|promo|coupon|forward|cookie|(^|[_-])ip($|[_-]))/i';
+const BON_LOG_KLUCZE_OSOBOWE = '/(mail|name|nip|vat|tax|phone|tel|addr|street|city|zip|post|company|firma|token|secret|sign|pass|haslo|auth|customer|buyer|invoice|billing|shipping|custom|promo|coupon|forward|cookie|(^|[_-])ip($|[_-]))/i';
 // mailjet: odpowiedź Mailjeta w zdarzeniu „mail” (HTTP, Status, MessageID, próby) – bez adresów; klucz zawiera „mail”, więc wyjątek
 const BON_LOG_KLUCZE_JAWNE = '/^((product|price|plan)[_-]name|price[_-]custom[_-]id|mailjet)$/i';
 const BON_LOG_EMAIL = '/[^\s@"]+@[^\s@"]+\.[^\s@"]+/';
@@ -159,6 +160,14 @@ function bon_diagnostyka(array $k, int $ile = 10, int $dni = 2, int $bony = 20, 
             'sync_od' => (string)($k['sync_od'] ?? ''),
             'easytools_api_key_ustawiony' => (string)($k['easytools_api_key'] ?? '') !== '' && !str_starts_with((string)$k['easytools_api_key'], 'WKLEJ'),
             'easytools_produkt_uuid' => (string)($k['easytools_produkt_uuid'] ?? ''),
+            // zapas SMTP OVH (2026-11-23): tylko host, port i stan – nigdy login ani hasło
+            'zapas_smtp' => [
+                'wlaczony' => bon_zapas_wlaczony($k),
+                'host' => (string)($k['mail_smtp_host'] ?? ''),
+                'port' => (int)($k['mail_smtp_port'] ?? 0),
+                'test_do' => (string)($k['mail_zapas_test_do'] ?? ''),
+                'test_aktywny' => bon_zapas_wymuszony($k),
+            ],
         ],
         'pliki_logu' => array_map(static fn($p) => ['plik' => basename($p), 'bajtow' => filesize($p), 'zmieniono' => date('c', (int)filemtime($p))],
             array_slice(array_reverse(glob($k['_katalog'] . '/bony-webhook-log/*.log') ?: []), 0, 14)),
