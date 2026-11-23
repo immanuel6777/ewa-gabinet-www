@@ -331,6 +331,13 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $r2 = bon_mail_kontrola($kKolejka, time() + 86400 + 60, 0);
     $niepotw = substr_count(is_file($plikPow) ? (string)file_get_contents($plikPow) : '', 'brak potwierdzenia dostarczenia – zamówienie ord_kontrola_kolejka');
     $t('kontrola: queued czeka, po 24 h jedno powiadomienie „niepotwierdzone”', $r1['czeka'] === 1 && $r2['czeka'] === 1 && $niepotw === 1, json_encode([$r1, $r2, $niepotw]));
+    $o = $r1['mailjet'][0]['odpowiedzi'][0] ?? [];
+    $t('kontrola: w wyniku surowy status i HTTP Mailjeta', ($o['status'] ?? null) === 'queued' && ($o['http'] ?? 0) === 200 && ($o['id'] ?? 0) === 444, json_encode($r1));
+    array_map('unlink', glob($kat . '/*.json') ?: []);
+    bon_mail_zapisz_wysylke($k, 'ord_kontrola_404', ['EWA-TEST-0005'], [555]);
+    $r = bon_mail_kontrola(array_replace($k, ['mailjet_test_status_http' => 404]), 0, 0);
+    $o = $r['mailjet'][0]['odpowiedzi'][0] ?? [];
+    $t('kontrola: błąd HTTP zapytania o status → czeka z kodem i opisem błędu', $r['czeka'] === 1 && ($o['http'] ?? 0) === 404 && array_key_exists('status', $o) && $o['status'] === null && str_contains((string)($o['blad'] ?? ''), '404'), json_encode($r));
     array_map('unlink', glob($kat . '/*.json') ?: []);
     @rmdir($kat);
     @unlink($plikPow);

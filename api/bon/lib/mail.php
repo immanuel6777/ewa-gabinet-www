@@ -253,9 +253,17 @@ function bon_mail_zapisz_wysylke(array $k, string $zamowienie, array $kody, arra
     @file_put_contents($katalog . '/' . md5($zamowienie . '|' . implode(',', $id)) . '.json', json_encode($wpis, JSON_UNESCAPED_UNICODE), LOCK_EX);
 }
 
-/** Status wiadomości z Mailjeta: GET /v3/REST/message/{id}. Zwraca status małymi literami albo null (jeszcze nie widać / błąd). */
-function bon_mailjet_status(array $k, int|string $id): ?string {
-    if ($k['mail_tryb'] === 'plik') return isset($k['mailjet_test_status']) ? (string)$k['mailjet_test_status'] : 'sent';
+/**
+ * Status wiadomości z Mailjeta: GET /v3/REST/message/{id}.
+ * Zwraca ['status' => małymi literami albo null (jeszcze nie widać / błąd), 'http' => kod, 'blad' => opis albo null]
+ * – http i blad trafiają do dziennika (mail-kontrola), żeby „czeka” dało się wyjaśnić. Bez treści odpowiedzi (adresy).
+ */
+function bon_mailjet_status(array $k, int|string $id): array {
+    if ($k['mail_tryb'] === 'plik') {
+        $http = (int)($k['mailjet_test_status_http'] ?? 200);
+        return ['status' => $http === 200 ? (isset($k['mailjet_test_status']) ? (string)$k['mailjet_test_status'] : 'sent') : null,
+            'http' => $http, 'blad' => $http === 200 ? null : 'HTTP ' . $http];
+    }
     $ch = curl_init('https://api.mailjet.com/v3/REST/message/' . rawurlencode((string)$id));
     curl_setopt_array($ch, [
         CURLOPT_USERPWD => (string)($k['mailjet_api_key'] ?? '') . ':' . (string)($k['mailjet_api_secret'] ?? ''),
@@ -265,10 +273,17 @@ function bon_mailjet_status(array $k, int|string $id): ?string {
     ]);
     $odp = curl_exec($ch);
     $kod = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    $bladCurl = $odp === false ? 'cURL ' . curl_errno($ch) . ': ' . curl_error($ch) : null;
     curl_close($ch);
-    if ($odp === false || $kod !== 200) return null;
-    $s = json_decode((string)$odp, true)['Data'][0]['Status'] ?? null;
-    return is_string($s) ? strtolower($s) : null;
+    if ($bladCurl !== null) return ['status' => null, 'http' => $kod, 'blad' => $bladCurl];
+    $j = json_decode((string)$odp, true);
+    if ($kod !== 200) {
+        $opis = is_array($j) ? (string)($j['ErrorMessage'] ?? $j['ErrorInfo'] ?? '') : '';
+        return ['status' => null, 'http' => $kod, 'blad' => trim('HTTP ' . $kod . ' ' . mb_substr($opis, 0, 200))];
+    }
+    $s = is_array($j) ? ($j['Data'][0]['Status'] ?? null) : null;
+    return ['status' => is_string($s) ? strtolower($s) : null, 'http' => $kod,
+        'blad' => is_string($s) ? null : 'brak pola Status (Count: ' . (is_array($j) ? (string)($j['Count'] ?? '?') : 'nie JSON') . ')'];
 }
 
 /**
@@ -290,8 +305,12 @@ function bon_mail_kontrola(array $k, int $teraz = 0, int $minWiekS = 600): array
         if ($wiek > 30 * 86400) { @unlink($plik); continue; }
         if (($w['status'] ?? null) !== null || $wiek < $minWiekS) continue;
 
-        $statusy = array_map(static fn($id) => bon_mailjet_status($k, $id), (array)($w['id'] ?? []));
+        $odpowiedzi = [];
+        foreach ((array)($w['id'] ?? []) as $id) $odpowiedzi[] = ['id' => $id] + bon_mailjet_status($k, $id);
+        $statusy = array_map(static fn($o) => $o['status'], $odpowiedzi);
         $wynik['sprawdzono']++;
+        $wynik['mailjet'][] = ['zamowienie' => $w['zamowienie'] ?? null, 'odpowiedzi' => $odpowiedzi];
+        $w['odpowiedzi'] = $odpowiedzi;
         $w['sprawdzono'] = $teraz;
         $kody = implode(', ', (array)($w['kody'] ?? []));
         $zle = array_values(array_filter($statusy, static fn($s) => in_array($s, BON_MAIL_PROBLEM, true)));
