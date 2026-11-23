@@ -262,6 +262,20 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $b = bon_test_bony($k, $pdo, $p['order_id']);
     $t('Mailjet błąd → ponowiony webhook dokańcza wysyłkę', ($odp['powtorzony'] ?? false) && ($w['wyslane'] ?? 0) === 1 && $b[0]['mail_wyslany_at'] !== null, json_encode($w));
 
+    // powiadomienie o nieudanej wysyłce: raz na zamówienie, potem najwyżej raz na dobę (cron ponawia co godzinę)
+    $plikPow = $k['_katalog'] . '/bony-powiadomienia.txt';
+    $ilePow = static fn(string $zam): int => substr_count(is_file($plikPow) ? (string)file_get_contents($plikPow) : '', 'NIE wysłano maila – zamówienie ' . $zam . "\n");
+    $p = bon_test_payload(['order_id' => 'ord_powiadom_raz']);
+    [, , $zadanie] = bon_test_webhook($kBlad, $pdo, $p);
+    if ($zadanie) $zadanie();
+    bon_wyslij_zamowienie($kBlad, $pdo, $p['order_id']);
+    bon_wyslij_zamowienie($kBlad, $pdo, $p['order_id']);
+    $t('Mailjet błąd 3× z rzędu: jedno powiadomienie', $ilePow($p['order_id']) === 1, (string)$ilePow($p['order_id']));
+    $t('powiadomienie o błędzie: po dobie znów wolno', bon_powiadomienie_bledu_czas($k, 'ord_doba', true) && !bon_powiadomienie_bledu_czas($k, 'ord_doba', true)
+        && bon_powiadomienie_bledu_czas($k, 'ord_doba', true, 0));
+    $w = bon_wyslij_zamowienie($k, $pdo, $p['order_id']);
+    $t('po udanej wysyłce znacznik błędu usunięty', ($w['wyslane'] ?? 0) === 1 && !is_file($k['_katalog'] . '/bony-mail-bledy/' . md5($p['order_id']) . '.txt'));
+
     // --- podgląd diagnostyczny (log.php): dane osobowe nigdy nie wychodzą ---
     $p = bon_test_payload(['customer_email' => 'jan.kowalski@example.com', 'customer_name' => 'Jan Kowalski', 'promo_code' => 'TEST99',
         'invoice_data' => ['nip' => '7311314632', 'company' => 'Firma Jana', 'street' => 'ul. Prosta 1'], 'customer_phone' => '+48 600 100 200',

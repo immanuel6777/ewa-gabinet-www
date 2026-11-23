@@ -120,6 +120,22 @@ function bon_mailjet_wyslij(array $k, string $do, string $temat, string $tekst, 
 }
 
 /**
+ * Znacznik „powiadomiono o nieudanej wysyłce” dla zamówienia (plik w konfig/bony-mail-bledy/, bez zmian w bazie).
+ * $blad = true: zwraca true, gdy powiadomienie należy wysłać (pierwszy błąd albo minęła doba), i zapisuje czas.
+ * $blad = false (wysyłka udana): usuwa znacznik.
+ */
+function bon_powiadomienie_bledu_czas(array $k, string $zamowienie, bool $blad, int $coIleS = 86400): bool {
+    if ((string)($k['_katalog'] ?? '') === '') return $blad;
+    $katalog = $k['_katalog'] . '/bony-mail-bledy';
+    $plik = $katalog . '/' . md5($zamowienie) . '.txt';
+    if (!$blad) { if (is_file($plik)) @unlink($plik); return false; }
+    $ostatnio = is_file($plik) ? (int)@file_get_contents($plik) : 0;
+    if ($ostatnio > 0 && time() - $ostatnio < $coIleS) return false;
+    if (is_dir($katalog) || @mkdir($katalog, 0700, true)) @file_put_contents($plik, (string)time(), LOCK_EX);
+    return true;
+}
+
+/**
  * Wysyła PDF-y niewysłanych, ważnych bonów zamówienia. Bezpieczne do wielokrotnego wywołania.
  * Zwraca ['wyslane' => liczba bonów, 'blad' => ?string, 'pominieto' => ?string].
  */
@@ -152,9 +168,14 @@ function bon_wyslij_zamowienie(array $k, PDO $pdo, string $zamowienie): array {
         $kody = implode(', ', array_column($bony, 'code'));
         if ($blad !== null) {
             error_log("bony: wysyłka zamówienia $zamowienie nieudana: $blad");
-            bon_powiadom($k, 'Bon: NIE wysłano maila – zamówienie ' . $zamowienie, "Kupujący nie dostał PDF-a z bonem.\nBłąd: $blad\n"
-                . "Bony: {$kody}\nWysłane w tej próbie: $wyslane\nPonowny webhook z Easytools dokończy wysyłkę; można też wysłać PDF ręcznie.");
+            // cron ponawia wysyłkę co godzinę – powiadomienie przy pierwszej nieudanej próbie, potem najwyżej raz na dobę (2026-11-23)
+            if (bon_powiadomienie_bledu_czas($k, $zamowienie, true)) {
+                bon_powiadom($k, 'Bon: NIE wysłano maila – zamówienie ' . $zamowienie, "Kupujący nie dostał PDF-a z bonem.\nBłąd: $blad\n"
+                    . "Bony: {$kody}\nWysłane w tej próbie: $wyslane\n"
+                    . "Synchronizacja (cron co godzinę) sama ponawia wysyłkę. Kolejne przypomnienie o tym zamówieniu najwcześniej za 24 h.");
+            }
         } else {
+            bon_powiadomienie_bledu_czas($k, $zamowienie, false);
             $suma = array_sum(array_map(static fn($b) => (int)bon_grosze($b['initial_pln']), $bony));
             bon_powiadom($k, 'Sprzedano bon – ' . bon_kwota_tekst($suma), "Zamówienie Easytools: $zamowienie\nBony: $kody\n"
                 . 'Kupujący dostał PDF mailem (' . (string)$bony[0]['buyer_email'] . ").\n"
