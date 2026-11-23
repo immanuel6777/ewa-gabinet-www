@@ -367,6 +367,10 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $sk = bon_powrot_skrot('sprawdzenie-wrzuty');
     $t('powrót z kasy: skrót przeżywa ukrywanie w podglądzie logu', $sk === '3f95-6e56-2653-5769' && bon_log_ukryj(['skroty' => ['x' => $sk]])['skroty']['x'] === $sk, $sk);
     $t('podgląd: kod bonu zamaskowany', bon_kod_maska('EWA-7KQ4-M9TX') === 'EWA-****-M9TX');
+    $mj = bon_log_ukryj(['typ' => 'mail', 'buyer_email' => 'jan@example.com', 'mailjet' => [['http' => 200, 'status' => 'success', 'id' => [1152921520000000001], 'proby' => 1]]]);
+    $t('podgląd: odpowiedź Mailjeta (HTTP, Status, MessageID, próby) jawna, e-mail nadal ukryty',
+        ($mj['mailjet'][0]['http'] ?? null) === 200 && ($mj['mailjet'][0]['status'] ?? null) === 'success'
+        && ($mj['mailjet'][0]['id'][0] ?? null) === 1152921520000000001 && ($mj['mailjet'][0]['proby'] ?? null) === 1 && $mj['buyer_email'] === '***', json_encode($mj));
     $t('podgląd: błąd bazy bez loginu', !str_contains(bon_opis_bledu(new PDOException("SQLSTATE[HY000] [1045] Access denied for user 'yppvggk'@'10.0.0.1' (using password: YES)"))['opis'], 'yppvggk'));
 
     // --- verify ---

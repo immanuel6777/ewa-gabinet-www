@@ -14,7 +14,8 @@ require_once __DIR__ . '/bon.php';
 
 // klucze, których wartości są ukrywane (w całym poddrzewie); wyjątki poniżej
 const BON_LOG_KLUCZE_OSOBOWE = '/(mail|name|nip|vat|tax|phone|tel|addr|street|city|zip|post|company|firma|token|secret|sign|pass|auth|customer|buyer|invoice|billing|shipping|custom|promo|coupon|forward|cookie|(^|[_-])ip($|[_-]))/i';
-const BON_LOG_KLUCZE_JAWNE = '/^((product|price|plan)[_-]name|price[_-]custom[_-]id)$/i';
+// mailjet: odpowiedź Mailjeta w zdarzeniu „mail” (HTTP, Status, MessageID, próby) – bez adresów; klucz zawiera „mail”, więc wyjątek
+const BON_LOG_KLUCZE_JAWNE = '/^((product|price|plan)[_-]name|price[_-]custom[_-]id|mailjet)$/i';
 const BON_LOG_EMAIL = '/[^\s@"]+@[^\s@"]+\.[^\s@"]+/';
 
 /** Kopia struktury z ukrytymi danymi osobowymi (zob. opis na górze pliku). */
