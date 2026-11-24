@@ -55,7 +55,4 @@ return [
     'mail_smtp_host' => 'ssl0.ovh.net',
     'mail_smtp_port' => 465,
     'mail_smtp_user' => 'bony@ewa-gabinet.pl', // login = skrzynka nadawcy (OVH wymaga tej samej koperty); hasło bony@ w konfigu na serwerze
-    // TEST zapasu (TA-07, 2026-11-24): do tej chwili (czas Warszawy, najwyżej 6 h naprzód) maile z bonem idą od razu przez SMTP OVH.
-    // Wygasa sam; po teście usunąć tę linię osobnym PR.
-    'mail_zapas_test_do' => '2026-11-24 15:00',
 ];
