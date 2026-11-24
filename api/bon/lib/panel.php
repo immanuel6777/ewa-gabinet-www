@@ -199,7 +199,9 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
         'dla' => $bon['dla'],
         'przedluzony' => !empty($bon['przedluzony_at']) ? substr((string)$bon['przedluzony_at'], 0, 10) : null,
         'wazny_do_pierwotnie' => !empty($bon['expires_at_pierwotna']) ? substr((string)$bon['expires_at_pierwotna'], 0, 10) : null,
-        'przedluzenie' => bon_przedluzenie_okno($bon, $teraz), // null = przycisku „Przedłuż” nie ma
+        'przedluzenie' => bon_przedluzenie_okno($bon, $teraz), // null = bon poza oknem przedłużenia
+        // wpis 18:34 (decyzja Bartka): przycisk „Przedłuż” tylko admin i konto z uprawnieniem rezygnacji (Ewa); Karolina widzi informację
+        'przedluz_wolno' => $sesja['rola'] === 'admin' || !empty($sesja['rezygnacje']),
         'rezygnacja' => bon_panel_rezygnacja($k, $pdo, (int)$bon['id']),
         'mail_odbity' => bon_panel_mail_odbity($zdarzenia), // znacznik „mail nie dotarł” (TA-11), zdejmuje go udana ponowna wysyłka
         // cofnięcie ostatniej realizacji (2026-11-24, wpisy 14:10 i 15:00): tylko admin i konto z uprawnieniem rezygnacji (Ewa)
@@ -514,9 +516,10 @@ function bon_panel_potwierdz_numer(array $k, PDO $pdo, array $sesja, string $uch
     return [200, ['ok' => true, 'kod' => $bon['code']]];
 }
 
-// --- przedłużenie o 3 miesiące (krok 4): każda rola panelu; reguły w bon_przedluz (lib/bon.php) ---
+// --- przedłużenie o 3 miesiące (krok 4); od wpisu 18:34 tylko admin i konto z 'rezygnacje' (Ewa); reguły w bon_przedluz (lib/bon.php) ---
 
 function bon_panel_przedluz(array $k, PDO $pdo, array $sesja, string $wpisany, ?DateTimeImmutable $teraz = null): array {
+    if ($sesja['rola'] !== 'admin' && empty($sesja['rezygnacje'])) return [403, ['ok' => false, 'blad' => 'Przedłużenia robi Ewa albo Bartek.']];
     if (bon_normalizuj_kod($wpisany, (string)$k['kod_prefix']) === null) return [400, ['ok' => false, 'blad' => 'Numer bonu ma postać EWA-XXXX-XXXX.']];
     $pdo->beginTransaction();
     try {

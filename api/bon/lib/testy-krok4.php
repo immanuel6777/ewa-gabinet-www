@@ -82,15 +82,23 @@ function bon_testy_krok4(array $k, PDO $pdo): array {
         && bon_panel_moze_rezygnacje(['rola' => 'realizacja', 'rezygnacje' => true]) && !bon_panel_moze_rezygnacje(['rola' => 'realizacja'])
         && !bon_panel_moze_rezygnacje(['rola' => 'realizacja', 'rezygnacje' => 'tak']));
 
-    // --- przedłużenie o 3 miesiące (każda rola) ---
-    [$kod, $odp] = bon_panel_przedluz($k, $pdo, $sEwa, (string)$b1['code']);
+    // --- przedłużenie o 3 miesiące (wpis 18:34: tylko admin i konto z uprawnieniem rezygnacji – Ewa; kasa 403 i sama informacja) ---
+    $sEwaP = $sEwa + ['rezygnacje' => true];
+    [$kodK, $odpK] = bon_panel_przedluz($k, $pdo, $sEwa, (string)$b1['code']);
+    [, $hK] = bon_panel_historia($k, $pdo, $sEwa, (string)$b1['code']);
+    [, $hP] = bon_panel_historia($k, $pdo, $sEwaP, (string)$b1['code']);
+    [, $hAd] = bon_panel_historia($k, $pdo, $sAdmin, (string)$b1['code']);
+    $t('przedłużenie (18:34): kasa bez uprawnienia → 403 „Przedłużenia robi Ewa albo Bartek”, przedluz_wolno false; Ewa i admin true',
+        $kodK === 403 && str_contains((string)($odpK['blad'] ?? ''), 'Ewa albo Bartek') && ($hK['przedluz_wolno'] ?? null) === false
+        && ($hP['przedluz_wolno'] ?? null) === true && ($hAd['przedluz_wolno'] ?? null) === true, json_encode([$odpK, $hK['przedluz_wolno'] ?? null], JSON_UNESCAPED_UNICODE));
+    [$kod, $odp] = bon_panel_przedluz($k, $pdo, $sEwaP, (string)$b1['code']);
     $t('przedłużenie: świeży bon (6 mies. do końca) → 409, przycisku nie ma', $kod === 409 && array_key_exists('przedluzenie', $hE) && $hE['przedluzenie'] === null, json_encode($odp, JSON_UNESCAPED_UNICODE));
     $koniec = $d('+10 days');
     $ustaw($b1['code'], ['expires_at' => $koniec]);
     [, $h] = bon_panel_historia($k, $pdo, $sEwa, (string)$b1['code']);
     $oczekiwana = bon_waznosc(new DateTimeImmutable($koniec, new DateTimeZone(BON_STREFA)), 3);
     $t('przedłużenie: 10 dni przed końcem → panel pokazuje możliwość i nową datę', ($h['przedluzenie']['nowa'] ?? '') === $oczekiwana, json_encode($h['przedluzenie'] ?? null));
-    [$kod, $odp] = bon_panel_przedluz($k, $pdo, $sEwa, (string)$b1['code']);
+    [$kod, $odp] = bon_panel_przedluz($k, $pdo, $sEwaP, (string)$b1['code']);
     $w = $wiersz((string)$b1['code']);
     [, $h] = bon_panel_historia($k, $pdo, $sEwa, (string)$b1['code']);
     $t('przedłużenie: Ewa (rola realizacja) przedłuża → nowa data, pierwotna zapisana, wpis w historii z datami', $kod === 200
@@ -98,19 +106,19 @@ function bon_testy_krok4(array $k, PDO $pdo): array {
         && ($h['zdarzenia'][0]['akcja'] ?? '') === 'przedluzenie' && ($h['zdarzenia'][0]['kto'] ?? '') === 'ewa' && str_contains((string)$h['zdarzenia'][0]['szczegoly'], $oczekiwana)
         && ($h['przedluzony'] ?? '') === $dzis->format('Y-m-d') && $h['przedluzenie'] === null, json_encode($odp, JSON_UNESCAPED_UNICODE));
     $ustaw($b1['code'], ['expires_at' => $d('+5 days')]); // nawet gdyby admin cofnął datę – drugie przedłużenie nie przysługuje
-    [$kod, $odp] = bon_panel_przedluz($k, $pdo, $sEwa, (string)$b1['code']);
+    [$kod, $odp] = bon_panel_przedluz($k, $pdo, $sEwaP, (string)$b1['code']);
     $t('przedłużenie: drugie → 409 „był już przedłużany”', $kod === 409 && str_contains((string)($odp['blad'] ?? ''), 'już przedłużany'));
 
     $b3 = $nowyBon(200);
     $ustaw($b3['code'], ['expires_at' => $d('-30 days')]);
-    [$kod] = bon_panel_przedluz($k, $pdo, $sEwa, (string)$b3['code']);
+    [$kod] = bon_panel_przedluz($k, $pdo, $sEwaP, (string)$b3['code']);
     $t('przedłużenie: 30. dzień po terminie → 200, bon znów ważny', $kod === 200 && bon_status_efektywny($wiersz((string)$b3['code'])) === 'valid');
     $b4 = $nowyBon(200);
     $ustaw($b4['code'], ['expires_at' => $d('-31 days')]);
-    [$kod] = bon_panel_przedluz($k, $pdo, $sEwa, (string)$b4['code']);
+    [$kod] = bon_panel_przedluz($k, $pdo, $sEwaP, (string)$b4['code']);
     $t('przedłużenie: 31. dzień po terminie → 409', $kod === 409);
     $ustaw($b4['code'], ['expires_at' => $d('+3 days'), 'balance_pln' => '0.00', 'status' => 'used']);
-    [$kod] = bon_panel_przedluz($k, $pdo, $sEwa, (string)$b4['code']);
+    [$kod] = bon_panel_przedluz($k, $pdo, $sEwaP, (string)$b4['code']);
     $t('przedłużenie: bon z saldem zero → 409', $kod === 409);
 
     // --- rezygnacja zarejestrowana w panelu (mail / papier) ---
@@ -181,7 +189,7 @@ function bon_testy_krok4(array $k, PDO $pdo): array {
     $t('zwrot ręczny przy rezygnacji: bon refunded, rezygnacja „zlecony” z ref „recznie” i kwotą', $kod === 200 && $wiersz((string)$b5['code'])['status'] === 'refunded'
         && $w5[0]['zwrot_stan'] === 'zlecony' && $w5[0]['zwrot_ref'] === 'recznie' && bon_zl((int)bon_grosze($w5[0]['zwrot_kwota_pln'])) === '135.00'
         && str_contains((string)$odp['opis'], 'rezygnacja zamknięta'), json_encode([$odp, $w5], JSON_UNESCAPED_UNICODE));
-    [$kod] = bon_panel_przedluz($k, $pdo, $sEwa, (string)$b5['code']);
+    [$kod] = bon_panel_przedluz($k, $pdo, $sEwaP, (string)$b5['code']);
     $t('przedłużenie: bon zwrócony → 409', $kod === 409);
 
     // --- data zapłaty zamiast chwili utworzenia (14 dni i 6 miesięcy „od dnia zapłaty”) ---
