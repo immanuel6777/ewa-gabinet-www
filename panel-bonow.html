@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="/_astro/sciezka-bonow.B4U7Ywh7.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.DrwHyHPA.css">
+<link rel="stylesheet" href="/_astro/panel-bonow.rmiyhP5i.css">
 <link rel="stylesheet" href="/_astro/Baza.CUaZgc7R.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
     <a class="przeskocz" href="#tresc">Przejdź do treści</a>
@@ -98,7 +98,6 @@
         <div class="stan" data-p-stan data-astro-cid-nl2nwxtk>
           <p class="stan-glowne" data-astro-cid-nl2nwxtk><span class="status" data-p-status data-astro-cid-nl2nwxtk></span> <span data-p-stan-zdanie data-astro-cid-nl2nwxtk></span></p>
           <p class="stan-drobne" data-p-stan-drobne hidden data-astro-cid-nl2nwxtk></p>
-          <p class="stan-drobne" data-p-rezygnacja hidden data-astro-cid-nl2nwxtk></p>
         </div>
         <!-- jeden przycisk główny zależny od stanu i roli: ważny → „Zrealizuj”, rezygnacja (Bartek, Ewa) → „Zwróć pieniądze” -->
         <div class="glowny" data-p-glowny hidden data-astro-cid-nl2nwxtk>
@@ -120,16 +119,13 @@
           <div data-p-dla-wiersz data-astro-cid-nl2nwxtk><dt data-astro-cid-nl2nwxtk>Dla</dt><dd data-p-dla data-astro-cid-nl2nwxtk></dd></div>
           <div data-p-przedluzony-wiersz hidden data-astro-cid-nl2nwxtk><dt data-astro-cid-nl2nwxtk>Przedłużony</dt><dd data-p-przedluzony data-astro-cid-nl2nwxtk></dd></div>
         </dl>
-        <!-- wpisy 17:33/17:35: czy potwierdzenie rezygnacji wyszło do kupującego (Bartek i Ewa) -->
+        <!-- wpis 20:17: fakty jako wiersze „etykieta – wartość”: rezygnacja, do zwrotu, termin, potwierdzenie, zapłacono, Easytools -->
+        <dl class="dane fakty-bonu" data-p-fakty hidden data-astro-cid-nl2nwxtk></dl>
+        <!-- wpisy 17:33/17:35: ponowna wysyłka potwierdzenia rezygnacji (Bartek i Ewa) – mniejszy przycisk w drugim rzędzie -->
         <div class="rez-potw" data-p-rez-potw hidden data-astro-cid-nl2nwxtk>
-          <p data-p-rez-potw-tekst data-astro-cid-nl2nwxtk></p>
-          <button class="przycisk obrys" type="button" data-p-rez-potw-wyslij data-astro-cid-nl2nwxtk>Wyślij potwierdzenie ponownie</button>
+          <button class="przycisk obrys maly" type="button" data-p-rez-potw-wyslij data-astro-cid-nl2nwxtk>Wyślij potwierdzenie ponownie</button>
           <p class="blad" data-p-blad-rez-potw hidden data-astro-cid-nl2nwxtk></p>
         </div>
-        <!-- P-15: rabat przy zakupie (Bartek i Ewa) -->
-        <p class="podpowiedz" data-p-rabat hidden data-astro-cid-nl2nwxtk></p>
-        <!-- P-11: stan płatności w Easytools (Bartek i Ewa) -->
-        <p class="podpowiedz" data-p-platnosc hidden data-astro-cid-nl2nwxtk></p>
         <p class="blad" data-p-platnosc-ostrzezenie hidden data-astro-cid-nl2nwxtk></p>
         <!-- P-10: bon znaleziony po e-mailu / zamówieniu – numer zamaskowany do potwierdzenia przez pacjenta (poza adminem) -->
         <div class="maska" data-p-maska hidden data-astro-cid-nl2nwxtk>
@@ -541,7 +537,7 @@
         <p class="blad" data-p-blad-realizacji hidden data-astro-cid-nl2nwxtk></p>
       </form>
 
-      <p class="sukces" data-p-sukces hidden aria-live="polite" data-astro-cid-nl2nwxtk></p>
+      <p class="komunikat-panelu" data-p-sukces hidden aria-live="polite" data-astro-cid-nl2nwxtk></p>
 
       <section class="karta" data-p-historia-sekcja hidden data-astro-cid-nl2nwxtk>
         <h2 data-astro-cid-nl2nwxtk>Historia</h2>
@@ -571,7 +567,7 @@
             <a class="przycisk obrys" data-p-pdf href="#" download data-astro-cid-nl2nwxtk>Pobierz PDF</a>
           </div>
           <!-- Bartek 2026-11-24: potwierdzenie przy przycisku (komunikat na górze strony bywa poza ekranem) -->
-          <p class="sukces" data-p-sukces-wyslij hidden aria-live="polite" data-astro-cid-nl2nwxtk></p>
+          <p class="komunikat-panelu" data-p-sukces-wyslij hidden aria-live="polite" data-astro-cid-nl2nwxtk></p>
         </form>
         <p class="blad" data-p-blad-wyslij hidden data-astro-cid-nl2nwxtk></p>
       </section>
@@ -648,8 +644,8 @@
   <svg class="strzalka" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" data-astro-cid-kwdr2zt4><path d="M12 19V5M6 11l6-6 6 6" data-astro-cid-kwdr2zt4></path></svg>
 </button>
 
-    <script type="module" src="/_astro/Baza.astro_astro_type_script_index_0_lang.Bg9MOvCr.js"></script>
+    <script type="module" src="/_astro/Baza.astro_astro_type_script_index_0_lang.DZ3gJKNM.js"></script>
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.DXNxMi-5.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.UEeuRW6l.js"></script>
