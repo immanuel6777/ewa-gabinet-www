@@ -94,6 +94,14 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     $t('mail: telefon pomocy z konfigu (tekst i HTML), puste = bez linii', !str_contains($bezTel, 'Pytania o bon')
         && str_contains($zTel, 'Pytania o bon lub kłopot z plikiem? Zadzwoń: 506 102 340 (pon.–pt. 9–17) albo odpisz na tego maila.')
         && str_contains($zTelHtml, '506 102 340'));
+    // wpis 17:47: zdanie o rezygnacji za przełącznikiem, przedostatnie (przed „Pytania o bon…”); ważność „od dnia zapłaty”
+    $zdanie = 'Rezygnacja w ciągu 14 dni od zapłaty: najszybciej na stronie ewa-gabinet.pl/bon, pod wynikiem sprawdzenia bonu.';
+    $kTel = array_replace($k, ['telefon_pomoc_bony' => '506 102 340']);
+    [, $bezRez] = bon_mail_tresc(array_replace($kTel, ['mail_zdanie_rezygnacja' => false]), $b);
+    [, $zRez, $zRezHtml] = bon_mail_tresc(array_replace($kTel, ['mail_zdanie_rezygnacja' => true]), $b);
+    $t('mail: zdanie o rezygnacji tylko z przełącznikiem, w tekście i HTML, tuż przed „Pytania o bon”; ważny „od dnia zapłaty”',
+        !str_contains($bezRez, 'Rezygnacja w ciągu') && str_contains($zRez, $zdanie . "\nPytania o bon")
+        && str_contains($zRezHtml, 'ewa-gabinet.pl/bon, pod wynikiem') && str_contains($zRez, 'od dnia zapłaty') && !str_contains($zRez, 'od dnia zakupu'));
 
     // drugi przebieg: bez duplikatu i bez ponownego pobierania szczegółów
     $wywolania = [];

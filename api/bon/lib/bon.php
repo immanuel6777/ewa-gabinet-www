@@ -67,6 +67,7 @@ const BON_USTAWIENIA_JAWNE = [
     'webhook_tryb', 'kwota_jednostka', 'easytools_tryb', 'easytools_produkt_uuid', 'bon_adres_pelny_min',
     'mail_zapas_test_do', // przełącznik testu zapasu – z repo zamiast FTP (wpis 11:35)
     'mail_obsluga',       // P-12: adres obsługi klientów (bony@)
+    'mail_zdanie_rezygnacja', // wpis 17:47: zdanie o rezygnacji na /bon w mailu z bonem
 ];
 
 /**

@@ -51,6 +51,9 @@ return [
     'mail_obsluga' => ['bony@ewa-gabinet.pl'],
     'telefon_pomoc_bony' => '506 102 340',
     'telefon_pomoc_bony_godziny' => 'pon.–pt. 9–17',
+    // wpis 17:47: zdanie „Rezygnacja w ciągu 14 dni od zapłaty: najszybciej na stronie ewa-gabinet.pl/bon…” w mailu z bonem.
+    // true dopiero na słowo Bartka, w tej samej wrzucie co włączenie nowego § 14 (funkcjeBonu.rezygnacja frontu).
+    'mail_zdanie_rezygnacja' => false,
 
     // --- zapas SMTP OVH (hasło skrzynki tylko na serwerze: mail_smtp_haslo) ---
     'mail_zapas' => true,

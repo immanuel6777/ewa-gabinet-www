@@ -47,9 +47,14 @@ function bon_mail_tresc(array $k, array $bony): array {
         : "Dziękujemy za zakup bonów podarunkowych. Każdy z $n bonów jest w załączniku jako osobny plik PDF – można je wydrukować albo przesłać dalej.";
     $zasady = [
         'Bon jest na zabiegi podologiczne w Gabinecie EWA, ' . $kontakt['ulica'] . ' w Pabianicach.',
-        "Niewykorzystana kwota zostaje na bonie na kolejną wizytę. Bon jest ważny $miesiace od dnia zakupu.",
+        "Niewykorzystana kwota zostaje na bonie na kolejną wizytę. Bon jest ważny $miesiace od dnia zapłaty.", // wpis 17:47: zapłaty, nie zakupu
         'Termin wizyty można zarezerwować przez Booksy albo telefonicznie: ' . $kontakt['telefon'] . '. Przy rezerwacji wystarczy podać numer bonu.',
     ];
+    // wpis 17:47 (decyzja Bartka): rezygnacje kierujemy na formularz /bon (tylko on blokuje bon od razu). Włączane razem z nowym
+    // § 14 regulaminu (funkcjeBonu.rezygnacja frontu) – przełącznik mail_zdanie_rezygnacja w lib/ustawienia.php
+    if (!empty($k['mail_zdanie_rezygnacja'])) {
+        $zasady[] = 'Rezygnacja w ciągu 14 dni od zapłaty: najszybciej na stronie ewa-gabinet.pl/bon, pod wynikiem sprawdzenia bonu.';
+    }
     // telefon pomocy przy bonach (Bartek 2026-11-24, wpis 09:40): numer Bartka z konfigu, puste = bez linii; wizyty dalej przez gabinet
     $pomoc = trim((string)($k['telefon_pomoc_bony'] ?? ''));
     if ($pomoc !== '') {
