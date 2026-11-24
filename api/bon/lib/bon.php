@@ -405,6 +405,7 @@ function bon_log_webhooka(array $k, string $raw, array $naglowki, ?bool $podpisO
         'czas' => bon_teraz()->format('c'),
         'podpis_ok' => $podpisOk,
         'podpis_w_naglowku' => ($naglowki['x-webhook-signature'] ?? '') !== '',
+        'podpis_diagnoza' => $podpisOk === true ? null : bon_podpis_diagnoza($k, $raw, $naglowki), // wpis 23:52: bez treści i wartości
         'rozmiar' => strlen($raw),
         'sha256' => hash('sha256', $raw),
         'zdarzenie' => $podpisOk === true ? (is_array($d) ? bon_webhook_pola($d) : ['niejson' => true]) : null,
@@ -485,10 +486,44 @@ function bon_historia(array $k, PDO $pdo, int $voucherId, string $akcja, string 
 // Dokumentacja (2026-11-21): nagłówek X-Webhook-Signature = hex HMAC-SHA256 surowego body kluczem podpisu
 // (https://easy.tools/docs/generate-webhook-signing-key). Zdarzenie z kwotą: single_product_bought
 // (product_assigned ma amount_paid = null; „Zakup dla kogoś innego” wyłączony w sklepie).
+// Algorytm wg easy.tools/docs/generate-webhook-signing-key (sprawdzone 2026-11-25): nagłówek X-Webhook-Signature = HMAC-SHA256
+// z SUROWEGO ciała (php://input) kluczem z panelu (Store settings → API & Webhooks), małe litery hex, bez znacznika czasu.
+// Klucz z konfigu bez spacji i enterów na brzegach (wklejony z panelu Easytools).
 function bon_podpis_ok(array $k, string $raw, string $podpis): bool {
-    $sekret = (string)($k['easytools_webhook_sekret'] ?? '');
+    $sekret = trim((string)($k['easytools_webhook_sekret'] ?? ''));
     if ($sekret === '' || str_starts_with($sekret, 'WKLEJ')) return false;
     return hash_equals(hash_hmac('sha256', $raw, $sekret), strtolower(trim($podpis)));
+}
+
+/**
+ * Wpis 23:52 (test 5): gdy podpis się nie zgadza – co by pasowało, BEZ treści i wartości nagłówków (Z4). Warianty: base64 zamiast
+ * hex, przedrostek „sha256=”, podpis z przeserializowanego JSON (przykład Node w dokumentacji: JSON.stringify(req.body)),
+ * zwykły SHA256 z klucza i treści. Znane nagłówki tylko jako tak/nie. Wynik trafia do logu webhooków i log.php.
+ */
+function bon_podpis_diagnoza(array $k, string $raw, array $naglowki): array {
+    $sekret = trim((string)($k['easytools_webhook_sekret'] ?? ''));
+    $podpis = trim((string)($naglowki['x-webhook-signature'] ?? ''));
+    $wynik = ['sekret_ustawiony' => $sekret !== '' && !str_starts_with($sekret, 'WKLEJ'), 'sekret_dlugosc' => strlen($sekret),
+        'podpis_dlugosc' => strlen($podpis), 'podpis_hex64' => preg_match('/^[0-9a-f]{64}$/i', $podpis) === 1, 'pasuje' => null, 'naglowki' => []];
+    foreach (['x-webhook-signature', 'x-webhook-timestamp', 'x-signature', 'x-easytools-signature', 'x-easycart-signature', 'content-type', 'user-agent'] as $n) {
+        $wynik['naglowki'][$n] = isset($naglowki[$n]) && $naglowki[$n] !== '';
+    }
+    $wynik['naglowkow'] = count($naglowki);
+    if (!$wynik['sekret_ustawiony'] || $podpis === '') return $wynik;
+    $d = json_decode($raw);
+    $warianty = [
+        'hex' => hash_hmac('sha256', $raw, $sekret),
+        'base64' => base64_encode(hash_hmac('sha256', $raw, $sekret, true)),
+        'prefiks-sha256' => 'sha256=' . hash_hmac('sha256', $raw, $sekret),
+        'hex-json-ponownie' => $d !== null ? hash_hmac('sha256', (string)json_encode($d, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $sekret) : null,
+        'hex-json-php' => $d !== null ? hash_hmac('sha256', (string)json_encode($d), $sekret) : null,
+        'sha256-klucz-tresc' => hash('sha256', $sekret . $raw),
+        'sha256-tresc-klucz' => hash('sha256', $raw . $sekret),
+    ];
+    foreach ($warianty as $nazwa => $oczekiwany) {
+        if ($oczekiwany !== null && (hash_equals(strtolower($oczekiwany), strtolower($podpis)) || hash_equals($oczekiwany, $podpis))) { $wynik['pasuje'] = $nazwa; break; }
+    }
+    return $wynik;
 }
 
 /**

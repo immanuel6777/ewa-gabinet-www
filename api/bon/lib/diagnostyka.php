@@ -87,8 +87,24 @@ function bon_log_webhooki(array $k, int $ile, int $dni): array {
                 'podpis_ok' => $w['podpis_ok'] ?? null,
                 'rozmiar' => $w['rozmiar'] ?? (is_string($w['body'] ?? null) ? strlen($w['body']) : null),
                 'zdarzenie' => $podpisOk && is_array($zdarzenie) ? bon_log_ukryj($zdarzenie) : null,
+                // wpis 23:52: wynik NASZYCH obliczeń (wariant podpisu, znane nagłówki tak/nie) – bez tekstu z zewnątrz
+                'podpis_diagnoza' => is_array($w['podpis_diagnoza'] ?? null) ? bon_log_diagnoza_podpisu($w['podpis_diagnoza']) : null,
             ];
         }
+    }
+    return $wynik;
+}
+
+/** Diagnoza podpisu z pliku logu – tylko znane klucze i typy (plik mógł zostać zmieniony; nic z zewnątrz słowo w słowo). */
+function bon_log_diagnoza_podpisu(array $d): array {
+    $wynik = [];
+    foreach (['sekret_ustawiony', 'podpis_hex64'] as $p) $wynik[$p] = ($d[$p] ?? null) === true;
+    foreach (['sekret_dlugosc', 'podpis_dlugosc', 'naglowkow'] as $p) $wynik[$p] = is_int($d[$p] ?? null) ? $d[$p] : null;
+    $znane = ['hex', 'base64', 'prefiks-sha256', 'hex-json-ponownie', 'hex-json-php', 'sha256-klucz-tresc', 'sha256-tresc-klucz'];
+    $wynik['pasuje'] = in_array($d['pasuje'] ?? null, $znane, true) ? $d['pasuje'] : null;
+    $wynik['naglowki'] = [];
+    foreach (['x-webhook-signature', 'x-webhook-timestamp', 'x-signature', 'x-easytools-signature', 'x-easycart-signature', 'content-type', 'user-agent'] as $n) {
+        $wynik['naglowki'][$n] = ($d['naglowki'][$n] ?? null) === true;
     }
     return $wynik;
 }

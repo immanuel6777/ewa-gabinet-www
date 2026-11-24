@@ -617,6 +617,28 @@ function bon_testy(array $kBaza, PDO $pdo): array {
         ($podpisany['zdarzenie']['order_uuid'] ?? '') === '11111111-2222-3333-4444-555555555555' && ($podpisany['zdarzenie']['price_custom_id'] ?? '') === 'bon-200'
         && array_key_exists('promo_code', $podpisany['zdarzenie'] ?? []) && !str_contains($json, 'Jan Tajny') && !str_contains($json, 'test@example.com')
         && ($podpisany['zdarzenie']['pola_wlasne']['bon-dla'] ?? '') === 'wpisane', json_encode($podpisany, JSON_UNESCAPED_UNICODE));
+
+    // wpis 23:52 (test 5): diagnoza nieudanego podpisu – który wariant by pasował, bez treści i wartości nagłówków
+    $sek = (string)$kW['easytools_webhook_sekret'];
+    $rawD = json_encode(['event' => 'single_product_bought', 'url' => 'https://x.test/a/b', 'kwota' => 'zł']); // z ukośnikami i polskim znakiem
+    $diag = static function (array $kk, string $raw, string $podpis): array {
+        return bon_podpis_diagnoza($kk, $raw, ['x-webhook-signature' => $podpis, 'content-type' => 'application/json', 'user-agent' => 'X']);
+    };
+    $dB64 = $diag($kW, $rawD, base64_encode(hash_hmac('sha256', $rawD, $sek, true)));
+    $dJson = $diag($kW, $rawD, hash_hmac('sha256', json_encode(json_decode($rawD), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), $sek));
+    $dZly = $diag($kW, $rawD, str_repeat('a', 64));
+    $t('webhook (23:52): diagnoza podpisu – base64 i JSON przeserializowany rozpoznane, zły podpis bez dopasowania; tylko znane nagłówki jako tak/nie',
+        ($dB64['pasuje'] ?? null) === 'base64' && ($dJson['pasuje'] ?? null) === 'hex-json-ponownie' && array_key_exists('pasuje', $dZly) && $dZly['pasuje'] === null
+        && ($dZly['sekret_ustawiony'] ?? false) === true && ($dZly['podpis_hex64'] ?? false) === true && ($dZly['naglowki']['user-agent'] ?? false) === true
+        && !str_contains(json_encode($dZly), 'application/json'), json_encode([$dB64, $dJson, $dZly]));
+    // klucz wklejony do konfigu ze spacją / enterem na końcu nie psuje podpisu
+    $kSp = array_replace($kW, ['easytools_webhook_sekret' => $sek . " \n"]);
+    $t('webhook (23:52): klucz ze spacją/enterem na końcu → podpis nadal poprawny', bon_podpis_ok($kSp, $rawD, hash_hmac('sha256', $rawD, $sek)));
+    // diagnoza trafia do logu i log.php przy podpisie false
+    bon_obsluz_webhook($kW, $rawD, ['x-webhook-signature' => base64_encode(hash_hmac('sha256', $rawD, $sek, true))]);
+    $ost = bon_log_webhooki($kW, 1, 1)[0] ?? [];
+    $t('webhook (23:52): log.php przy podpis_ok=false pokazuje diagnozę (pasuje: base64), bez treści', ($ost['podpis_diagnoza']['pasuje'] ?? null) === 'base64'
+        && $ost['zdarzenie'] === null, json_encode($ost, JSON_UNESCAPED_UNICODE));
     foreach (glob($katW . '/*/*') ?: [] as $f) @unlink($f);
     foreach (glob($katW . '/*') ?: [] as $f) is_dir($f) ? @rmdir($f) : @unlink($f);
     @rmdir($katW);
