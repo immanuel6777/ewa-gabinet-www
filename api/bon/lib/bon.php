@@ -208,6 +208,22 @@ function bon_kod_maska(string $kod): string {
     return $kod === '' ? '' : 'EWA-****-' . substr($kod, -4);
 }
 
+// --- historia bonu (krok 1, 2026-11-23): tabela voucher_admin_log = pełna historia z jednego miejsca ---
+// kto: login panelu, 'klient' (strona /bon) albo 'system' (webhook, synchronizacja, cron). Realizacje są osobno w redemptions.
+// Bez danych osobowych w szczegółach (panel pokazuje je kasie i adminowi).
+const BON_HISTORIA_AKCJE = [
+    'utworzenie', 'mail', 'dla-od',                                  // zakup: bon powstał, PDF wysłany, Dla/Od uzupełnione z webhooka
+    'waznosc', 'zatwierdz', 'zwrot',                                 // admin w panelu (etap 3)
+    'rezygnacja', 'rezygnacja-cofnieta', 'przedluzenie', 'przypomnienie', // krok 2, 5, 6 (cofnięcie: pomyłka albo klient się wycofał)
+    'zwrot-zlecony', 'zwrot-potwierdzony', 'zwrot-nieudany',         // krok 3
+];
+
+function bon_historia(array $k, PDO $pdo, int $voucherId, string $akcja, string $szczegoly, string $kto, ?DateTimeImmutable $teraz = null): void {
+    if (!in_array($akcja, BON_HISTORIA_AKCJE, true)) throw new InvalidArgumentException('nieznana akcja historii bonu: ' . $akcja);
+    $pdo->prepare('INSERT INTO ' . bon_tabela($k, 'voucher_admin_log') . ' (voucher_id, akcja, szczegoly, kto, kiedy) VALUES (?, ?, ?, ?, ?)')
+        ->execute([$voucherId, $akcja, mb_substr($szczegoly, 0, 255), mb_substr($kto, 0, 40), ($teraz ?? bon_teraz())->format('Y-m-d H:i:s')]);
+}
+
 // --- webhook Easytools ---
 // Dokumentacja (2026-11-21): nagłówek X-Webhook-Signature = hex HMAC-SHA256 surowego body kluczem podpisu
 // (https://easy.tools/docs/generate-webhook-signing-key). Zdarzenie z kwotą: single_product_bought
@@ -376,6 +392,8 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
                 $st->bindValue(':nr', $nr, PDO::PARAM_INT);
                 $st->execute();
                 $kody[] = $kod;
+                bon_historia($k, $pdo, (int)$pdo->lastInsertId(), 'utworzenie', 'źródło: ' . $z['zrodlo'] . ', status: ' . $status
+                    . ', zapłacono ' . bon_zl($zaplacono) . ' zł' . ($nr > 1 || $ilosc > 1 ? ", sztuka $nr z $ilosc" : ''), 'system', $teraz);
             }
             $pdo->commit();
             break;
@@ -395,7 +413,12 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
                 foreach (['dla', 'od'] as $pole) {
                     $w = $z[$pole] ?? null;
                     if (is_string($w) && trim($w) !== '') {
-                        $pdo->prepare("UPDATE $tab SET $pole = ? WHERE easytools_order_id = ? AND ($pole IS NULL OR $pole = '')")->execute([$w, $zamowienie]);
+                        $ids = $pdo->prepare("SELECT id FROM $tab WHERE easytools_order_id = ? AND ($pole IS NULL OR $pole = '')");
+                        $ids->execute([$zamowienie]);
+                        foreach ($ids->fetchAll(PDO::FETCH_COLUMN) as $id) {
+                            $pdo->prepare("UPDATE $tab SET $pole = ? WHERE id = ?")->execute([$w, $id]);
+                            bon_historia($k, $pdo, (int)$id, 'dla-od', "„" . ($pole === 'dla' ? 'Dla' : 'Od') . "” uzupełnione z webhooka", 'system');
+                        }
                     }
                 }
                 return [200, ['ok' => true, 'powtorzony' => true], static fn() => bon_wyslij_zamowienie($k, $pdo, $zamowienie)];

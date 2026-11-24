@@ -177,8 +177,10 @@ function bon_diagnostyka(array $k, int $ile = 10, int $dni = 2, int $bony = 20, 
     try {
         $pdo ??= bon_pdo($k);
         $wynik['baza'] = ['ok' => true, 'tabele' => []];
-        foreach (['vouchers', 'redemptions', 'voucher_sessions', 'voucher_login_attempts', 'voucher_admin_log', 'voucher_verify_limit'] as $t) {
-            $wynik['baza']['tabele'][$t] = (int)$pdo->query('SELECT COUNT(*) FROM ' . bon_tabela($k, $t))->fetchColumn();
+        foreach (['vouchers', 'redemptions', 'voucher_sessions', 'voucher_login_attempts', 'voucher_admin_log', 'voucher_verify_limit', 'voucher_withdrawals', 'voucher_withdrawal_tokens'] as $t) {
+            // brak tabeli (np. migracja kroku 1 jeszcze nie wykonana) nie psuje reszty podglądu
+            try { $wynik['baza']['tabele'][$t] = (int)$pdo->query('SELECT COUNT(*) FROM ' . bon_tabela($k, $t))->fetchColumn(); }
+            catch (PDOException) { $wynik['baza']['tabele'][$t] = 'brak tabeli'; }
         }
         $wynik['bony'] = bon_log_bony($k, $pdo, $bony);
         $wynik['realizacje'] = bon_log_realizacje($k, $pdo, 10);

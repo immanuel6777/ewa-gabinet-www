@@ -258,7 +258,10 @@ function bon_wyslij_zamowienie(array $k, PDO $pdo, string $zamowienie): array {
                 // SMTP zerwał się po przesłaniu treści: serwer mógł mail przyjąć. Bez automatycznej ponownej wysyłki (bez dubli):
                 // bon oznaczony jako wysłany, gabinet dostaje jedno powiadomienie do sprawdzenia u kupującego.
                 $teraz = bon_teraz()->format('Y-m-d H:i:s');
-                foreach ($paczka as $b) $oznacz->execute([$teraz, $b['id']]);
+                foreach ($paczka as $b) {
+                    $oznacz->execute([$teraz, $b['id']]);
+                    bon_historia($k, $pdo, (int)$b['id'], 'mail', 'PDF wysłany zapasowo (SMTP OVH) – dostarczenie niepewne', 'system');
+                }
                 bon_zdarzenie($k, 'mail-niepewny', ['zamowienie' => $zamowienie, 'kody' => array_map('bon_kod_maska', array_column($paczka, 'code')), 'blad' => $blad]);
                 bon_powiadom($k, 'Bon: mail MOŻE nie dotrzeć – zamówienie ' . $zamowienie, "Zapasowa wysyłka (SMTP OVH) zerwała się po przesłaniu treści – serwer mógł mail przyjąć.\n"
                     . 'Bony: ' . implode(', ', array_column($paczka, 'code')) . "\nBłąd: $blad\n"
@@ -269,7 +272,11 @@ function bon_wyslij_zamowienie(array $k, PDO $pdo, string $zamowienie): array {
             }
             if ($blad !== null) break;
             $teraz = bon_teraz()->format('Y-m-d H:i:s');
-            foreach ($paczka as $b) { $oznacz->execute([$teraz, $b['id']]); $wyslane++; }
+            foreach ($paczka as $b) {
+                $oznacz->execute([$teraz, $b['id']]);
+                bon_historia($k, $pdo, (int)$b['id'], 'mail', 'PDF wysłany do kupującego' . ($wpis['droga'] === 'smtp-ovh' ? ' (zapasowo przez SMTP OVH)' : ''), 'system');
+                $wyslane++;
+            }
             // tryb „plik” (testy, też test-ovh.php na produkcji): bez zapisu do kontroli – zmyślone MessageID nie mogą trafić do crona;
             // droga SMTP: bez kontroli po MessageID (zapis „przyjęte przez serwer OVH” w zdarzeniu mail)
             if ($k['mail_tryb'] !== 'plik' && $wpis['droga'] === 'mailjet') bon_mail_zapisz_wysylke($k, $zamowienie, array_column($paczka, 'code'), $odp['id']);

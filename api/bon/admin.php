@@ -3,6 +3,7 @@
 //   POST {kod, akcja: waznosc, data: RRRR-MM-DD, powod} – ręczna zmiana daty ważności (indywidualne zgody Ewy, poza regulaminem)
 //   POST {kod, akcja: zatwierdz}                       – bon wstrzymany → ważny, potem PDF mailem do kupującego
 //   POST {kod, akcja: zwrot, powod}                    – oznaczenie zwrotu (same pieniądze zwraca się w Easytools)
+//   POST {kod, akcja: cofnij-rezygnacje, powod}        – rezygnacja złożona pomyłkowo albo wycofana, tylko przed zleceniem zwrotu
 // Każda zmiana trafia do voucher_admin_log (kto, kiedy, co). Logika: lib/panel.php.
 
 declare(strict_types=1);

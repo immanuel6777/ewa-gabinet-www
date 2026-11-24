@@ -10,8 +10,11 @@
 
 declare(strict_types=1);
 // etap 3: tabele panelu (sesje, nieudane logowania, dziennik admina); kolejność odwrotna przy usuwaniu (vouchers na końcu)
-const BON_TABELE = ['vouchers', 'redemptions', 'voucher_verify_limit', 'voucher_sessions', 'voucher_login_attempts', 'voucher_admin_log'];
-const BON_TABELE_ODWROTNIE = ['redemptions', 'voucher_verify_limit', 'voucher_sessions', 'voucher_login_attempts', 'voucher_admin_log', 'vouchers'];
+// krok 1 (2026-11-23): rezygnacje i tokeny potwierdzeń (lib/migracje/krok1.sql). Gdy na OVH migracji jeszcze nie ma,
+// test wykonuje ją na kopiach test_* – sprawdzenie migracji na prawdziwym MySQL przed wykonaniem na prawdziwych tabelach.
+const BON_TABELE_KROK1 = ['voucher_withdrawals', 'voucher_withdrawal_tokens'];
+const BON_TABELE = ['vouchers', 'redemptions', 'voucher_verify_limit', 'voucher_sessions', 'voucher_login_attempts', 'voucher_admin_log', 'voucher_withdrawals', 'voucher_withdrawal_tokens'];
+const BON_TABELE_ODWROTNIE = ['voucher_withdrawal_tokens', 'voucher_withdrawals', 'redemptions', 'voucher_verify_limit', 'voucher_sessions', 'voucher_login_attempts', 'voucher_admin_log', 'vouchers'];
 require __DIR__ . '/lib/bon.php';
 require __DIR__ . '/lib/testy.php';
 
@@ -69,6 +72,12 @@ $brak = [];
 foreach (BON_TABELE as $t) {
     try { $pdo->query("SELECT 1 FROM $t LIMIT 1"); } catch (Throwable $e) { $brak[] = $t; }
 }
+// brak samych tabel kroku 1 = migracja jeszcze niewykonana → przećwiczymy ją na kopiach
+$migrujKopie = $brak && !array_diff($brak, BON_TABELE_KROK1);
+if ($migrujKopie) {
+    $wiersz('Migracja kroku 1 jeszcze niewykonana na prawdziwych tabelach (brak: ' . implode(', ', $brak) . ') – wykonam ją na kopiach test_*.');
+    $brak = [];
+}
 if ($brak) {
     $wiersz('Brak tabel: ' . implode(', ', $brak) . ' → wgraj plan/bony.sql w phpMyAdmin i odśwież.');
     exit;
@@ -76,11 +85,22 @@ if ($brak) {
 $wiersz('Tabele ' . implode(', ', BON_TABELE) . ': są');
 
 $kTest = array_replace($k, ['tabele_przedrostek' => 'test_', 'mail_powiadomienie' => []]);
-foreach (BON_TABELE_ODWROTNIE as $t) {
-    $pdo->exec("DROP TABLE IF EXISTS test_$t");
+foreach (BON_TABELE_ODWROTNIE as $t) $pdo->exec("DROP TABLE IF EXISTS test_$t");
+foreach (BON_TABELE as $t) {
+    if ($migrujKopie && in_array($t, BON_TABELE_KROK1, true)) continue; // powstaną z migracji
     $pdo->exec("CREATE TABLE test_$t LIKE $t");
 }
-$wiersz('Utworzono kopie test_* tabel: ' . implode(', ', BON_TABELE));
+$wiersz('Utworzono kopie test_* tabel.');
+if ($migrujKopie) {
+    try {
+        foreach (bon_migracja_na_kopiach((string)file_get_contents(__DIR__ . '/lib/migracje/krok1.sql')) as $polecenie) $pdo->exec($polecenie);
+        $wiersz('Migracja kroku 1 na kopiach test_*: OK (lib/migracje/krok1.sql) – można ją wykonać w phpMyAdmin na prawdziwych tabelach.');
+    } catch (Throwable $e) {
+        $wiersz('BŁĄD migracji kroku 1 na kopiach test_*: ' . $e->getMessage() . ' – NIE wykonuj jej na prawdziwych tabelach.');
+        foreach (BON_TABELE_ODWROTNIE as $t) $pdo->exec("DROP TABLE IF EXISTS test_$t");
+        exit;
+    }
+}
 
 // --- scenariusze ---
 $wiersz("\n== Testy (te same co lokalnie na SQLite)");
@@ -104,3 +124,10 @@ if (empty($_GET['zostaw'])) {
 }
 @unlink($k['_katalog'] . '/bony-mailjet.jsonl'); // zapis testowych maili (tryb „plik”) – nic nie poszło do Mailjeta
 $wiersz('Po teście usuń test_token z konfig/bony.php.');
+
+/** Polecenia migracji przepisane na tabele test_* (nazwy tabel i klucza obcego; komentarze usunięte). */
+function bon_migracja_na_kopiach(string $sql): array {
+    $sql = preg_replace('/--[^\n]*/', '', $sql) ?? '';
+    $sql = preg_replace('/\b(vouchers|voucher_withdrawals|voucher_withdrawal_tokens|voucher_withdrawals_fk)\b/', 'test_$1', $sql) ?? '';
+    return array_values(array_filter(array_map('trim', explode(';', $sql))));
+}

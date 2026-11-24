@@ -185,6 +185,8 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
 }
 
 function bon_panel_imie(array $k, string $login): string {
+    if ($login === 'klient') return 'Klient (strona)';
+    if ($login === 'system') return 'System';
     $konto = $k['panel_konta'][$login] ?? null;
     return is_array($konto) && !empty($konto['imie']) ? (string)$konto['imie'] : $login;
 }
@@ -308,6 +310,7 @@ function bon_panel_powod_odmowy(string $status): string {
         'expired' => 'Bon stracił ważność.',
         'refunded' => 'Bon został zwrócony – nie można go realizować.',
         'held' => 'Bon czeka na zatwierdzenie (sprawdza Bartek). Na razie nie realizujemy.',
+        'withdrawn' => 'Kupujący zrezygnował z bonu (czeka na zwrot pieniędzy) – nie można go realizować.',
     ][$status] ?? 'Tego bonu nie można teraz realizować.';
 }
 
@@ -363,13 +366,26 @@ function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
             if ($bon['status'] === 'refunded') { $pdo->rollBack(); return [409, ['ok' => false, 'blad' => 'Bon jest już oznaczony jako zwrócony.']]; }
             $pdo->prepare("UPDATE $tabB SET status = 'refunded' WHERE id = ?")->execute([$bon['id']]);
             $opis = $bon['status'] . ' → zwrócony, saldo w chwili zwrotu ' . bon_zl((int)bon_grosze($bon['balance_pln'])) . ' zł';
+        } elseif ($akcja === 'cofnij-rezygnacje') {
+            // pomyłka (rezygnacja na nie tym bonie) albo klient się wycofał – tylko zanim zlecono zwrot (krok 1, 2026-11-23).
+            // Wiersz rezygnacji zostaje ze stanem 'anulowana' (ponowna rezygnacja w terminie nadpisze ten sam wiersz).
+            if ($powod === '') { $pdo->rollBack(); return [400, ['ok' => false, 'blad' => 'Wpisz powód cofnięcia (pomyłka, klient się wycofał).']]; }
+            $tabW = bon_tabela($k, 'voucher_withdrawals');
+            $w = $pdo->prepare("SELECT zwrot_stan FROM $tabW WHERE voucher_id = ?");
+            $w->execute([$bon['id']]);
+            $stan = $w->fetchColumn();
+            if ($bon['status'] !== 'withdrawn' || $stan === false) { $pdo->rollBack(); return [409, ['ok' => false, 'blad' => 'Ten bon nie ma złożonej rezygnacji.']]; }
+            if ($stan !== 'oczekuje') { $pdo->rollBack(); return [409, ['ok' => false, 'blad' => 'Zwrot został już zlecony – rezygnacji nie można cofnąć.']]; }
+            $pdo->prepare("UPDATE $tabW SET zwrot_stan = 'anulowana' WHERE voucher_id = ? AND zwrot_stan = 'oczekuje'")->execute([$bon['id']]);
+            $pdo->prepare("UPDATE $tabB SET status = 'valid' WHERE id = ? AND status = 'withdrawn'")->execute([$bon['id']]);
+            $akcja = 'rezygnacja-cofnieta';
+            $opis = 'rezygnacja cofnięta, bon znów ważny';
         } else {
             $pdo->rollBack();
             return [400, ['ok' => false, 'blad' => 'Nieznana akcja.']];
         }
         if ($powod !== '') $opis .= '; ' . $powod;
-        $pdo->prepare('INSERT INTO ' . bon_tabela($k, 'voucher_admin_log') . ' (voucher_id, akcja, szczegoly, kto, kiedy) VALUES (?, ?, ?, ?, ?)')
-            ->execute([$bon['id'], $akcja, mb_substr($opis, 0, 255), $sesja['login'], $teraz->format('Y-m-d H:i:s')]);
+        bon_historia($k, $pdo, (int)$bon['id'], $akcja, $opis, $sesja['login'], $teraz);
         $pdo->commit();
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
