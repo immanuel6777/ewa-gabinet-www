@@ -60,6 +60,8 @@ function bon_ustawienia_repo(): array {
 }
 
 /** Ustawienia jawne (wpis 11:30) – w log.php ze źródłem wartości: kod / repo / serwer. */
+const BON_SZAFIROWY_RABAT = 'Szafirowy z rabatem'; // wpis 18:20: początek uwagi i tematu alertu
+
 const BON_USTAWIENIA_JAWNE = [
     'sync_tryb', 'sync_od', 'sync_dni', 'sync_odstep_s', 'warianty', 'nazwy_bonow', 'ceny', 'prog_wstrzymania', 'min_dowolna_pln',
     'waznosc_miesiecy', 'kod_prefix', 'verify_limit_na_minute', 'mail_nadawca', 'mail_odpowiedz', 'mail_powiadomienie',
@@ -585,7 +587,8 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
     }
 
     if ($status !== 'valid') {
-        bon_powiadom($k, 'Bon WSTRZYMANY – zamówienie ' . $zamowienie, implode("\n", [
+        $szafirowy = (bool)array_filter($uwagi, static fn($u) => str_starts_with((string)$u, BON_SZAFIROWY_RABAT));
+        bon_powiadom($k, 'Bon WSTRZYMANY' . ($szafirowy ? ' – ' . BON_SZAFIROWY_RABAT . ', sprawdź' : '') . ' – zamówienie ' . $zamowienie, implode("\n", [
             $status === 'czesciowo' ? 'Część bonów z tego zamówienia czeka na ręczne zatwierdzenie (status held); pozostałe poszły mailem.'
                 : 'Bon(y) czekają na ręczne zatwierdzenie (status held).',
             'Powód: ' . implode('; ', array_unique($uwagi)),
@@ -627,7 +630,13 @@ function bon_pozycja_wylicz(array $k, array $z, array $p): array {
     $wariant = $p['nominal'] ?? null;
     if ($wariant === 'dowolna') {
         $wartosc = $zaplaconoJedn;
-        if ($wartosc < (int)$k['min_dowolna_pln'] * 100) $uwagi[] = 'dowolna kwota poniżej minimum ' . $k['min_dowolna_pln'] . ' zł';
+        // wpis 18:20 (decyzja Bartka): kody rabatowe nie obejmują Szafirowego (dowolna kwota = wartość bonu, rabat by „znikał”).
+        // Kod w zamówieniu (webhook; API kodu nie podaje) albo kwota poniżej minimum wariantu → bon wstrzymany + alert
+        $promoZ = trim((string)($z['promo'] ?? ''));
+        if ($promoZ !== '') $uwagi[] = BON_SZAFIROWY_RABAT . " (kod $promoZ) – kody nie obejmują dowolnej kwoty, sprawdź";
+        if ($wartosc < (int)$k['min_dowolna_pln'] * 100) {
+            $uwagi[] = BON_SZAFIROWY_RABAT . '? Zapłacono ' . bon_zl($wartosc) . ' zł, poniżej minimum dowolnej kwoty ' . $k['min_dowolna_pln'] . ' zł – sprawdź';
+        }
     } elseif (is_int($wariant) || is_float($wariant) || (is_string($wariant) && is_numeric($wariant))) {
         $wartosc = (int)round((float)$wariant * 100);
         if ($zaplaconoJedn < (int)round($wartosc * (float)$k['prog_wstrzymania'])) {
