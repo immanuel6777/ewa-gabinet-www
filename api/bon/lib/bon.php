@@ -634,6 +634,14 @@ function bon_pozycja_wylicz(array $k, array $z, array $p): array {
 // --- verify (publiczny) ---
 
 // limit zapytań na IP i minutę; true = można. $cel rozdziela liczniki (verify / adres na stronie podziękowania).
+/** Licznik w bieżącym oknie bez zwiększania (np. limit liczący tylko nieudane próby – bon_rezygnacja_ze_strony). */
+function bon_limit_licznik(PDO $pdo, array $k, string $ip, string $cel, int $oknoS = 60): int {
+    $klucz = hash('sha256', $ip . '|' . ($k['easytools_webhook_sekret'] ?? '') . '|' . $cel);
+    $st = $pdo->prepare('SELECT licznik FROM ' . bon_tabela($k, 'voucher_verify_limit') . ' WHERE klucz = ? AND okno = ?');
+    $st->execute([$klucz, intdiv(time(), $oknoS) * intdiv($oknoS, 60)]);
+    return (int)$st->fetchColumn();
+}
+
 // $oknoS: długość okna w sekundach (60 = minuta; 3600 = godzina dla limitu prób rezygnacji na bon). Okno zapisane jako numer
 // minuty jego początku, więc sprzątanie (okna starsze niż 60 min) działa tak samo dla obu długości.
 function bon_limit_ok(PDO $pdo, array $k, string $ip, string $cel = 'limit', ?int $max = null, int $oknoS = 60): bool {

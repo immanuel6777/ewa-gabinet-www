@@ -119,5 +119,13 @@ function bon_testy_zwroty(array $k, PDO $pdo): array {
     [, $hA] = bon_panel_historia($kz, $pdo, $sAdmin, $b6['code']);
     $t('zwrot: Ewa nie oznaczy zwrotu bonu bez rezygnacji (403); A1 – pieniądze zwrócone w Easytools, bon ważny → ostrzeżenie w panelu',
         $h === 403 && str_contains((string)($hA['platnosc']['ostrzezenie'] ?? ''), 'bon nadal działa') && array_key_exists('zwrot', $hA) && $hA['zwrot'] === null, json_encode($hA['platnosc'] ?? null));
+
+    // „Oznacz zwrot” admina na bonie bez rezygnacji (wpis 16:47): w historii do zwrotu mniejsza z dwóch – saldo albo wpłata
+    $p7 = bon_test_payload(['price_custom_id' => 'bon-200', 'amount_paid' => 200]);
+    bon_test_webhook($kz, $pdo, $p7);
+    $b7 = bon_test_bony($kz, $pdo, $p7['order_id'])[0];
+    $pdo->prepare("UPDATE $tabB SET paid_pln = '8.00' WHERE id = ?")->execute([$b7['id']]);
+    [$h, $o] = bon_panel_admin($kz, $pdo, $sAdmin, ['kod' => $b7['code'], 'akcja' => 'zwrot', 'powod' => 'awaryjnie']);
+    $t('Oznacz zwrot bez rezygnacji (admin): w historii „do zwrotu 8.00 zł” (saldo 200, wpłata 8)', $h === 200 && str_contains((string)($o['opis'] ?? ''), 'do zwrotu 8.00 zł'), (string)($o['opis'] ?? ''));
     return $wyniki;
 }

@@ -60,6 +60,25 @@ function bon_testy_p10(array $k, PDO $pdo): array {
     [$h, $o] = bon_panel_potwierdz_numer($k, $pdo, $sKasa, $u2, substr(str_replace('-', '', $kod2), -4));
     $t('P-10 po 5 złych próbach → 429 nawet z dobrymi znakami, numer nie wychodzi', $h === 429 && !isset($o['kod']), json_encode($o));
 
+    // karty wyników (2026-11-24): nazwa, kolor, „Dla”, ostatnia realizacja, grupa zamówienia, ważne najpierw; Gmail bez kropek
+    $gm = 'karty.test.' . random_int(1000, 9999) . '@gmail.com';
+    $pQ = bon_test_payload(['price_custom_id' => 'bon-500', 'amount_paid' => 1000, 'quantity' => 2, 'customer_email' => $gm, 'custom_fields' => ['bon-dla' => 'Mama']]);
+    bon_test_webhook($k, $pdo, $pQ);
+    $pW = bon_test_payload(['price_custom_id' => 'bon-200', 'amount_paid' => 200, 'customer_email' => $gm]);
+    bon_test_webhook($k, $pdo, $pW);
+    $kodW = (string)(bon_test_bony($k, $pdo, $pW['order_id'])[0]['code'] ?? '');
+    bon_panel_realizuj($k, $pdo, $sKasa, ['kod' => $kodW, 'kwota_reczna' => '200', 'client_token' => bin2hex(random_bytes(12))]); // wykorzystany
+    [, $sG] = bon_panel_szukaj($k, $pdo, str_replace('.', '', strstr($gm, '@', true)) . '@gmail.com', null, $sKasa);
+    $bG = $sG['bony'] ?? [];
+    $t('karty: Gmail bez kropek znajduje 3 bony; najpierw 2 ważne (500, z jednego zamówienia – ta sama grupa), na końcu wykorzystany',
+        count($bG) === 3 && $bG[0]['status'] === 'valid' && $bG[1]['status'] === 'valid' && $bG[2]['status'] === 'used'
+        && $bG[0]['grupa'] === $bG[1]['grupa'] && $bG[0]['grupa'] !== $bG[2]['grupa'], json_encode($sG, JSON_UNESCAPED_UNICODE));
+    $t('karty: nazwa i kolor bonu, „Dla”, ostatnia realizacja tylko przy wykorzystanym',
+        ($bG[0]['nazwa'] ?? '') === 'Bon Bursztynowy' && ($bG[0]['kolor'] ?? '') === 'zloty' && ($bG[0]['dla'] ?? '') === 'Mama' && $bG[0]['ostatnia_realizacja'] === null
+        && ($bG[2]['nazwa'] ?? '') === 'Bon Szmaragdowy' && ($bG[2]['kolor'] ?? '') === 'zielen' && !empty($bG[2]['ostatnia_realizacja']));
+    [, $sInnaDomena] = bon_panel_szukaj($k, $pdo, 'kartytest@example.com', null, $sKasa);
+    $t('karty: kropki ignorowane tylko w Gmailu', ($sInnaDomena['bony'] ?? null) === []);
+
     // wysyłka ponowna przy masce: kasa na ten sam adres – tak
     [$h] = bon_panel_wyslij_ponownie($k, $pdo, $sKasa, ['kod' => $kod2]);
     $t('P-10 kasa: wysyłka ponowna na ten sam adres kupującego → 200', $h === 200);

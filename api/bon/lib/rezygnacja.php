@@ -17,12 +17,16 @@ const BON_REZYGNACJA_PROB_NA_GODZINE = 5;
  * [kod HTTP, odpowiedź dla strony, ?kontekst do maili]. Kontekst (po sukcesie): bon (wiersz), kwota (grosze), zgloszono.
  * Adres e-mail kupującego nie trafia do odpowiedzi ani do dziennika.
  */
-function bon_rezygnacja_ze_strony(array $k, PDO $pdo, string $wpisanyKod, string $email, string $ip, ?DateTimeImmutable $teraz = null): array {
+// $krok (2026-11-24, wpis 16:47): 'sprawdz' = te same warunki i ten sam licznik prób, ale NIC nie zapisuje (strona pokazuje okno
+// potwierdzenia dopiero po poprawnym adresie, z kwotą do zwrotu); 'zglos' = zgłoszenie (serwer sprawdza wszystko od nowa).
+function bon_rezygnacja_ze_strony(array $k, PDO $pdo, string $wpisanyKod, string $email, string $ip, ?DateTimeImmutable $teraz = null, string $krok = 'zglos'): array {
     $odmowa = static fn(int $http, string $powod) => [$http, ['ok' => false, 'powod' => $powod], null];
     $kod = bon_normalizuj_kod($wpisanyKod, (string)$k['kod_prefix']);
     if ($kod === null) return $odmowa(400, 'stan');
     if (!bon_limit_ok($pdo, $k, $ip, 'rezygnacja-ip', (int)($k['verify_limit_na_minute'] ?? 20))) return $odmowa(429, 'limit');
-    if (!bon_limit_ok($pdo, $k, 'bon|' . $kod, 'rezygnacja-bon', BON_REZYGNACJA_PROB_NA_GODZINE, 3600)) return $odmowa(429, 'limit');
+    // limit na bon liczy tylko NIEUDANE sprawdzenia adresu (prośba frontu do #74): udane podejście (sprawdz + zglos) nie zużywa
+    // prób, a zgadywanie adresu nadal blokuje 5 pomyłek na godzinę. Tu tylko odczyt licznika; zwiększenie – przy złym adresie.
+    if (bon_limit_licznik($pdo, $k, 'bon|' . $kod, 'rezygnacja-bon', 3600) >= BON_REZYGNACJA_PROB_NA_GODZINE) return $odmowa(429, 'limit');
     $teraz ??= bon_teraz();
     $tabB = bon_tabela($k, 'vouchers');
     $tabW = bon_tabela($k, 'voucher_withdrawals');
@@ -43,6 +47,7 @@ function bon_rezygnacja_ze_strony(array $k, PDO $pdo, string $wpisanyKod, string
         // adres z zakupu: bez wielkości liter i spacji na brzegach
         if (mb_strtolower(trim($email)) === '' || mb_strtolower(trim($email)) !== mb_strtolower(trim((string)$bon['buyer_email']))) {
             $pdo->rollBack();
+            bon_limit_ok($pdo, $k, 'bon|' . $kod, 'rezygnacja-bon', BON_REZYGNACJA_PROB_NA_GODZINE, 3600); // licz pomyłkę
             return $odmowa(400, 'email');
         }
         $st = $pdo->prepare("SELECT zwrot_stan FROM $tabW WHERE voucher_id = ?");
@@ -51,6 +56,12 @@ function bon_rezygnacja_ze_strony(array $k, PDO $pdo, string $wpisanyKod, string
         if ($stan !== false && $stan !== 'anulowana') { $pdo->rollBack(); return $odmowa(409, 'stan'); }
 
         $kwota = min($saldo, (int)bon_grosze($bon['paid_pln']));
+        if ($krok === 'sprawdz') { // krok 1: wszystko się zgadza – kwota do zwrotu, bez zapisu
+            $pdo->rollBack();
+            // „krok” w odpowiedzi (prośba frontu): stary serwer na krok=sprawdz robił pełne zgłoszenie i odpowiadał {ok, kwota} –
+            // po tym polu front odróżnia „sprawdzone” od „już zgłoszone”
+            return [200, ['ok' => true, 'kwota' => bon_zl($kwota), 'krok' => 'sprawdz'], null];
+        }
         $chwila = $teraz->format('Y-m-d H:i:s');
         $wartosci = [$chwila, $chwila, 'strona', 'klient', bon_zl($saldo), bon_zl($kwota), $bon['id']];
         if ($stan === false) {

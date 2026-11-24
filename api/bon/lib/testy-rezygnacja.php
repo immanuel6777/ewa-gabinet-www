@@ -46,6 +46,26 @@ function bon_testy_rezygnacja(array $k, PDO $pdo): array {
         date_default_timezone_set($strefaSerwera);
     }
 
+    // krok „sprawdz” (wpis 16:47): bez zapisu i maili, ten sam licznik prób; kwota = min(saldo, wpłata)
+    $bS = $nowy(200, 'rezs-' . random_int(1000, 9999) . '@example.com');
+    $pdo->prepare('UPDATE ' . bon_tabela($k, 'vouchers') . ' SET paid_pln = ? WHERE code = ?')->execute(['8.00', $bS['code']]); // zakup z kodem rabatowym
+    [$h, $o, $ctxS] = bon_rezygnacja_ze_strony($k, $pdo, $bS['code'], (string)$bS['buyer_email'], $ip, null, 'sprawdz');
+    $t('krok sprawdz: dobry adres → ok z kwotą 8.00 (mniejsza z: saldo 200, wpłata 8), bon nadal ważny, bez rezygnacji i bez maili',
+        $h === 200 && $o === ['ok' => true, 'kwota' => '8.00', 'krok' => 'sprawdz'] && $ctxS === null && $stan($bS['code']) === ['valid', null], json_encode([$o, $stan($bS['code'])]));
+    [$h, $o] = bon_rezygnacja_ze_strony($k, $pdo, $bS['code'], 'zly@example.com', $ip, null, 'sprawdz');
+    $t('krok sprawdz: zły adres → 400 powod email', $h === 400 && ($o['powod'] ?? '') === 'email');
+    $bL = $nowy(200, 'rezl-' . random_int(1000, 9999) . '@example.com');
+    foreach (['sprawdz', 'zglos', 'sprawdz', 'zglos', 'sprawdz'] as $i => $kr) bon_rezygnacja_ze_strony($k, $pdo, $bL['code'], "zly$i@example.com", '203.0.113.' . (100 + $i), null, $kr);
+    [$h, $o] = bon_rezygnacja_ze_strony($k, $pdo, $bL['code'], (string)$bL['buyer_email'], '203.0.113.200', null, 'sprawdz');
+    $t('limit wspólny dla obu kroków: 5 złych prób w dowolnej kombinacji → 429 limit', $h === 429 && ($o['powod'] ?? '') === 'limit');
+    // liczą się tylko pomyłki (prośba frontu): 4 złe adresy, potem dobry przechodzi przez sprawdz i zglos
+    $bP = $nowy(200, 'rezp-' . random_int(1000, 9999) . '@example.com');
+    for ($i = 0; $i < 4; $i++) bon_rezygnacja_ze_strony($k, $pdo, $bP['code'], "zly$i@example.com", '203.0.113.' . (150 + $i), null, 'sprawdz');
+    [$h1, $o1] = bon_rezygnacja_ze_strony($k, $pdo, $bP['code'], (string)$bP['buyer_email'], '203.0.113.160', null, 'sprawdz');
+    [$h2, $o2] = bon_rezygnacja_ze_strony($k, $pdo, $bP['code'], (string)$bP['buyer_email'], '203.0.113.160', null, 'zglos');
+    $t('limit liczy tylko pomyłki: po 4 złych adresach dobry przechodzi sprawdz (z polem krok) i zglos (bez pola krok)',
+        $h1 === 200 && ($o1['krok'] ?? '') === 'sprawdz' && $h2 === 200 && ($o2['ok'] ?? false) && !isset($o2['krok']), json_encode([$o1, $o2]));
+
     // zły adres: jawna odmowa, bon bez zmian; wielkość liter i spacje bez znaczenia
     [$h, $o] = bon_rezygnacja_ze_strony($k, $pdo, $b['code'], 'ktos-inny@example.com', $ip);
     $t('rezygnacja: zły adres → 400 powod email, bon nadal ważny', $h === 400 && $o === ['ok' => false, 'powod' => 'email'] && $stan($b['code'])[0] === 'valid');

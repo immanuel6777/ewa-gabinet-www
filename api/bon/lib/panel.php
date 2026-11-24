@@ -378,22 +378,62 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
     } else {
         return [400, ['ok' => false, 'blad' => 'Wpisz numer bonu (EWA-XXXX-XXXX), e-mail kupującego albo numer zamówienia Easytools.']];
     }
-    $st = $pdo->prepare("SELECT * FROM $tab WHERE LOWER($kolumna) = ? ORDER BY created_at DESC, id DESC LIMIT " . (BON_PANEL_SZUKAJ_MAX + 1));
-    $st->execute([$wartosc]);
+    // Gmail ignoruje kropki w nazwie skrzynki (bartosz.kalwinski = bartoszkalwinski) – szukamy bez kropek (2026-11-24)
+    $gmail = $typ === 'email' && preg_match('/@(gmail|googlemail)\.com$/', $wartosc) === 1;
+    $warunek = $gmail ? "REPLACE(LOWER(buyer_email), '.', '') = ? AND (LOWER(buyer_email) LIKE '%@gmail.com' OR LOWER(buyer_email) LIKE '%@googlemail.com')"
+        : "LOWER($kolumna) = ?";
+    $st = $pdo->prepare("SELECT * FROM $tab WHERE $warunek ORDER BY created_at DESC, id DESC LIMIT " . (BON_PANEL_SZUKAJ_MAX + 1));
+    $st->execute([$gmail ? str_replace('.', '', $wartosc) : $wartosc]);
     $wiersze = $st->fetchAll();
+    $wiersze20 = array_slice($wiersze, 0, BON_PANEL_SZUKAJ_MAX);
+    $dodatki = bon_panel_karty_dodatki($k, $pdo, array_map(static fn($b) => (int)$b['id'], $wiersze20));
+    $teraz ??= bon_teraz();
     // P-10 (2026-11-24): poza adminem numer bonu znalezionego po e-mailu / zamówieniu jest zamaskowany – zamiast numeru uchwyt
     // związany z sesją; pełny numer dopiero po potwierdzeniu 4 ostatnich znaków przez pacjenta (bon_panel_potwierdz_numer)
     $maskuj = $sesja !== null && $sesja['rola'] !== 'admin';
-    $bony = array_map(static fn($b) => ($maskuj
-        ? ['kod' => null, 'kod_maska' => bon_panel_maska((string)$b['code']), 'uchwyt' => bon_panel_uchwyt($k, $sesja, (int)$b['id'])]
-        : ['kod' => $b['code']]) + [
-        'status' => bon_status_efektywny($b, $teraz),
-        'saldo' => bon_zl((int)bon_grosze($b['balance_pln'])),
-        'wartosc' => bon_zl((int)bon_grosze($b['initial_pln'])),
-        'wazny_do' => substr((string)$b['expires_at'], 0, 10),
-        'kupiono' => substr((string)$b['created_at'], 0, 10),
-    ], array_slice($wiersze, 0, BON_PANEL_SZUKAJ_MAX));
+    $bony = array_map(static function ($b) use ($k, $sesja, $maskuj, $teraz, $dodatki) {
+        $status = bon_status_efektywny($b, $teraz);
+        $doKonca = (int)$teraz->setTime(0, 0)->diff(new DateTimeImmutable(substr((string)$b['expires_at'], 0, 10), new DateTimeZone(BON_STREFA)))->format('%r%a');
+        $d = $dodatki[(int)$b['id']] ?? [];
+        return ($maskuj
+            ? ['kod' => null, 'kod_maska' => bon_panel_maska((string)$b['code']), 'uchwyt' => bon_panel_uchwyt($k, $sesja, (int)$b['id'])]
+            : ['kod' => $b['code']]) + [
+            'status' => $status,
+            'saldo' => bon_zl((int)bon_grosze($b['balance_pln'])),
+            'wartosc' => bon_zl((int)bon_grosze($b['initial_pln'])),
+            'wazny_do' => substr((string)$b['expires_at'], 0, 10),
+            'kupiono' => substr((string)$b['created_at'], 0, 10),
+            // karty wyników (Bartek 2026-11-24): nazwa i kolor bonu, „Dla”, ostatnia realizacja, kończąca się ważność, ostrzeżenia
+            'nazwa' => bon_nazwa($k, $b),
+            'kolor' => match (bon_rodzaj($k, $b)) { 200 => 'zielen', 300 => 'czerwony', 500 => 'zloty', default => 'granat' },
+            'dla' => $b['dla'] ?: null,
+            'ostatnia_realizacja' => $d['realizacja'] ?? null,
+            'konczy_sie' => $status === 'valid' && $doKonca >= 0 && $doKonca <= BON_PRZEDLUZENIE_OKNO_DNI,
+            'mail_odbity' => $d['mail_odbity'] ?? false,
+            // grupowanie bonów z jednego zamówienia (koszyk mieszany, ilość > 1) – skrót, nie numer zamówienia
+            'grupa' => substr(hash('sha256', (string)$b['easytools_order_id']), 0, 10),
+        ];
+    }, $wiersze20);
+    // kolejność: najpierw bony, którymi można płacić, potem pozostałe; w każdej grupie najnowsze pierwsze (zapytanie już tak sortuje)
+    usort($bony, static fn($a, $b) => ($a['status'] === 'valid' ? 0 : 1) <=> ($b['status'] === 'valid' ? 0 : 1));
     return [200, ['ok' => true, 'typ' => $typ, 'bony' => $bony, 'wiecej' => count($wiersze) > BON_PANEL_SZUKAJ_MAX]];
+}
+
+/** Dla kart wyników: ostatnia realizacja (data) i znacznik „mail nie dotarł” – jednym zapytaniem na tabelę. */
+function bon_panel_karty_dodatki(array $k, PDO $pdo, array $ids): array {
+    if (!$ids) return [];
+    $miejsca = implode(',', array_fill(0, count($ids), '?'));
+    $wynik = [];
+    $st = $pdo->prepare('SELECT voucher_id, MAX(redeemed_at) AS ost FROM ' . bon_tabela($k, 'redemptions') . " WHERE voucher_id IN ($miejsca) GROUP BY voucher_id");
+    $st->execute($ids);
+    foreach ($st->fetchAll() as $r) $wynik[(int)$r['voucher_id']]['realizacja'] = (string)$r['ost'];
+    $st = $pdo->prepare('SELECT voucher_id, akcja FROM ' . bon_tabela($k, 'voucher_admin_log') . " WHERE voucher_id IN ($miejsca) AND akcja IN ('mail', 'mail-odbity') ORDER BY kiedy DESC, id DESC");
+    $st->execute($ids);
+    foreach ($st->fetchAll() as $r) {
+        $id = (int)$r['voucher_id'];
+        if (!isset($wynik[$id]['mail_odbity'])) $wynik[$id]['mail_odbity'] = $r['akcja'] === 'mail-odbity';
+    }
+    return $wynik;
 }
 
 // --- P-10 (2026-11-24, wpis 14:35): bon znaleziony po e-mailu kupującego albo zamówieniu – numer zamaskowany do potwierdzenia ---
@@ -655,7 +695,10 @@ function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
             if ($bon['status'] === 'refunded') { $pdo->rollBack(); return [409, ['ok' => false, 'blad' => 'Bon jest już oznaczony jako zwrócony.']]; }
             if ($sesja['rola'] !== 'admin' && $bon['status'] !== 'withdrawn') { $pdo->rollBack(); return [403, ['ok' => false, 'blad' => 'Oznaczyć zwrot bonu bez rezygnacji może tylko Bartek.']]; }
             $pdo->prepare("UPDATE $tabB SET status = 'refunded' WHERE id = ?")->execute([$bon['id']]);
-            $opis = $bon['status'] . ' → zwrócony, saldo w chwili zwrotu ' . bon_zl((int)bon_grosze($bon['balance_pln'])) . ' zł';
+            // do zwrotu = mniejsza z dwóch: saldo albo wpłata (wpis 16:47: bon 200 zł kupiony za 8 zł → 8 zł, nie 200 zł)
+            $saldoZ = (int)bon_grosze($bon['balance_pln']);
+            $opis = $bon['status'] . ' → zwrócony, saldo w chwili zwrotu ' . bon_zl($saldoZ) . ' zł, do zwrotu '
+                . bon_zl(min($saldoZ, (int)bon_grosze($bon['paid_pln']))) . ' zł (mniejsza z: saldo, wpłata)';
             if ($bon['status'] === 'withdrawn') {
                 // pieniądze oddane ręcznie w Easytools: oczekująca rezygnacja → 'zlecony' z zwrot_ref = 'recznie', żeby lista
                 // oczekujących w kroku 3 nie zleciła drugiego zwrotu przez API (krok 3 nie odpytuje transakcji dla 'recznie')

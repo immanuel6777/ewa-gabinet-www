@@ -22,10 +22,12 @@ try {
     $d = str_starts_with($typ, 'application/json') ? json_decode((string)file_get_contents('php://input', false, null, 0, 8192), true) : null;
     if (!is_array($d)) { bon_json(400, ['ok' => false, 'powod' => 'stan']); exit; }
     $pdo = bon_pdo($k);
-    [$http, $odp, $ctx] = bon_rezygnacja_ze_strony($k, $pdo, (string)($d['kod'] ?? ''), (string)($d['email'] ?? ''), (string)($_SERVER['REMOTE_ADDR'] ?? ''));
+    // krok: 'sprawdz' (bez zapisu, przed oknem potwierdzenia) | 'zglos' (domyślnie – zgodność wstecz) – wpis 16:47
+    $krok = ($d['krok'] ?? 'zglos') === 'sprawdz' ? 'sprawdz' : 'zglos';
+    [$http, $odp, $ctx] = bon_rezygnacja_ze_strony($k, $pdo, (string)($d['kod'] ?? ''), (string)($d['email'] ?? ''), (string)($_SERVER['REMOTE_ADDR'] ?? ''), null, $krok);
     bon_json($http, $odp);
     $kodBonu = bon_normalizuj_kod((string)($d['kod'] ?? ''), (string)$k['kod_prefix']);
-    bon_zdarzenie($k, 'rezygnacja-strona', ['http' => $http, 'powod' => $odp['powod'] ?? null, 'kod' => $kodBonu ? bon_kod_maska($kodBonu) : null]);
+    bon_zdarzenie($k, 'rezygnacja-strona', ['krok' => $krok, 'http' => $http, 'powod' => $odp['powod'] ?? null, 'kod' => $kodBonu ? bon_kod_maska($kodBonu) : null]);
 } catch (Throwable $e) {
     error_log('bony/rezygnacja: ' . $e->getMessage());
     if ($k) bon_zdarzenie($k, 'blad', ['plik' => 'rezygnacja'] + bon_opis_bledu($e));
