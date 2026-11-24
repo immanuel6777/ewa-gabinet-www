@@ -245,5 +245,46 @@ function bon_testy_kwoty_kasy(array $k, PDO $pdo): array {
     [, $skA] = bon_panel_szukaj($k, $pdo, $email, null, $sAdmin);
     $t('karty admina: kwoty przy wszystkich, rabat przy bonie z kodem', !array_filter($skA['bony'] ?? [], static fn($c) => $c['saldo'] === null)
         && (bool)array_filter($skA['bony'] ?? [], static fn($c) => ($c['rabat']['kod'] ?? '') === 'KWOTY96'));
+
+    // --- Z3 (REVIEW-SECURITY F1/F5, REVIEW 13): limity logowania atomowe i na sam login ---
+    // równoległe żądania: każde kolejne startuje, gdy poprzednie jest w trakcie sprawdzania hasła (porażka jeszcze niezapisana);
+    // przez limit login+IP (5) może przejść najwyżej 5 z 30
+    $loginR = 'z3-rownolegle-' . random_int(1000, 9999);
+    $ipR = '198.51.100.' . random_int(1, 250);
+    $doszlo = 0;
+    $kR = $k;
+    $kR['_test_przed_haslem'] = static function () use (&$kR, $pdo, $loginR, $ipR, &$doszlo): void {
+        if (++$doszlo < 30) bon_panel_zaloguj($kR, $pdo, $loginR, 'zle', false, $ipR);
+    };
+    bon_panel_zaloguj($kR, $pdo, $loginR, 'zle', false, $ipR);
+    $t('Z3: 30 „równoległych” prób na ten sam login i IP → do sprawdzenia hasła dochodzi najwyżej 5', $doszlo === 5, (string)$doszlo);
+
+    // sam login z różnych adresów: 10 pomyłek z 10 IP → 11. z nowego IP 429; alert na alerty@ dokładnie raz
+    $plikPow = $k['_katalog'] . '/bony-powiadomienia.txt';
+    $loginL = 'z3-konto-' . random_int(1000, 9999);
+    $powPrzed = strlen((string)@file_get_contents($plikPow));
+    $kody = [];
+    for ($i = 1; $i <= 13; $i++) [$kody[]] = bon_panel_zaloguj($k, $pdo, $loginL, 'zle', false, '192.0.2.' . $i);
+    $pow = substr((string)@file_get_contents($plikPow), $powPrzed);
+    $t('Z3: 10 pomyłek na jeden login z 10 różnych IP → kolejne 429 (każde z nowego IP), jeden alert z nazwą konta',
+        array_slice($kody, 0, 10) === array_fill(0, 10, 401) && array_slice($kody, 10) === [429, 429, 429]
+        && substr_count($pow, 'zablokowane logowanie do panelu – konto ' . $loginL) === 1, json_encode($kody));
+
+    // IPv6: adresy z jednej sieci /64 liczone razem (5 pomyłek na login+sieć → 429 z innego adresu tej sieci)
+    $loginV = 'z3-ipv6-' . random_int(1000, 9999);
+    for ($i = 1; $i <= 5; $i++) bon_panel_zaloguj($k, $pdo, $loginV, 'zle', false, '2001:db8:1:2::' . dechex($i));
+    [$kV] = bon_panel_zaloguj($k, $pdo, $loginV, 'zle', false, '2001:db8:1:2:ffff::9');
+    [$kV2] = bon_panel_zaloguj($k, $pdo, $loginV, 'zle', false, '2001:db8:1:3::1');
+    $t('Z3: IPv6 – ta sama sieć /64 dzieli limit (429), inna sieć nie (401)', $kV === 429 && $kV2 === 401 && bon_ip_grupa('2001:db8:1:2::a') === bon_ip_grupa('2001:db8:1:2:ffff::9'),
+        json_encode([$kV, $kV2]));
+
+    // udane logowanie oddaje rezerwację: 25 udanych logowań z jednego IP nie wyczerpuje limitu 20 na IP
+    $ipU = '198.51.100.' . random_int(1, 250);
+    $udane = 0;
+    for ($i = 0; $i < 25; $i++) {
+        [$kU, , $cU] = bon_panel_zaloguj($k, $pdo, 'bartek', 'haslo-bartka-test', false, $ipU) + [2 => null];
+        if ($kU === 200) { $udane++; bon_panel_wyloguj($k, $pdo, (string)($cU['wartosc'] ?? '')); }
+    }
+    $t('Z3: 25 udanych logowań z jednego IP → wszystkie 200 (udane nie zużywają limitu)', $udane === 25, (string)$udane);
     return $wyniki;
 }

@@ -31,6 +31,8 @@ function bon_panel_konfig(array $k): array {
         'panel_zapamietaj_dni' => 90,
         'panel_limit_login_ip' => 5,
         'panel_limit_ip' => 20,
+        'panel_limit_login' => 10, // Z3: nieudane próby na sam login (z dowolnych adresów) w oknie; do decyzji Bartka
+
         'panel_limit_okno_min' => 15,
         'uslugi_plik' => dirname(__DIR__) . '/lib/uslugi.json',
     ];
@@ -51,29 +53,47 @@ function bon_panel_zaloguj(array $k, PDO $pdo, string $login, string $haslo, boo
     $login = strtolower(trim($login));
     $tabProby = bon_tabela($k, 'voucher_login_attempts');
     $kluczLogin = bon_panel_ip_klucz($k, $login . '|' . $ip);
-    $kluczIp = bon_panel_ip_klucz($k, $ip);
-    $od = time() - (int)$k['panel_limit_okno_min'] * 60;
 
-    $ile = $pdo->prepare("SELECT COUNT(*) FROM $tabProby WHERE klucz = ? AND czas >= ?");
-    $ile->execute([$kluczLogin, $od]);
-    $nLogin = (int)$ile->fetchColumn();
-    $ile->execute([$kluczIp, $od]);
-    $nIp = (int)$ile->fetchColumn();
-    if ($nLogin >= (int)$k['panel_limit_login_ip'] || $nIp >= (int)$k['panel_limit_ip']) {
+    // Z3 (REVIEW-SECURITY F1/F5, REVIEW 13): próba REZERWOWANA atomowo przed sprawdzeniem hasła (UPDATE licznik + 1, potem odczyt –
+    // bon_limit_ok), więc równoległe żądania nie przejdą razem przez limit. Trzy liczniki w oknie 15 min: login+IP (5), IP (20)
+    // i sam login niezależnie od IP (10, z alertem). IPv6 liczone sieciami /64. Udane logowanie oddaje swoją rezerwację.
+    // Zapamiętane urządzenie (ciasteczko 90 dni) nie loguje się hasłem, więc limit na login go nie blokuje.
+    $okno = (int)$k['panel_limit_okno_min'] * 60;
+    $grupa = bon_ip_grupa($ip);
+    $liczniki = [
+        ['login|' . $login . '|' . $grupa, 'panel-login-ip', (int)$k['panel_limit_login_ip']],
+        [$grupa, 'panel-ip', (int)$k['panel_limit_ip']],
+        ['login|' . $login, 'panel-login', (int)$k['panel_limit_login']],
+    ];
+    $przekroczony = null;
+    foreach ($liczniki as [$klucz, $cel, $max]) {
+        if (!bon_limit_ok($pdo, $k, $klucz, $cel, $max, $okno)) $przekroczony ??= $cel;
+    }
+    if ($przekroczony !== null) {
+        // alert raz na okno: dokładnie jedno żądanie widzi licznik loginu = limit + 1 (zwiększanie atomowe)
+        if (bon_limit_licznik($pdo, $k, 'login|' . $login, 'panel-login', $okno) === (int)$k['panel_limit_login'] + 1) {
+            bon_powiadom($k, 'Bony: zablokowane logowanie do panelu – konto ' . $login, 'Ponad ' . (int)$k['panel_limit_login'] . ' nieudanych prób logowania na konto '
+                . "„{$login}” w ciągu " . (int)$k['panel_limit_okno_min'] . " minut (z różnych adresów). Logowanie hasłem na to konto jest wstrzymane do końca okna.\n"
+                . 'Zalogowane urządzenia („zapamiętaj”) działają dalej. Jeśli to nie pracownik – zmień hasło konta w konfigu.');
+            bon_zdarzenie($k, 'logowanie-limit-konta', ['login' => $login, 'limit' => (int)$k['panel_limit_login']]);
+        }
         return [429, ['ok' => false, 'blad' => 'Za dużo nieudanych prób. Spróbuj ponownie za ' . (int)$k['panel_limit_okno_min'] . ' minut.']];
     }
 
+    if (isset($k['_test_przed_haslem']) && is_callable($k['_test_przed_haslem'])) ($k['_test_przed_haslem'])(); // testy Z3: równoległe żądanie
     $konto = is_array($k['panel_konta'][$login] ?? null) ? $k['panel_konta'][$login] : null;
     $hash = (string)($konto['haslo'] ?? '');
     $ok = password_verify($haslo, $hash !== '' ? $hash : BON_PANEL_HASH_ATRAPA) && $konto !== null && $hash !== '';
     if (!$ok) {
-        $wpis = $pdo->prepare("INSERT INTO $tabProby (klucz, czas) VALUES (?, ?)");
-        $wpis->execute([$kluczLogin, time()]);
-        $wpis->execute([$kluczIp, time()]);
+        // ślad do diagnostyki (log.php: nieudane logowania z 24 h); limitem są liczniki wyżej
+        $pdo->prepare("INSERT INTO $tabProby (klucz, czas) VALUES (?, ?)")->execute([$kluczLogin, time()]);
         if (random_int(1, 50) === 1) $pdo->prepare("DELETE FROM $tabProby WHERE czas < ?")->execute([time() - 86400]);
         return [401, ['ok' => false, 'blad' => 'Zły login albo hasło.']];
     }
-    $pdo->prepare("DELETE FROM $tabProby WHERE klucz = ?")->execute([$kluczLogin]);
+    // udane logowanie: login+IP od zera (pracownik się pomylił), IP i sam login – tylko ta jedna rezerwacja wraca
+    bon_limit_oddaj($pdo, $k, 'login|' . $login . '|' . $grupa, 'panel-login-ip', $okno, true);
+    bon_limit_oddaj($pdo, $k, $grupa, 'panel-ip', $okno);
+    bon_limit_oddaj($pdo, $k, 'login|' . $login, 'panel-login', $okno);
 
     $token = bin2hex(random_bytes(32));
     $csrf = bin2hex(random_bytes(32));

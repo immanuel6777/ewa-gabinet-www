@@ -397,14 +397,42 @@ function bon_log_webhooka(array $k, string $raw, array $naglowki, ?bool $podpisO
     if (!is_dir($katalog) && !@mkdir($katalog, 0700, true)) { error_log('bony: nie mogę utworzyć ' . $katalog); return; }
     $plik = $katalog . '/' . bon_teraz()->format('Y-m-d') . '.log';
     if (is_file($plik) && filesize($plik) > 5 * 1024 * 1024) { error_log('bony: log webhooka > 5 MB, pomijam'); return; }
+    // Z4 (REVIEW-SECURITY F2, 2026-11-24): bez nagłówków, bez IP, bez surowej treści. Żądanie BEZ poprawnego podpisu (każdy może
+    // wysłać POST) = tylko metadane; z podpisem Easytools = wąska lista pól zdarzenia (bon_webhook_pola), bez danych kupującego.
+    $d = $podpisOk === true ? json_decode($raw, true) : null;
     $wpis = json_encode([
         'czas' => bon_teraz()->format('c'),
-        'ip' => $_SERVER['REMOTE_ADDR'] ?? '',
         'podpis_ok' => $podpisOk,
-        'naglowki' => $naglowki,
-        'body' => $raw,
+        'podpis_w_naglowku' => ($naglowki['x-webhook-signature'] ?? '') !== '',
+        'rozmiar' => strlen($raw),
+        'sha256' => hash('sha256', $raw),
+        'zdarzenie' => $podpisOk === true ? (is_array($d) ? bon_webhook_pola($d) : ['niejson' => true]) : null,
     ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
     @file_put_contents($plik, $wpis . "\n", FILE_APPEND | LOCK_EX);
+}
+
+/**
+ * Z4: wąska lista pól webhooka do logu – to, czego potrzeba do decyzji o webhook_tryb (order_uuid = id zamówienia z API?) i nr 12
+ * (kod rabatowy). Napisy przycięte do 100 znaków; pola własne (Dla/Od) tylko z nazwą i „wpisane/puste”; nazwy kluczy przycięte.
+ */
+function bon_webhook_pola(array $d): array {
+    $pola = ['event', 'success', 'timestamp', 'is_subscription', 'order_id', 'order_uuid', 'amount_paid', 'order_amount', 'currency',
+        'quantity', 'price_id', 'price_custom_id', 'promo_code', 'product_name'];
+    $wynik = [];
+    foreach ($pola as $p) {
+        if (!array_key_exists($p, $d)) continue;
+        $v = $d[$p];
+        $wynik[$p] = is_string($v) ? mb_substr($v, 0, 100) : (is_scalar($v) || $v === null ? $v : '[' . gettype($v) . ']');
+    }
+    $wlasne = [];
+    foreach (array_slice(is_array($d['custom_fields'] ?? null) ? $d['custom_fields'] : [], 0, 20, true) as $kl => $w) {
+        $nazwa = is_array($w) ? (string)($w['name'] ?? $w['label'] ?? $w['key'] ?? $kl) : (string)$kl;
+        $wartosc = is_array($w) ? ($w['value'] ?? null) : $w;
+        $wlasne[mb_substr($nazwa, 0, 40)] = is_string($wartosc) && trim($wartosc) !== '' ? 'wpisane' : 'puste';
+    }
+    if ($wlasne) $wynik['pola_wlasne'] = $wlasne;
+    $wynik['klucze'] = array_map(static fn($kl) => mb_substr((string)$kl, 0, 40), array_slice(array_keys($d), 0, 40));
+    return $wynik;
 }
 
 // --- dziennik zdarzeń (2026-11-22): co backend ZROBIŁ – wynik webhooka, wysyłka PDF, błędy, logowania, realizacje, zmiany admina.
@@ -752,6 +780,22 @@ function bon_limit_ok(PDO $pdo, array $k, string $ip, string $cel = 'limit', ?in
     $st = $pdo->prepare("SELECT licznik FROM $tab WHERE klucz = ? AND okno = ?");
     $st->execute([$klucz, $okno]);
     return (int)$st->fetchColumn() <= ($max ?? (int)$k['verify_limit_na_minute']);
+}
+
+/** Z3 (2026-11-24): oddanie zarezerwowanej próby (np. udane logowanie) – licznik okna −1, nie poniżej zera. */
+function bon_limit_oddaj(PDO $pdo, array $k, string $ip, string $cel, int $oknoS = 60, bool $wyzeruj = false): void {
+    $klucz = hash('sha256', $ip . '|' . ($k['easytools_webhook_sekret'] ?? '') . '|' . $cel);
+    $okno = intdiv(time(), $oknoS) * intdiv($oknoS, 60);
+    $pdo->prepare('UPDATE ' . bon_tabela($k, 'voucher_verify_limit') . ' SET licznik = ' . ($wyzeruj ? '0' : 'licznik - 1') . ' WHERE klucz = ? AND okno = ? AND licznik > 0')
+        ->execute([$klucz, $okno]);
+}
+
+/** Z3 (F5): adres do limitów – IPv6 skrócony do sieci /64 (jeden host ma ich zwykle całe mnóstwo), IPv4 bez zmian. */
+function bon_ip_grupa(string $ip): string {
+    if (!str_contains($ip, ':')) return $ip;
+    $bin = @inet_pton($ip);
+    if ($bin === false || strlen($bin) !== 16) return $ip;
+    return bin2hex(substr($bin, 0, 8)) . '::/64';
 }
 
 // --- stan zamówienia dla /bony/dziekujemy (Bartek 2026-11-24, wpisy 10:00 i 10:30; TA-10) ---

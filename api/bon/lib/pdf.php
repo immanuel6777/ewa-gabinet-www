@@ -1,5 +1,6 @@
 <?php
-// PDF bonu (backend bonów, etap 2: 2026-11-21). Jedna strona A4: przód i tył karty obok siebie (do wydruku i wycięcia),
+// PDF bonu (backend bonów, etap 2: 2026-11-21; od 2026-11-24 3 strony: „Pokaż w gabinecie” + dwie wycinanki składane, lib/grafika/uklad-wycinanka*.json).
+// Dawniej: jedna strona A4: przód i tył karty obok siebie (do wydruku i wycięcia),
 // pod spodem dane bonu i zasady w skrócie. Tła kart = zrzuty KartaBonu.astro (scripts/bon-pdf-tla.mjs → lib/grafika/),
 // pozycje pól z lib/grafika/uklad.json. PDF powstaje w pamięci i nie jest nigdzie zapisywany (Dla/Od to dane osobowe).
 // TCPDF 6.11.4 (LGPL, lib/tcpdf/, bez Composera), czcionka Lato (OFL) z @fontsource przerobiona na pliki TCPDF.
@@ -76,7 +77,6 @@ function bon_pdf(array $bon, array $k): string {
     $kontakt = bon_kontakt($k);
     $miesiace = bon_miesiace_tekst((int)($k['waznosc_miesiecy'] ?? 6));
     bon_pdf_tcpdf();
-    $uklad = json_decode((string)file_get_contents(__DIR__ . '/grafika/uklad.json'), true);
     $wartosc = (int)bon_grosze($bon['initial_pln']);
     $prog = bon_pdf_kolor($k, $bon);
     $kwota = bon_kwota_tekst($wartosc);
@@ -165,79 +165,107 @@ function bon_pdf(array $bon, array $k): string {
     $pdf->Write(6, preg_replace('/#.*/', '', str_replace('https://', '', BON_REGULAMIN)), BON_REGULAMIN);
     $pdf->SetFont('lato', '', 10.5);
     $pdf->SetXY(15, 270);
-    $pdf->Cell(180, 6, 'Na następnej stronie: bon do wydrukowania i wycięcia.', 0, 1, 'C');
+    $pdf->Cell(180, 6, 'Na następnych stronach: bon do wydrukowania – do wyboru z miejscem na wstążkę albo z nadrukowaną kokardą.', 0, 1, 'C');
 
-    // === strona 2: bon do wydruku i wycięcia (dotychczasowy układ) ===
+    // === strony 2 i 3 (Bartek 2026-11-24, decyzja 15:35, wpis 22:22): dwie wycinanki składane – przód i tył obok siebie na jednym
+    // tle z liniami cięcia i zgięcia (tła i uklad-*.json z frontu, PR #57). Strona 2: P3 „do przewiązania” (pas ton w ton),
+    // strona 3: z nadrukowaną wstążką i kokardą. Dawna strona z osobnym przodem i tyłem (tlo-przod/tyl-*) wypadła z PDF. ===
+    foreach ([
+        ['uklad-wycinanka.json', "tlo-wycinanka-$prog.jpg", 'Bon do przewiązania wstążką', 'Wytnij, zegnij, sklej, a jeśli masz wstążkę, przewiąż bon.'],
+        ['uklad-wycinanka-wstazka.json', "tlo-wycinanka-wstazka-$prog.jpg", 'Bon z nadrukowaną kokardą', 'Wytnij, zegnij i sklej.'],
+    ] as [$plikUkladu, $tlo, $tytul, $podtytul]) {
+        $uklad = json_decode((string)file_get_contents(__DIR__ . '/grafika/' . $plikUkladu), true);
+        bon_pdf_wycinanka($pdf, $uklad, __DIR__ . '/grafika/' . $tlo, $tytul, $podtytul, $bon, $kod, $kwota, $waznosc, $adresQr);
+    }
+    return $pdf->Output('', 'S');
+}
+
+/**
+ * Strona z wycinanką: nagłówek, tło (przód | zgięcie | tył, 190 mm szerokości) i pola zmienne w miejscach z uklad-*.json
+ * (px CSS względem obrazu). Wpisy 22:27/22:34: numer „Numer bonu” + numer pogrubiony, odsunięty od logo; Dla/Od/Kwota NAD
+ * liniami (dół tekstu ok. 1,2 mm nad linią, wcześniej tekst nachodził na linię), kwota wyśrodkowana na długości linii;
+ * kwota na przodzie Lato Bold (była za cienka).
+ */
+function bon_pdf_wycinanka(TCPDF $pdf, array $u, string $tlo, string $tytul, string $podtytul, array $bon, string $kod, string $kwota, string $waznosc, string $adresQr): void {
     $pdf->AddPage();
-
-    // --- nagłówek ---
     $pdf->SetTextColor(...BON_PDF_INK);
-    $pdf->SetFont('latolight', '', 24);
-    $pdf->SetXY(10, 14);
-    $pdf->Cell(190, 11, 'Bon podarunkowy', 0, 1, 'C');
+    $pdf->SetFont('latolight', '', 22);
+    $pdf->SetXY(10, 12);
+    $pdf->Cell(190, 10, $tytul, 0, 1, 'C');
     $pdf->SetTextColor(...BON_PDF_MUTED);
     $pdf->SetFont('lato', '', 10.5);
     $pdf->SetX(10);
-    $pdf->Cell(190, 6, 'Wydrukuj na zwykłej kartce, wytnij obie strony wzdłuż przerywanej linii i sklej je tyłem do siebie.', 0, 1, 'C');
+    $pdf->Cell(190, 6, $podtytul, 0, 1, 'C');
 
-    // --- karty: przód z lewej, tył z prawej ---
-    $obrazW = 92.0;                                   // mm na jeden zrzut (z marginesem na cień)
-    $s = $obrazW / $uklad['strony']['przod']['obraz']['w']; // mm na 1 px CSS
-    $obrazH = $uklad['strony']['przod']['obraz']['h'] * $s;
-    $y0 = 32.0;
-    $xP = 10.0;
-    $xT = 210.0 - 10.0 - $obrazW;
-    $pt = static fn(float $px) => $px * $s / 0.352778; // rozmiar czcionki: px CSS karty → pt w PDF
-    $pdf->Image(__DIR__ . "/grafika/tlo-przod-$prog.jpg", $xP, $y0, $obrazW, $obrazH, 'JPG');
-    $pdf->Image(__DIR__ . "/grafika/tlo-tyl-$prog.jpg", $xT, $y0, $obrazW, $obrazH, 'JPG');
+    $x0 = 10.0;
+    $y0 = 30.0;
+    $s = 190.0 / $u['obraz']['w'];                       // mm na 1 px CSS
+    $pt = static fn(float $px) => $px * $s / 0.352778;   // rozmiar czcionki: px CSS → pt
+    $X = static fn(float $px) => $x0 + $px * $s;
+    $Y = static fn(float $px) => $y0 + $px * $s;
+    $pdf->Image($tlo, $x0, $y0, 190.0, $u['obraz']['h'] * $s, 'JPG');
 
-    // przód: kwota (miejsce .kwota-b, wyśrodkowana na karcie)
-    $p = $uklad['strony']['przod'];
+    // przód: kwota wyśrodkowana na karcie, Lato Bold
+    $p = $u['przod'];
     $pdf->SetTextColor(...BON_PDF_INK);
-    $pdf->SetFont('lato', '', $pt(56));
-    $pdf->SetXY($xP + $p['karta']['x'] * $s, $y0 + $p['kwota']['y'] * $s);
-    $pdf->Cell($p['karta']['w'] * $s, $p['kwota']['h'] * $s, $kwota, 0, 0, 'C', false, '', 0, false, 'T', 'M');
+    $pdf->SetFont('latob', '', $pt(56));
+    $pdf->SetXY($X($p['karta']['x']), $Y($p['kwota']['y']));
+    $pdf->Cell($p['karta']['w'] * $s, $p['kwota']['h'] * $s, $kwota, 0, 0, 'C', false, '', 1, false, 'T', 'M');
 
-    // tył: numer, Dla / Od / Kwota na liniach, QR, ważność
-    $t = $uklad['strony']['tyl'];
-    $pdf->SetFont('latob', '', $pt(15));
-    $pdf->setFontSpacing(0.25);
-    $pdf->SetXY($xT + $t['karta']['x'] * $s, $y0 + $t['numer']['y'] * $s);
-    $pdf->Cell($t['karta']['w'] * $s, $t['numer']['h'] * $s, 'NR ' . $kod, 0, 0, 'C', false, '', 0, false, 'T', 'M');
+    // tył: „Numer bonu” + numer pogrubiony, wyśrodkowane na karcie, odsunięte w dół od logo
+    $t = $u['tyl'];
+    $etykieta = 'Numer bonu  ';
+    $pdf->SetFont('lato', '', $pt(14));
+    $wE = $pdf->GetStringWidth($etykieta);
+    $pdf->SetFont('latob', '', $pt(17));
+    $pdf->setFontSpacing(0.2);
+    $wK = $pdf->GetStringWidth($kod);
+    $xN = $X($t['karta']['x']) + ($t['karta']['w'] * $s - $wE - $wK) / 2;
+    $yN = $Y($t['numer']['y']); // odstęp od logo daje tło (front #98: numer.y 254 → 276)
+    $odstepy = $pdf->getCellPaddings();
+    $pdf->setCellPaddings(0, 0, 0, 0); // bez wewnętrznego odstępu komórek TCPDF (~1 mm): numer wyśrodkowany, „Ważny do” na krawędzi listy z tła
+    $hN = $t['numer']['h'] * $s;
+    $pdf->setFontSpacing(0);
+    $pdf->SetFont('lato', '', $pt(14));
+    $pdf->SetXY($xN, $yN);
+    $pdf->Cell($wE, $hN, $etykieta, 0, 0, 'L', false, '', 0, false, 'T', 'B');
+    $pdf->SetFont('latob', '', $pt(17));
+    $pdf->setFontSpacing(0.2);
+    $pdf->Cell($wK + 1, $hN, $kod, 0, 0, 'L', false, '', 0, false, 'T', 'B');
     $pdf->setFontSpacing(0);
 
+    // Dla / Od / Kwota: tekst NAD linią (dół 1,2 mm nad nią); Dla/Od od lewej, kwota na środku linii; puste = do wpisania ręcznie
     $pdf->SetFont('lato', '', $pt(18));
     foreach ([$bon['dla'] ?? '', $bon['od'] ?? '', $kwota] as $i => $tekst) {
+        if ($tekst === '' || $tekst === null) continue;
         $l = $t['linie'][$i];
-        if ($tekst === '' || $tekst === null) continue; // puste pole zostaje do wpisania ręcznie
         $wys = 7.0;
-        $pdf->SetXY($xT + ($l['x'] + 4) * $s, $y0 + $l['y'] * $s - $wys + 0.6);
-        $pdf->Cell(($l['w'] - 8) * $s, $wys, (string)$tekst, 0, 0, 'L', false, '', 1, false, 'T', 'B'); // stretch 1 = zmieść długie imię
+        $pdf->SetXY($X($l['x'] + 4), $Y($l['y']) - 1.2 - $wys);
+        $pdf->Cell(($l['w'] - 8) * $s, $wys, (string)$tekst, 0, 0, $i === 2 ? 'C' : 'L', false, '', 1, false, 'T', 'B'); // stretch 1 = zmieść długie imię
     }
 
-    $q = $t['qr']; // 136 px tła = 25,6 mm (front #53, 2026-11-24; wcześniej 84 px = 15,8 mm)
-    $pdf->write2DBarcode($adresQr, 'QRCODE,M', $xT + $q['x'] * $s, $y0 + $q['y'] * $s, $q['w'] * $s, $q['h'] * $s,
+    $q = $t['qr'];
+    $pdf->write2DBarcode($adresQr, 'QRCODE,M', $X($q['x']), $Y($q['y']), $q['w'] * $s, $q['h'] * $s,
         ['border' => false, 'padding' => 0, 'fgcolor' => BON_PDF_INK, 'bgcolor' => false], 'N');
 
     $w = $t['waznosc'];
-    $pdf->SetXY($xT + $w['x'] * $s, $y0 + $w['y'] * $s);
+    $pdf->SetTextColor(...BON_PDF_INK);
+    $pdf->SetXY($X($w['x']), $Y($w['y']));
     $pdf->SetFont('latob', '', $pt(16));
     $pdf->Cell($w['w'] * $s + 10, $w['h'] * $s / 2, 'Ważny do', 0, 2, 'L', false, '', 0, false, 'T', 'M');
     $pdf->SetTextColor(...BON_PDF_MUTED);
     $pdf->SetFont('lato', '', $pt(16));
     $pdf->Cell($w['w'] * $s + 10, $w['h'] * $s / 2, $waznosc, 0, 0, 'L', false, '', 0, false, 'T', 'M');
+    $pdf->setCellPaddings($odstepy['L'], $odstepy['T'], $odstepy['R'], $odstepy['B']);
 
-    // --- pod kartami: dane bonu i zasady w skrócie (pełne zasady: BON_REGULAMIN) ---
-    $y = $y0 + $obrazH + 8;
+    // pod wycinanką: dane bonu i jak drukować
+    $y = $y0 + $u['obraz']['h'] * $s + 6;
     $pdf->SetTextColor(...BON_PDF_INK);
     $pdf->SetFont('latob', '', 12);
-    $pdf->SetXY(20, $y);
-    $pdf->Cell(170, 7, 'Numer bonu: ' . $kod . '   ·   Wartość: ' . $kwota . '   ·   Ważny do: ' . $waznosc, 0, 1, 'C');
+    $pdf->SetXY(10, $y);
+    $pdf->Cell(190, 7, 'Numer bonu: ' . $kod . '   ·   Wartość: ' . $kwota . '   ·   Ważny do: ' . $waznosc, 0, 1, 'C');
     $pdf->SetFont('lato', '', 10.5);
     $pdf->SetTextColor(...BON_PDF_MUTED);
-    $pdf->SetX(20);
-    $pdf->Cell(170, 6, 'Saldo i ważność sprawdzisz, skanując kod QR na bonie.', 0, 1, 'C');
-
-    // zasady, telefony i Booksy są na stronie 1 („Pokaż w gabinecie”) – tu tylko wycinanka i dane bonu
-    return $pdf->Output('', 'S');
+    $pdf->SetX(10);
+    $pdf->Cell(190, 6, 'Drukuj na kartce A4 w rzeczywistym rozmiarze (100%, bez dopasowania do strony).', 0, 1, 'C');
 }

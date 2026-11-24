@@ -122,6 +122,25 @@ function bon_testy_rezygnacja(array $k, PDO $pdo): array {
     [$h, $o] = bon_rezygnacja_ze_strony($k, $pdo, 'EWA-ZLY', 'a@example.com', $ip);
     $t('rezygnacja: zły format numeru → 400 powod stan', $h === 400 && ($o['powod'] ?? '') === 'stan');
 
+    // Z3 (REVIEW-SECURITY F3): „równoległe” zgadywanie adresu – każde kolejne żądanie startuje, gdy poprzednie jeszcze nie porównało
+    // adresu (pomyłka niezapisana); przez limit 5 na bon może przejść najwyżej 5 z 20, z różnych IP
+    $b6 = $nowy(200, 'rez6-' . random_int(1000, 9999) . '@example.com');
+    $porownan = 0;
+    $kP = $k;
+    $kP['_test_po_limicie'] = static function () use (&$kP, $pdo, $b6, &$porownan): void {
+        if (++$porownan < 20) bon_rezygnacja_ze_strony($kP, $pdo, $b6['code'], "zgadywany$porownan@example.com", '203.0.113.' . (100 + $porownan), null, 'sprawdz');
+    };
+    bon_rezygnacja_ze_strony($kP, $pdo, $b6['code'], 'zgadywany0@example.com', '203.0.113.99', null, 'sprawdz');
+    $t('Z3: 20 „równoległych” prób adresu na jeden bon (różne IP) → do porównania dochodzi najwyżej 5', $porownan === 5, (string)$porownan);
+    // udane sprawdzenie nie zużywa próby: 8× dobry adres w kroku „sprawdz” → wszystkie 200
+    $b7 = $nowy(200, 'rez7-' . random_int(1000, 9999) . '@example.com');
+    $ok7 = 0;
+    for ($i = 0; $i < 8; $i++) {
+        [$h7] = bon_rezygnacja_ze_strony($k, $pdo, $b7['code'], (string)$b7['buyer_email'], '203.0.113.' . (150 + $i), null, 'sprawdz');
+        if ($h7 === 200) $ok7++;
+    }
+    $t('Z3: 8 udanych sprawdzeń adresu na jednym bonie → wszystkie 200 (udane nie zużywają limitu)', $ok7 === 8, (string)$ok7);
+
     // cofnięcie rezygnacji ze strony w panelu (pomyłka) – istniejąca ścieżka
     [$h] = bon_panel_admin($k, $pdo, ['login' => 'bartek', 'imie' => 'Bartek', 'rola' => 'admin', 'csrf' => 'x'], ['kod' => $b['code'], 'akcja' => 'cofnij-rezygnacje', 'powod' => 'kupujący się pomylił']);
     $t('panel: rezygnację ze strony da się cofnąć („Cofnij rezygnację”) → bon znów ważny', $h === 200 && $stan($b['code'])[0] === 'valid');

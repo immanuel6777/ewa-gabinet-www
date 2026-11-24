@@ -24,9 +24,19 @@ function bon_rezygnacja_ze_strony(array $k, PDO $pdo, string $wpisanyKod, string
     $kod = bon_normalizuj_kod($wpisanyKod, (string)$k['kod_prefix']);
     if ($kod === null) return $odmowa(400, 'stan');
     if (!bon_limit_ok($pdo, $k, $ip, 'rezygnacja-ip', (int)($k['verify_limit_na_minute'] ?? 20))) return $odmowa(429, 'limit');
-    // limit na bon liczy tylko NIEUDANE sprawdzenia adresu (prośba frontu do #74): udane podejście (sprawdz + zglos) nie zużywa
-    // prób, a zgadywanie adresu nadal blokuje 5 pomyłek na godzinę. Tu tylko odczyt licznika; zwiększenie – przy złym adresie.
-    if (bon_limit_licznik($pdo, $k, 'bon|' . $kod, 'rezygnacja-bon', 3600) >= BON_REZYGNACJA_PROB_NA_GODZINE) return $odmowa(429, 'limit');
+    // Z3 (REVIEW-SECURITY F3): próba na bon REZERWOWANA atomowo przed porównaniem adresu (dawniej: odczyt licznika, a zwiększenie
+    // dopiero przy złym adresie – równoległe żądania przechodziły razem). Rezerwacja wraca, gdy to nie była pomyłka w adresie, więc
+    // nadal liczą się tylko NIEUDANE sprawdzenia (prośba frontu do #74): 5 pomyłek na godzinę na bon.
+    if (!bon_limit_ok($pdo, $k, 'bon|' . $kod, 'rezygnacja-bon', BON_REZYGNACJA_PROB_NA_GODZINE, 3600)) return $odmowa(429, 'limit');
+    if (isset($k['_test_po_limicie']) && is_callable($k['_test_po_limicie'])) ($k['_test_po_limicie'])(); // testy Z3: równoległe żądanie
+    $wynik = bon_rezygnacja_ze_strony_sprawdzona($k, $pdo, $kod, $email, $teraz, $krok);
+    if (($wynik[1]['powod'] ?? '') !== 'email') bon_limit_oddaj($pdo, $k, 'bon|' . $kod, 'rezygnacja-bon', 3600);
+    return $wynik;
+}
+
+/** Część rezygnacji ze strony po limitach (Z3): stan bonu, termin, adres z zakupu, zapis. Woła ją tylko bon_rezygnacja_ze_strony. */
+function bon_rezygnacja_ze_strony_sprawdzona(array $k, PDO $pdo, string $kod, string $email, ?DateTimeImmutable $teraz, string $krok): array {
+    $odmowa = static fn(int $http, string $powod) => [$http, ['ok' => false, 'powod' => $powod], null];
     $teraz ??= bon_teraz();
     $tabB = bon_tabela($k, 'vouchers');
     $tabW = bon_tabela($k, 'voucher_withdrawals');
@@ -47,8 +57,7 @@ function bon_rezygnacja_ze_strony(array $k, PDO $pdo, string $wpisanyKod, string
         // adres z zakupu: bez wielkości liter i spacji na brzegach
         if (mb_strtolower(trim($email)) === '' || mb_strtolower(trim($email)) !== mb_strtolower(trim((string)$bon['buyer_email']))) {
             $pdo->rollBack();
-            bon_limit_ok($pdo, $k, 'bon|' . $kod, 'rezygnacja-bon', BON_REZYGNACJA_PROB_NA_GODZINE, 3600); // licz pomyłkę
-            return $odmowa(400, 'email');
+            return $odmowa(400, 'email'); // pomyłka zostaje policzona (rezerwacja nie wraca)
         }
         $st = $pdo->prepare("SELECT zwrot_stan FROM $tabW WHERE voucher_id = ?");
         $st->execute([$bon['id']]);

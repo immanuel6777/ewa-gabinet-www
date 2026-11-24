@@ -5,7 +5,7 @@
 //  - tylko bony 'valid' z mail_wyslany_at = NULL (wstrzymane 'held' czekają na zatwierdzenie, bez maila),
 //  - jedna wysyłka naraz na zamówienie (blokada MySQL GET_LOCK) – ponowiony webhook w trakcie wysyłki nie wyśle drugi raz,
 //    a ponowiony PO nieudanej wysyłce ją dokończy,
-//  - quantity N → N PDF-ów, po 10 w jednym mailu (limit Mailjet ok. 15 MB na wiadomość, PDF ok. 0,5 MB),
+//  - quantity N → N PDF-ów, po 5 w jednym mailu (limit Mailjet ok. 15 MB na wiadomość, PDF ok. 1,1 MB od 24.11),
 //  - PDF-y tylko w pamięci, nigdzie nie zapisywane; nieudana wysyłka → powiadomienie admina przez mail().
 // mail_tryb = 'plik' (testy): zamiast Mailjet zapis treści wysyłki (bez PDF-ów, same nazwy i rozmiary) do pliku obok konfigu.
 
@@ -13,7 +13,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/pdf.php';
 require_once __DIR__ . '/smtp.php';
 
-const BON_PDF_NA_MAIL = 10;
+const BON_PDF_NA_MAIL = 5; // 2026-11-24: PDF 3-stronicowy ok. 1,1 MB (base64 +33%) – 5 na mail ≈ 7,3 MB, zapas pod 15 MB Mailjeta
 
 function bon_blokada(PDO $pdo, string $nazwa): bool {
     if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql') return true; // SQLite (testy): jeden proces
