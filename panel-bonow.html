@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="/_astro/sciezka-bonow.B4U7Ywh7.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.rmiyhP5i.css">
+<link rel="stylesheet" href="/_astro/panel-bonow.CLUA61sh.css">
 <link rel="stylesheet" href="/_astro/Baza.CUaZgc7R.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
     <a class="przeskocz" href="#tresc">Przejdź do treści</a>
@@ -541,8 +541,10 @@
 
       <section class="karta" data-p-historia-sekcja hidden data-astro-cid-nl2nwxtk>
         <h2 data-astro-cid-nl2nwxtk>Historia</h2>
-        <h3 data-astro-cid-nl2nwxtk>Realizacje</h3>
-        <ul class="historia" data-p-historia data-astro-cid-nl2nwxtk></ul>
+        <!-- wpis 20:22: jedna oś czasu (realizacje + zdarzenia), najnowsze na górze; domyślnie 2, „Pokaż całą historię (N)” rozwija w miejscu.
+             Wzorzec: timeline / activity feed z shadcn przez 21st.dev – tylko układ, na naszych tokenach -->
+        <ol class="os zwinieta" data-p-os aria-live="polite" data-astro-cid-nl2nwxtk></ol>
+        <button class="przycisk obrys maly" type="button" data-p-os-wiecej aria-expanded="false" hidden data-astro-cid-nl2nwxtk></button>
         <p class="podpowiedz" data-p-historia-pusta hidden data-astro-cid-nl2nwxtk>Bon nie był jeszcze realizowany.</p>
         <!-- cofnięcie ostatniej realizacji (2026-11-24): Ewa i Bartek, do 24 h; serwer daje „cofnij_realizacje” tylko im -->
         <div class="cofnij" data-p-cofnij-real-sekcja hidden data-astro-cid-nl2nwxtk>
@@ -550,8 +552,6 @@
           <button class="przycisk obrys" type="button" data-p-cofnij-real data-astro-cid-nl2nwxtk>Cofnij ostatnią realizację</button>
           <p class="blad" data-p-blad-cofnij hidden data-astro-cid-nl2nwxtk></p>
         </div>
-        <h3 data-astro-cid-nl2nwxtk>Zdarzenia</h3>
-        <ul class="historia" data-p-zdarzenia data-astro-cid-nl2nwxtk></ul>
       </section>
 
       <!-- obsługa kupującego (2026-11-24, TA-11): admin i konto z uprawnieniem rezygnacji (Bartek, Ewa) – serwer daje „obsluga” tylko im -->
@@ -648,4 +648,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.UEeuRW6l.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.DDVapOjq.js"></script>
