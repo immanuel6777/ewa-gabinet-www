@@ -73,7 +73,8 @@ function bon_test_konfig(array $k): array {
 /** Kontakt jak z buildu (src/pages/api/bon/lib/kontakt.json.ts), zapisany obok konfigu – wartości celowo testowe. */
 function bon_test_kontakt(string $katalog): string {
     $plik = $katalog . '/bony-test-kontakt.json';
-    file_put_contents($plik, json_encode(['telefon' => '600 000 001', 'ulica' => 'ul. Testowa 1', 'miasto' => 'Pabianice'], JSON_UNESCAPED_UNICODE));
+    file_put_contents($plik, json_encode(['telefon' => '600 000 001', 'ulica' => 'ul. Testowa 1', 'miasto' => 'Pabianice',
+        'telefony' => ['42 000 00 01', '600 000 001'], 'booksy' => 'https://example.booksy.com/a/'], JSON_UNESCAPED_UNICODE));
     return $plik;
 }
 
@@ -227,12 +228,16 @@ function bon_testy(array $kBaza, PDO $pdo): array {
         $kol('bon-200', '200.00') === 'zielen' && $kol('Bon Rubinowy', '300.00') === 'czerwony' && $kol('Bon 500 zł', '500.00') === 'zloty'
         && $kol('Bon Szafirowy', '500.00') === 'granat' && $kol('bon-dowolna', '300.00') === 'granat' && $kol('', '237.50') === 'granat'
         && $kol('', '300.00') === 'czerwony');
+    $uk = json_decode((string)file_get_contents(__DIR__ . '/grafika/uklad.json'), true);
+    $qrMm = $uk['strony']['tyl']['qr']['w'] * 92.0 / $uk['strony']['tyl']['obraz']['w'];
+    $t('PDF: kod QR na tyle bonu co najmniej 25 mm (wpis 12:55)', $qrMm >= 25, round($qrMm, 1) . ' mm');
     $t('tła PDF: 4 kolory × przód i tył są w lib/grafika', count(array_filter(['zielen', 'czerwony', 'zloty', 'granat'],
         static fn($c) => is_file(__DIR__ . "/grafika/tlo-przod-$c.jpg") && is_file(__DIR__ . "/grafika/tlo-tyl-$c.jpg"))) === 4);
     $t('ważność słownie: 1 miesiąc, 3 miesiące, 6 miesięcy, 12 miesięcy, 22 miesiące', bon_miesiace_tekst(1) === '1 miesiąc' && bon_miesiace_tekst(3) === '3 miesiące'
         && bon_miesiace_tekst(6) === '6 miesięcy' && bon_miesiace_tekst(12) === '12 miesięcy' && bon_miesiace_tekst(22) === '22 miesiące');
     $pdfBajty = bon_pdf(['code' => 'EWA-TEST-2345', 'initial_pln' => '300.00', 'expires_at' => '2027-11-21', 'dla' => 'Żaneta Ćwik', 'od' => null], $k);
     $t('PDF: powstaje, poprawny nagłówek, < 1,5 MB', str_starts_with($pdfBajty, '%PDF-') && strlen($pdfBajty) < 1500000 && str_contains($pdfBajty, '%%EOF'), strlen($pdfBajty) . ' B');
+    $t('PDF: dwie strony – „Pokaż w gabinecie” i wycinanka (wpis 12:55)', preg_match_all('#/Type\s*/Page[^s]#', $pdfBajty) === 2);
     $jsonl = $k['_katalog'] . '/bony-mailjet.jsonl';
     $maile = static function () use ($jsonl): array {
         return is_file($jsonl) ? array_values(array_map(static fn($l) => json_decode($l, true), array_filter(explode("\n", (string)file_get_contents($jsonl))))) : [];

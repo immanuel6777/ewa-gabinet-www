@@ -92,6 +92,82 @@ function bon_pdf(array $bon, array $k): string {
     $pdf->SetMargins(0, 0, 0);
     $pdf->SetAutoPageBreak(false);
     $pdf->setFontSubsetting(true);
+
+    // === strona 1: „Pokaż w gabinecie” (Bartek 2026-11-24, wpis 12:55) – PDF otwarty na telefonie pokazuje górę pierwszej
+    // strony, więc obdarowany od razu ma duży kod QR i numer do pokazania w gabinecie. Bez danych kupującego. ===
+    $pdf->AddPage();
+    $adresQr = BON_PDF_ADRES_SPRAWDZ . rawurlencode($kod);
+    $pdf->SetTextColor(...BON_PDF_MUTED);
+    $pdf->SetFont('lato', '', 10.5);
+    $pdf->SetXY(15, 12);
+    $pdf->Cell(180, 6, 'Bon podarunkowy · EWA Gabinet podologiczny', 0, 1, 'L');
+    // karta z kodem: tło jak --c-chip, kod 50 mm, obok numer, nazwa, kwota, ważność
+    $pdf->SetFillColor(246, 239, 233);
+    $pdf->RoundedRect(15, 22, 180, 70, 4, '1111', 'F');
+    $pdf->SetFillColor(255, 255, 255);
+    $pdf->RoundedRect(21, 28, 58, 58, 2, '1111', 'F');
+    $pdf->write2DBarcode($adresQr, 'QRCODE,M', 25, 32, 50, 50, ['border' => false, 'padding' => 0, 'fgcolor' => BON_PDF_INK, 'bgcolor' => false], 'N');
+    $x = 88;
+    $pdf->SetTextColor(...BON_PDF_INK);
+    $pdf->SetFont('latolight', '', 17);
+    $pdf->SetXY($x, 29);
+    $pdf->Cell(102, 8, bon_nazwa($k, $bon), 0, 2, 'L');
+    $pdf->SetFont('lato', '', 30);
+    $pdf->Cell(102, 14, $kwota, 0, 2, 'L');
+    $pdf->SetFont('latob', '', 16);
+    $pdf->setFontSpacing(0.3);
+    $pdf->Cell(102, 9, $kod, 0, 2, 'L');
+    $pdf->setFontSpacing(0);
+    $pdf->SetFont('lato', '', 12);
+    $pdf->SetTextColor(...BON_PDF_MUTED);
+    $pdf->Cell(102, 7, 'Ważny do ' . $waznosc, 0, 2, 'L');
+    $pdf->SetTextColor(...BON_PDF_INK);
+    $pdf->SetFont('latob', '', 12);
+    $pdf->SetXY($x, 74);
+    $pdf->MultiCell(102, 5.6, 'Pokaż ten kod w gabinecie albo podaj numer bonu.', 0, 'L', false, 1);
+
+    // jak umówić wizytę: Booksy i oba telefony gabinetu (kontakt.json z buildu)
+    $telefony = array_values(array_filter((array)($kontakt['telefony'] ?? [$kontakt['telefon']])));
+    $booksy = (string)($kontakt['booksy'] ?? '');
+    $pdf->SetXY(15, 102);
+    $pdf->SetFont('latob', '', 13);
+    $pdf->Cell(180, 7, 'Jak umówić wizytę', 0, 1, 'L');
+    $pdf->SetFont('lato', '', 11);
+    if ($booksy !== '') {
+        $pdf->SetX(15);
+        $pdf->Write(6, '•  Online przez Booksy: ');
+        $pdf->SetTextColor(...BON_PDF_MUTED);
+        $pdf->Write(6, 'umów wizytę', $booksy);
+        $pdf->SetTextColor(...BON_PDF_INK);
+        $pdf->Ln(6);
+    }
+    $pdf->SetX(15);
+    $pdf->MultiCell(180, 6, '•  Telefonicznie: ' . implode(' albo ', $telefony) . '. Przy rezerwacji podaj numer bonu.', 0, 'L', false, 1);
+    $pdf->SetX(15);
+    $pdf->MultiCell(180, 6, '•  Gabinet EWA, ' . $kontakt['ulica'] . ', ' . ($kontakt['miasto'] ?? 'Pabianice') . '.', 0, 'L', false, 1);
+
+    $pdf->SetXY(15, $pdf->GetY() + 5);
+    $pdf->SetFont('latob', '', 13);
+    $pdf->Cell(180, 7, 'Dobrze wiedzieć', 0, 1, 'L');
+    $pdf->SetFont('lato', '', 11);
+    foreach ([
+        'Przy każdej wizycie wartość zabiegu odejmujemy od salda. Niewykorzystana kwota zostaje na bonie na kolejną wizytę.',
+        'Jeśli zabieg kosztuje więcej niż saldo, różnicę można dopłacić na miejscu.',
+        "Bon jest ważny $miesiace od dnia zakupu. Po tym terminie wygasa.",
+        'Saldo i ważność sprawdzisz, skanując kod QR.',
+    ] as $z) {
+        $pdf->SetX(15);
+        $pdf->MultiCell(180, 6, '•  ' . $z, 0, 'L', false, 1);
+    }
+    $pdf->SetTextColor(...BON_PDF_MUTED);
+    $pdf->SetXY(15, $pdf->GetY() + 3);
+    $pdf->Write(6, 'Pełne zasady bonu: ');
+    $pdf->Write(6, preg_replace('/#.*/', '', str_replace('https://', '', BON_REGULAMIN)), BON_REGULAMIN);
+    $pdf->SetFont('lato', '', 10.5);
+    $pdf->SetXY(15, 270);
+    $pdf->Cell(180, 6, 'Na następnej stronie: bon do wydrukowania i wycięcia.', 0, 1, 'C');
+
+    // === strona 2: bon do wydruku i wycięcia (dotychczasowy układ) ===
     $pdf->AddPage();
 
     // --- nagłówek ---
@@ -139,8 +215,8 @@ function bon_pdf(array $bon, array $k): string {
         $pdf->Cell(($l['w'] - 8) * $s, $wys, (string)$tekst, 0, 0, 'L', false, '', 1, false, 'T', 'B'); // stretch 1 = zmieść długie imię
     }
 
-    $q = $t['qr'];
-    $pdf->write2DBarcode(BON_PDF_ADRES_SPRAWDZ . rawurlencode($kod), 'QRCODE,M', $xT + $q['x'] * $s, $y0 + $q['y'] * $s, $q['w'] * $s, $q['h'] * $s,
+    $q = $t['qr']; // 136 px tła = 25,6 mm (front #53, 2026-11-24; wcześniej 84 px = 15,8 mm)
+    $pdf->write2DBarcode($adresQr, 'QRCODE,M', $xT + $q['x'] * $s, $y0 + $q['y'] * $s, $q['w'] * $s, $q['h'] * $s,
         ['border' => false, 'padding' => 0, 'fgcolor' => BON_PDF_INK, 'bgcolor' => false], 'N');
 
     $w = $t['waznosc'];
@@ -162,25 +238,6 @@ function bon_pdf(array $bon, array $k): string {
     $pdf->SetX(20);
     $pdf->Cell(170, 6, 'Saldo i ważność sprawdzisz, skanując kod QR na bonie.', 0, 1, 'C');
 
-    $zasady = [
-        'Bon można wykorzystać na zabiegi podologiczne w Gabinecie EWA, ' . $kontakt['ulica'] . ' w Pabianicach.',
-        'Przy każdej wizycie wartość zabiegu odejmujemy od salda. Niewykorzystana kwota zostaje na bonie na kolejną wizytę.',
-        'Jeśli zabieg kosztuje więcej niż saldo, różnicę można dopłacić na miejscu.',
-        "Bon jest ważny $miesiace od dnia zakupu. Po tym terminie wygasa.",
-        'Termin wizyty zarezerwujesz przez Booksy albo telefonicznie: ' . $kontakt['telefon'] . '. Przy rezerwacji podaj numer bonu.',
-    ];
-    $pdf->SetTextColor(...BON_PDF_INK);
-    $pdf->SetFont('lato', '', 10.5);
-    $pdf->SetXY(25, $pdf->GetY() + 5);
-    foreach ($zasady as $z) {
-        $pdf->SetX(25);
-        $pdf->MultiCell(160, 5.4, '•  ' . $z, 0, 'L', false, 1);
-    }
-    // pełne zasady: klikalny link pod listą
-    $pdf->SetTextColor(...BON_PDF_MUTED);
-    $pdf->SetXY(25, $pdf->GetY() + 3);
-    $adres = str_replace('https://', '', BON_REGULAMIN);
-    $pdf->Write(5.4, 'Pełne zasady bonu: ');
-    $pdf->Write(5.4, preg_replace('/#.*/', '', $adres), BON_REGULAMIN);
+    // zasady, telefony i Booksy są na stronie 1 („Pokaż w gabinecie”) – tu tylko wycinanka i dane bonu
     return $pdf->Output('', 'S');
 }
