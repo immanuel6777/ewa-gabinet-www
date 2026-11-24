@@ -159,10 +159,13 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
     if (bon_normalizuj_kod($wpisany, (string)$k['kod_prefix']) === null) return [400, ['ok' => false, 'blad' => 'Numer bonu ma postać EWA-XXXX-XXXX.']];
     $bon = bon_panel_znajdz($k, $pdo, $wpisany);
     if (!$bon) return [404, ['ok' => false, 'blad' => 'Nie ma bonu o tym numerze.']];
-    $st = $pdo->prepare('SELECT amount_pln, doplata_pln, typ, pozycje, notatka, redeemed_at, redeemed_by FROM ' . bon_tabela($k, 'redemptions')
+    $st = $pdo->prepare('SELECT id, amount_pln, doplata_pln, typ, pozycje, notatka, redeemed_at, redeemed_by FROM ' . bon_tabela($k, 'redemptions')
         . ' WHERE voucher_id = ? ORDER BY redeemed_at DESC, id DESC');
     $st->execute([$bon['id']]);
+    $cofniete = bon_panel_cofniete_realizacje($k, $pdo, (int)$bon['id']);
     $historia = array_map(static fn($r) => [
+        'id' => (int)$r['id'],
+        'cofnieta' => in_array((int)$r['id'], $cofniete, true), // 2026-11-24: realizacja cofnięta (wiersz zostaje, saldo wróciło)
         'kiedy' => (string)$r['redeemed_at'],
         'zdjeto' => bon_zl((int)bon_grosze($r['amount_pln'])),
         'doplata' => bon_zl((int)bon_grosze($r['doplata_pln'])),
@@ -199,6 +202,8 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
         'przedluzenie' => bon_przedluzenie_okno($bon, $teraz), // null = przycisku „Przedłuż” nie ma
         'rezygnacja' => bon_panel_rezygnacja($k, $pdo, (int)$bon['id']),
         'mail_odbity' => bon_panel_mail_odbity($zdarzenia), // znacznik „mail nie dotarł” (TA-11), zdejmuje go udana ponowna wysyłka
+        // cofnięcie ostatniej realizacji (2026-11-24, wpisy 14:10 i 15:00): tylko admin i konto z uprawnieniem rezygnacji (Ewa)
+        'cofnij_realizacje' => ($admin || !empty($sesja['rezygnacje'])) ? bon_panel_cofniecie_mozliwe($k, $pdo, $bon, $teraz) : null,
         'historia' => $historia,
         'zdarzenia' => $zdarzenia,
     ];
@@ -229,8 +234,36 @@ const BON_PANEL_ZDARZENIA = [
     'przypomnienie' => 'Przypomnienie o końcu ważności', 'zwrot-zlecony' => 'Zwrot zlecony', 'zwrot-potwierdzony' => 'Zwrot potwierdzony',
     'zwrot-nieudany' => 'Zwrot nieudany',
     'mail-odbity' => 'Mail z bonem NIE dotarł', 'adres' => 'Zmieniony adres e-mail', 'mail-ponownie' => 'Wysyłka ponowna',
-    'pdf' => 'PDF pobrany w panelu',
+    'pdf' => 'PDF pobrany w panelu', 'realizacja-cofnieta' => 'Realizacja cofnięta',
 ];
+
+// --- cofnięcie ostatniej realizacji (2026-11-24, wpisy 14:10 i 15:00) ---
+// Bez migracji: wiersz realizacji zostaje (redemptions.typ to ENUM), cofnięcie = wpis „realizacja-cofnieta” w historii bonu
+// z prefiksem „realizacja #ID:” i zwrot kwoty na saldo. Tylko OSTATNIA realizacja bonu, do 24 h, z powodem.
+const BON_COFNIECIE_GODZIN = 24;
+
+/** id realizacji cofniętych (z historii bonu). */
+function bon_panel_cofniete_realizacje(array $k, PDO $pdo, int $voucherId): array {
+    $st = $pdo->prepare('SELECT szczegoly FROM ' . bon_tabela($k, 'voucher_admin_log') . " WHERE voucher_id = ? AND akcja = 'realizacja-cofnieta'");
+    $st->execute([$voucherId]);
+    $ids = [];
+    foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $s) if (preg_match('/^realizacja #(\d+):/', (string)$s, $m)) $ids[] = (int)$m[1];
+    return $ids;
+}
+
+/** Ostatnia realizacja bonu, jeśli można ją cofnąć: ['id','kwota','kiedy','zabiegi'] albo null. */
+function bon_panel_cofniecie_mozliwe(array $k, PDO $pdo, array $bon, ?DateTimeImmutable $teraz = null): ?array {
+    if (!in_array($bon['status'], ['valid', 'used'], true)) return null; // wstrzymany, zwrócony, z rezygnacją – bez cofania
+    $st = $pdo->prepare('SELECT id, amount_pln, pozycje, typ, redeemed_at FROM ' . bon_tabela($k, 'redemptions') . ' WHERE voucher_id = ? ORDER BY redeemed_at DESC, id DESC LIMIT 1');
+    $st->execute([$bon['id']]);
+    $r = $st->fetch();
+    if (!$r || in_array((int)$r['id'], bon_panel_cofniete_realizacje($k, $pdo, (int)$bon['id']), true)) return null;
+    $kiedy = new DateTimeImmutable((string)$r['redeemed_at'], new DateTimeZone(BON_STREFA));
+    if ($kiedy < ($teraz ?? bon_teraz())->modify('-' . BON_COFNIECIE_GODZIN . ' hours')) return null;
+    $nazwy = array_map(static fn($p) => (string)($p['nazwa'] ?? ''), $r['pozycje'] ? (json_decode((string)$r['pozycje'], true) ?: []) : []);
+    return ['id' => (int)$r['id'], 'kwota' => bon_zl((int)bon_grosze($r['amount_pln'])), 'kiedy' => (string)$r['redeemed_at'],
+        'zabiegi' => $r['typ'] === 'reczna' ? 'kwota ręczna' : implode(', ', array_filter($nazwy))];
+}
 
 /** Ostatnia wysyłka odbita: najnowsze z „mail” / „mail-odbity” to odbicie (zdarzenia od najnowszych). Znacznik w panelu (TA-11). */
 function bon_panel_mail_odbity(array $zdarzenia): bool {
@@ -520,7 +553,8 @@ function bon_panel_po_tokenie(array $k, PDO $pdo, string $token, string $wpisany
  */
 function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTimeImmutable $teraz = null): array {
     $akcja = (string)($dane['akcja'] ?? '');
-    $wolno = $sesja['rola'] === 'admin' || ($akcja === 'rezygnacja' && !empty($sesja['rezygnacje']));
+    // rezygnacja i cofnięcie ostatniej realizacji: także konto z uprawnieniem rezygnacji (Ewa); reszta tylko admin
+    $wolno = $sesja['rola'] === 'admin' || (in_array($akcja, ['rezygnacja', 'cofnij-realizacje'], true) && !empty($sesja['rezygnacje']));
     if (!$wolno) return [403, ['ok' => false, 'blad' => 'Ta zmiana jest tylko dla administratora.']];
     $teraz ??= bon_teraz();
     $powod = bon_tekst((string)($dane['powod'] ?? ''), 150);
@@ -575,6 +609,22 @@ function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
             $pdo->prepare("UPDATE $tabB SET status = 'valid' WHERE id = ? AND status = 'withdrawn'")->execute([$bon['id']]);
             $akcja = 'rezygnacja-cofnieta';
             $opis = 'rezygnacja cofnięta, bon znów ważny';
+        } elseif ($akcja === 'cofnij-realizacje') {
+            // pomyłka przy realizacji (zła kwota, zły bon) – tylko ostatnia realizacja, do 24 h; wiersz realizacji zostaje
+            if ($powod === '') { $pdo->rollBack(); return [400, ['ok' => false, 'blad' => 'Wpisz powód cofnięcia (np. pomyłka w kwocie, nie ten bon).']]; }
+            $r = bon_panel_cofniecie_mozliwe($k, $pdo, $bon, $teraz);
+            if (!$r || (int)($dane['realizacja'] ?? 0) !== $r['id']) {
+                $pdo->rollBack();
+                return [409, ['ok' => false, 'blad' => 'Cofnąć można tylko ostatnią realizację, do ' . BON_COFNIECIE_GODZIN . ' godzin od niej. Odśwież bon i sprawdź historię.']];
+            }
+            $stare = (int)bon_grosze($bon['balance_pln']);
+            $nowe = $stare + (int)bon_grosze($r['kwota']);
+            $pdo->prepare("UPDATE $tabB SET balance_pln = ?, status = CASE WHEN status = 'used' THEN 'valid' ELSE status END WHERE id = ?")
+                ->execute([bon_zl($nowe), $bon['id']]);
+            $akcja = 'realizacja-cofnieta';
+            // prefiks „realizacja #ID:” czyta bon_panel_cofniete_realizacje – nie zmieniać
+            $opis = 'realizacja #' . $r['id'] . ': −' . $r['kwota'] . ' zł (' . ($r['zabiegi'] ?: 'zabieg') . ', ' . substr($r['kiedy'], 0, 16) . '), saldo '
+                . bon_zl($stare) . ' → ' . bon_zl($nowe) . ' zł';
         } else {
             $pdo->rollBack();
             return [400, ['ok' => false, 'blad' => 'Nieznana akcja.']];

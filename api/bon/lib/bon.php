@@ -369,7 +369,7 @@ const BON_HISTORIA_AKCJE = [
     'waznosc', 'zatwierdz', 'zwrot',                                 // admin w panelu (etap 3)
     'rezygnacja', 'rezygnacja-cofnieta', 'przedluzenie', 'przypomnienie', // krok 2, 5, 6 (cofnięcie: pomyłka albo klient się wycofał)
     'zwrot-zlecony', 'zwrot-potwierdzony', 'zwrot-nieudany',         // krok 3
-    'mail-odbity', 'adres', 'mail-ponownie', 'pdf',                  // 2026-11-24 (TA-11): odbicie, zmiana adresu, ponowna wysyłka, PDF z panelu
+    'mail-odbity', 'adres', 'mail-ponownie', 'pdf', 'realizacja-cofnieta',                  // 2026-11-24 (TA-11): odbicie, zmiana adresu, ponowna wysyłka, PDF z panelu
 ];
 
 function bon_historia(array $k, PDO $pdo, int $voucherId, string $akcja, string $szczegoly, string $kto, ?DateTimeImmutable $teraz = null): void {

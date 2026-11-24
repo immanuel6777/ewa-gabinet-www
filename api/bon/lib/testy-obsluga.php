@@ -83,5 +83,41 @@ function bon_testy_obsluga(array $k, PDO $pdo): array {
     [$kodP] = bon_panel_pdf_bon($k, $pdo, $sAdmin, $kod);
     [$kodH] = bon_panel_wyslij_ponownie($k, $pdo, $sAdmin, ['kod' => $kod]);
     $t('bon zwrócony: PDF i wysyłka ponowna → 409', $kodP === 409 && $kodH === 409);
+
+    // --- cofnięcie ostatniej realizacji (2026-11-24, wpisy 14:10 i 15:00) ---
+    $p2 = bon_test_payload(['price_custom_id' => 'bon-300', 'amount_paid' => 300]);
+    bon_test_webhook($k, $pdo, $p2);
+    $kodC = (string)(bon_test_bony($k, $pdo, $p2['order_id'])[0]['code'] ?? '');
+    $tok = static fn() => bin2hex(random_bytes(12));
+    bon_panel_realizuj($k, $pdo, $sKasa, ['kod' => $kodC, 'kwota_reczna' => '100', 'client_token' => $tok()]);
+    bon_panel_realizuj($k, $pdo, $sKasa, ['kod' => $kodC, 'kwota_reczna' => '250', 'client_token' => $tok()]); // 200 z bonu, dopłata 50 → used
+    $saldo = static function () use ($k, $pdo, $kodC): array {
+        $b = bon_panel_znajdz($k, $pdo, $kodC);
+        return [bon_zl((int)bon_grosze($b['balance_pln'])), $b['status']];
+    };
+    [, $hK] = bon_panel_historia($k, $pdo, $sKasa, $kodC);
+    [, $hE] = bon_panel_historia($k, $pdo, $sEwa, $kodC);
+    $cr = $hE['cofnij_realizacje'] ?? null;
+    $t('cofnięcie: kasa nie widzi przycisku, Ewa widzi ostatnią realizację (200 zł)', ($hK['cofnij_realizacje'] ?? null) === null && $cr && $cr['kwota'] === '200.00', json_encode($cr));
+    [$kodA] = bon_panel_admin($k, $pdo, $sKasa, ['kod' => $kodC, 'akcja' => 'cofnij-realizacje', 'realizacja' => $cr['id'] ?? 0, 'powod' => 'x']);
+    [$kodB] = bon_panel_admin($k, $pdo, $sEwa, ['kod' => $kodC, 'akcja' => 'cofnij-realizacje', 'realizacja' => $cr['id'] ?? 0]);
+    [$kodC2] = bon_panel_admin($k, $pdo, $sEwa, ['kod' => $kodC, 'akcja' => 'cofnij-realizacje', 'realizacja' => ($cr['id'] ?? 0) - 1, 'powod' => 'nie ta']);
+    $t('cofnięcie: kasa 403, bez powodu 400, nie ostatnia realizacja 409; saldo bez zmian', $kodA === 403 && $kodB === 400 && $kodC2 === 409 && $saldo() === ['0.00', 'used']);
+    [$kodD, $odp] = bon_panel_admin($k, $pdo, $sEwa, ['kod' => $kodC, 'akcja' => 'cofnij-realizacje', 'realizacja' => $cr['id'] ?? 0, 'powod' => 'pomyłka w kwocie']);
+    $t('cofnięcie: Ewa cofa ostatnią → saldo 0 → 200 zł, bon znów ważny', $kodD === 200 && $saldo() === ['200.00', 'valid'], json_encode($odp));
+    [, $hA] = bon_panel_historia($k, $pdo, $sAdmin, $kodC);
+    $wpis = array_values(array_filter($hA['zdarzenia'], static fn($z) => $z['akcja'] === 'realizacja-cofnieta'))[0] ?? [];
+    $t('cofnięcie: wiersz realizacji zostaje jako „cofnięta”, poprzednia nie; wpis w historii z kwotą, saldem, powodem i osobą',
+        count($hA['historia']) === 2 && $hA['historia'][0]['cofnieta'] === true && $hA['historia'][1]['cofnieta'] === false
+        && str_contains((string)($wpis['szczegoly'] ?? ''), '−200.00 zł') && str_contains((string)$wpis['szczegoly'], '0.00 → 200.00')
+        && str_contains((string)$wpis['szczegoly'], 'pomyłka w kwocie') && ($wpis['kto'] ?? '') === 'ewa', json_encode($wpis));
+    [$kodE] = bon_panel_admin($k, $pdo, $sAdmin, ['kod' => $kodC, 'akcja' => 'cofnij-realizacje', 'realizacja' => $cr['id'] ?? 0, 'powod' => 'drugi raz']);
+    $t('cofnięcie: drugi raz tej samej → 409; poprzedniej (już nie ostatniej) nie da się cofnąć, przycisku brak',
+        $kodE === 409 && ($hA['cofnij_realizacje'] ?? null) === null && $saldo() === ['200.00', 'valid']);
+    bon_panel_realizuj($k, $pdo, $sKasa, ['kod' => $kodC, 'kwota_reczna' => '50', 'client_token' => $tok()]);
+    $poDobie = bon_teraz()->modify('+25 hours');
+    [, $hP] = bon_panel_historia($k, $pdo, $sAdmin, $kodC, $poDobie);
+    [$kodF] = bon_panel_admin($k, $pdo, $sAdmin, ['kod' => $kodC, 'akcja' => 'cofnij-realizacje', 'realizacja' => $hP['historia'][0]['id'] ?? 0, 'powod' => 'po czasie'], $poDobie);
+    $t('cofnięcie: po 24 h przycisku nie ma, serwer odmawia (409)', ($hP['cofnij_realizacje'] ?? null) === null && $kodF === 409 && $saldo() === ['150.00', 'valid']);
     return $wyniki;
 }
