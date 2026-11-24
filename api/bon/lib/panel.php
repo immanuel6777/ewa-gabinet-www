@@ -324,9 +324,16 @@ function bon_panel_wyslij_ponownie(array $k, PDO $pdo, array $sesja, array $dane
         $st = $pdo->prepare("SELECT id, status FROM $tabB WHERE easytools_order_id = ?");
         $st->execute([$zam]);
         $bonyZam = $st->fetchAll();
+        // Bartek 2026-11-24: dwa kroki – „Zmień adres” (bez_wysylki: sam zapis adresu), potem osobno „Wyślij ponownie”
+        $bezWysylki = !empty($dane['bez_wysylki']);
+        if ($bezWysylki && !$zmiana) { $pdo->rollBack(); return [400, ['ok' => false, 'blad' => 'To jest ten sam adres – nie ma czego zmieniać.']]; }
         if ($zmiana) {
             $pdo->prepare("UPDATE $tabB SET buyer_email = ? WHERE easytools_order_id = ?")->execute([$nowy, $zam]);
             foreach ($bonyZam as $b) bon_historia($k, $pdo, (int)$b['id'], 'adres', "$stary → $nowy; potwierdzono: $potw", $sesja['login'], $teraz);
+        }
+        if ($bezWysylki) {
+            $pdo->commit();
+            return [200, ['ok' => true, 'adres' => $nowy, 'zmiana_adresu' => true, 'bonow' => count($bonyZam), 'wyslano' => false], null];
         }
         $pdo->prepare("UPDATE $tabB SET mail_wyslany_at = NULL WHERE easytools_order_id = ? AND status = 'valid'")->execute([$zam]);
         $ile = count(array_filter($bonyZam, static fn($b) => $b['status'] === 'valid'));

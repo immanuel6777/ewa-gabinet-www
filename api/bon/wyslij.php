@@ -31,6 +31,8 @@ try {
         }
     }
     bon_json($kod, $odp);
+    // sama zmiana adresu (krok 1 z dwóch, Bartek 2026-11-24): zdarzenie bez adresów – adresy są w historii bonu
+    if ($zam === null && ($odp['ok'] ?? false)) bon_zdarzenie($k, 'adres', ['kto' => $sesja['login'], 'bonow' => $odp['bonow'] ?? null]);
 } catch (Throwable $e) {
     error_log('bony/wyslij: ' . $e->getMessage());
     bon_zdarzenie($k, 'blad', ['plik' => 'wyslij'] + bon_opis_bledu($e));

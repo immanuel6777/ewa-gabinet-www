@@ -77,6 +77,18 @@ function bon_testy_obsluga(array $k, PDO $pdo): array {
     $t('wyślij ponownie bez zmiany adresu: bez „jak potwierdzono”, bez wpisu „adres”', $kodH === 200 && ($odp['zmiana_adresu'] ?? true) === false && ($odp['adres'] ?? '') === $nowy);
     bon_wyslij_zamowienie($k, $pdo, (string)$p['order_id']);
 
+    // dwa kroki (Bartek 2026-11-24): „Zmień adres” (bez_wysylki) zapisuje adres i historię, NIE zleca wysyłki; ten sam adres → 400
+    $nowy2 = 'drugi-' . random_int(1000, 9999) . '@example.com';
+    [$kodZ, $odpZ, $zamZ] = bon_panel_wyslij_ponownie($k, $pdo, $sEwa, ['kod' => $kod, 'email' => $nowy2, 'potwierdzenie' => 'telefon', 'bez_wysylki' => true]) + [2 => null];
+    $poZ = bon_test_bony($k, $pdo, $p['order_id']);
+    [, $hZ] = bon_panel_historia($k, $pdo, $sAdmin, $kod);
+    [$kodS] = bon_panel_wyslij_ponownie($k, $pdo, $sEwa, ['kod' => $kod, 'email' => $nowy2, 'bez_wysylki' => true]);
+    $t('Zmień adres bez wysyłki: adres przy obu bonach, wpis „adres” z kto, bez zlecenia wysyłki (mail_wyslany_at bez zmian); ten sam adres → 400',
+        $kodZ === 200 && $zamZ === null && ($odpZ['wyslano'] ?? true) === false && ($odpZ['bonow'] ?? 0) === 2
+        && $poZ[0]['buyer_email'] === $nowy2 && $poZ[1]['buyer_email'] === $nowy2 && $poZ[0]['mail_wyslany_at'] !== null
+        && ($hZ['zdarzenia'][0]['akcja'] ?? '') === 'adres' && ($hZ['zdarzenia'][0]['kto'] ?? '') === 'ewa' && str_contains((string)$hZ['zdarzenia'][0]['szczegoly'], "→ $nowy2")
+        && $kodS === 400, json_encode([$odpZ, $poZ[0]['mail_wyslany_at'] ?? null, $hZ['zdarzenia'][0] ?? null], JSON_UNESCAPED_UNICODE));
+
     // --- PDF z panelu ---
     [$kodP, $bon] = bon_panel_pdf_bon($k, $pdo, $sEwa, $kod);
     $t('PDF z panelu: bon ważny → wiersz bonu, wpis „pdf” w historii', $kodP === 200 && ($bon['code'] ?? '') === $kod && str_starts_with(bon_pdf($bon, $k), '%PDF'));
