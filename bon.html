@@ -34,7 +34,7 @@
 <style>.eyebrow[data-astro-cid-zedojbgr]{font-size:var(--fs-eyebrow-m);color:var(--c-ink-muted);letter-spacing:.06em;text-transform:uppercase;align-items:center;gap:8px;line-height:1.3;display:inline-flex}.kropka[data-astro-cid-zedojbgr]{background:var(--c-coral);border-radius:50%;flex-shrink:0;width:7px;height:7px}@media (width>=900px){.eyebrow[data-astro-cid-zedojbgr]{font-size:var(--fs-eyebrow);gap:10px}.kropka[data-astro-cid-zedojbgr]{width:8px;height:8px}}
 .pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/bon.DWQfrxCA.css">
+<link rel="stylesheet" href="/_astro/bon.CEpsEKmV.css">
 <link rel="stylesheet" href="/_astro/Baza.CUaZgc7R.css">
 <link rel="stylesheet" href="/_astro/KartaBonu.C-N_av8q.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body>
@@ -1912,6 +1912,39 @@
         </label>
         <button class="przycisk" type="submit" data-astro-cid-b3uxbwor>Sprawdź</button>
       </form>
+      <!-- rezygnacja kupującego (wpisy doradcy 2026-11-24 16:10, 16:50): widoczna, gdy verify zwraca rezygnacja_mozliwa (do czasu
+           wdrożenia pola: bon ważny z saldem > 0); spokojnie na dole – stronę ogląda głównie obdarowany. Formularz: adres e-mail
+           z zakupu → własne okno potwierdzenia → POST /api/bon/rezygnacja.php (kontrakt we wpisie 16:50). Zgodność adresu
+           sprawdza dopiero serwer. Samoobsługowego zwrotu pieniędzy nie ma – zgłoszenie trafia do gabinetu. -->
+      <details class="rezygnacja" data-bon-rezygnacja hidden data-astro-cid-b3uxbwor>
+        <summary data-astro-cid-b3uxbwor>Chcesz zrezygnować z kupionego bonu?</summary>
+        <div class="rezygnacja-tresc" data-astro-cid-b3uxbwor>
+          <p data-astro-cid-b3uxbwor>Z bonu może zrezygnować osoba, która go kupiła, w ciągu 14 dni od zapłaty. Zwrócimy kwotę, która została na bonie, tą samą metodą płatności.</p>
+          <form class="rez-forma formularz" novalidate data-rez-forma data-astro-cid-b3uxbwor>
+            <label class="pole" data-astro-cid-b3uxbwor>
+              <span class="etykieta" data-astro-cid-b3uxbwor>Adres e-mail podany przy zakupie</span>
+              <input type="email" name="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false" maxlength="190" required data-rez-email data-astro-cid-b3uxbwor>
+            </label>
+            <button class="przycisk obrys" type="submit" disabled data-rez-wyslij data-astro-cid-b3uxbwor>Zgłoś rezygnację z bonu</button>
+          </form>
+          <p class="rez-blad" role="alert" hidden data-rez-blad data-astro-cid-b3uxbwor></p>
+          <p class="zwrot-tel" data-astro-cid-b3uxbwor>Wolisz zadzwonić? <a href="tel:+48506102340" data-astro-cid-b3uxbwor>506 102 340</a> <span class="bez-lamania" data-astro-cid-b3uxbwor>(pon.–pt. 9–17)</span></p>
+        </div>
+      </details>
+      <!-- po udanym zgłoszeniu: zostaje widoczne, gdy blok rezygnacji zniknie po odświeżeniu wyniku -->
+      <p class="rez-sukces" role="status" hidden data-rez-sukces data-astro-cid-b3uxbwor></p>
+
+      <!-- własne okno potwierdzenia (jak w panelu gabinetu): Esc i klik w tło = Anuluj, fokus na Anuluj -->
+      <dialog class="okno" aria-labelledby="rez-okno-tytul" data-rez-okno data-astro-cid-b3uxbwor>
+        <form method="dialog" class="okno-forma" data-astro-cid-b3uxbwor>
+          <h2 id="rez-okno-tytul" data-astro-cid-b3uxbwor>Rezygnacja z bonu</h2>
+          <p class="okno-tresc" data-rez-okno-tresc data-astro-cid-b3uxbwor></p>
+          <div class="okno-przyciski" data-astro-cid-b3uxbwor>
+            <button class="przycisk" type="submit" value="tak" data-astro-cid-b3uxbwor>Tak, rezygnuję</button>
+            <button class="przycisk obrys" type="button" data-rez-okno-nie data-astro-cid-b3uxbwor>Anuluj</button>
+          </div>
+        </form>
+      </dialog>
       <noscript><p class="wstep" data-astro-cid-b3uxbwor>Do sprawdzenia bonu potrzebna jest włączona obsługa JavaScript. Możesz też zadzwonić do gabinetu.</p></noscript>
     </div>
 
@@ -2572,4 +2605,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/bon.astro_astro_type_script_index_0_lang.BdHvgqOz.js"></script>
+<script type="module" src="/_astro/bon.astro_astro_type_script_index_0_lang.kiEDuXYs.js"></script>
