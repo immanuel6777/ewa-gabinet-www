@@ -208,6 +208,13 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
         'zdarzenia' => $zdarzenia,
     ];
     if ($admin || !empty($sesja['rezygnacje'])) {
+        // P-11: „Zwróć pieniądze” (bon z rezygnacją czekającą na zwrot) i linia „Płatność w Easytools” (API, tylko te konta)
+        $r = $odp['rezygnacja'];
+        $odp['zwrot'] = $r && $bon['status'] === 'withdrawn' && in_array($r['stan'], ['oczekuje', 'nieudany'], true)
+            ? ['kwota' => $r['kwota'], 'zamowienie' => $bon['easytools_order_id'], 'email' => $bon['buyer_email'], 'ponowienie' => $r['stan'] === 'nieudany',
+               'transakcja' => !empty($bon['easytools_transaction_id'])]
+            : null;
+        if (function_exists('bon_panel_platnosc')) $odp['platnosc'] = bon_panel_platnosc($k, $bon);
         // obsługa kupującego (TA-11): obecny adres do potwierdzenia z kupującym, „Wyślij ponownie” i „Pobierz PDF”
         $odp['obsluga'] = ['email' => $bon['buyer_email'], 'wyslij' => $bon['status'] === 'valid', 'pdf' => in_array($bon['status'], ['valid', 'used'], true)];
         // formularz „Zarejestruj rezygnację”: tylko bon ważny w bazie z saldem (bon_panel_zarejestruj_rezygnacje sprawdza to samo)
@@ -617,7 +624,8 @@ function bon_panel_po_tokenie(array $k, PDO $pdo, string $token, string $wpisany
 function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTimeImmutable $teraz = null): array {
     $akcja = (string)($dane['akcja'] ?? '');
     // rezygnacja i cofnięcie ostatniej realizacji: także konto z uprawnieniem rezygnacji (Ewa); reszta tylko admin
-    $wolno = $sesja['rola'] === 'admin' || (in_array($akcja, ['rezygnacja', 'cofnij-realizacje'], true) && !empty($sesja['rezygnacje']));
+    // P-11: „Oznacz zwrot” także Ewa – ale tylko na bonie z rezygnacją (zwrot zrobiony w Easytools), sprawdzane niżej
+    $wolno = $sesja['rola'] === 'admin' || (in_array($akcja, ['rezygnacja', 'cofnij-realizacje', 'zwrot'], true) && !empty($sesja['rezygnacje']));
     if (!$wolno) return [403, ['ok' => false, 'blad' => 'Ta zmiana jest tylko dla administratora.']];
     $teraz ??= bon_teraz();
     $powod = bon_tekst((string)($dane['powod'] ?? ''), 150);
@@ -645,6 +653,7 @@ function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
             $doMaila = (string)$bon['easytools_order_id'];
         } elseif ($akcja === 'zwrot') {
             if ($bon['status'] === 'refunded') { $pdo->rollBack(); return [409, ['ok' => false, 'blad' => 'Bon jest już oznaczony jako zwrócony.']]; }
+            if ($sesja['rola'] !== 'admin' && $bon['status'] !== 'withdrawn') { $pdo->rollBack(); return [403, ['ok' => false, 'blad' => 'Oznaczyć zwrot bonu bez rezygnacji może tylko Bartek.']]; }
             $pdo->prepare("UPDATE $tabB SET status = 'refunded' WHERE id = ?")->execute([$bon['id']]);
             $opis = $bon['status'] . ' → zwrócony, saldo w chwili zwrotu ' . bon_zl((int)bon_grosze($bon['balance_pln'])) . ' zł';
             if ($bon['status'] === 'withdrawn') {

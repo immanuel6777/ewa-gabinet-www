@@ -22,6 +22,14 @@ try {
     } catch (Throwable $e) {
         bon_zdarzenie($k, 'blad', ['plik' => 'cron (kontrola dostarczenia)'] + bon_opis_bledu($e));
     }
+    // P-11: potwierdzanie zwrotów zleconych z panelu (Easytools księguje je asynchronicznie)
+    try {
+        require_once __DIR__ . '/zwroty.php';
+        $zwroty = bon_zwroty_potwierdz($k, $pdo);
+        if ($zwroty['sprawdzono'] > 0) bon_zdarzenie($k, 'zwroty-kontrola', $zwroty);
+    } catch (Throwable $e) {
+        bon_zdarzenie($k, 'blad', ['plik' => 'cron (zwroty)'] + bon_opis_bledu($e));
+    }
     echo json_encode($raport, JSON_UNESCAPED_UNICODE), "\n";
 } catch (Throwable $e) {
     error_log('bony/cron: ' . $e->getMessage());

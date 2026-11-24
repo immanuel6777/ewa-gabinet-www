@@ -468,61 +468,35 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
         return [200, ['ok' => true, 'pominieto' => 'waluta']];
     }
 
-    // ilość: pieniądze już wpłynęły, więc nic nie odrzucamy – dziwna ilość = bon wstrzymany do sprawdzenia
-    $uwagi = [];
-    $ilosc = $z['ilosc'] ?? 1;
-    if (is_string($ilosc) && ctype_digit($ilosc)) $ilosc = (int)$ilosc;
-    if (!is_int($ilosc) || $ilosc < 1) {
-        $uwagi[] = 'zła ilość (quantity: ' . json_encode($z['ilosc'] ?? null) . ') – utworzono 1 bon, sprawdź zamówienie';
-        $ilosc = 1;
-    } elseif ($ilosc > 50) {
-        $uwagi[] = "ilość $ilosc > 50 – utworzono 50 bonów, resztę dodaj ręcznie";
-        $ilosc = 50;
+    // koszyk mieszany (2026-11-24, wpis 17:30): każda pozycja zamówienia osobno, ze swoim wariantem, ilością i kwotą; numery
+    // w zamówieniu kolejno przez wszystkie pozycje. Bez $z['pozycje'] (webhook, stare wywołania) – jedna pozycja z pól zamówienia.
+    $pozycje = is_array($z['pozycje'] ?? null) && $z['pozycje']
+        ? array_values($z['pozycje'])
+        : [['wariant' => $z['wariant'] ?? '', 'nominal' => $z['nominal'] ?? null, 'ilosc' => $z['ilosc'] ?? 1, 'zaplacono' => $z['zaplacono'] ?? null]];
+    $wyliczone = array_map(static fn($p) => bon_pozycja_wylicz($k, $z, $p), $pozycje);
+    if (count($wyliczone) > 1) {
+        // pozycja z uwagą wstrzymuje tylko swoje bony; do uwag dopisz, że zamówienie miało kilka pozycji (łatwiej w Easytools)
+        foreach ($wyliczone as &$w) if ($w['uwagi']) $w['uwagi'][] = 'zamówienie z ' . count($wyliczone) . ' pozycji';
+        unset($w);
     }
-
-    // --- wartość bonu: nominał wariantu z konfigu; „dowolna” = kwota zapłacona ---
-    $zaplaconoRazem = $z['zaplacono'];
-    if (!is_int($zaplaconoRazem) || $zaplaconoRazem < 0) { $uwagi[] = 'brak lub zła kwota zapłacona'; $zaplaconoRazem = 0; }
-    $zaplaconoJedn = intdiv($zaplaconoRazem, $ilosc);
-
-    $wariantId = bon_tekst((string)$z['wariant'], 100);
-    $wariant = $z['nominal'];
-    if ($wariant === 'dowolna') {
-        $wartosc = $zaplaconoJedn;
-        if ($wartosc < (int)$k['min_dowolna_pln'] * 100) $uwagi[] = 'dowolna kwota poniżej minimum ' . $k['min_dowolna_pln'] . ' zł';
-    } elseif (is_int($wariant) || is_float($wariant) || (is_string($wariant) && is_numeric($wariant))) {
-        $wartosc = (int)round((float)$wariant * 100);
-        if ($zaplaconoJedn < (int)round($wartosc * (float)$k['prog_wstrzymania'])) {
-            $uwagi[] = 'zapłacono ' . bon_zl($zaplaconoJedn) . ' zł przy nominale ' . bon_zl($wartosc) . ' zł (próg ' . ((float)$k['prog_wstrzymania'] * 100) . '%)';
-        } elseif ($zaplaconoJedn > $wartosc) {
-            // np. ilość nie doszła albo kwota to coś innego niż suma zamówienia – mogło przepaść kilka bonów
-            $uwagi[] = 'zapłacono ' . bon_zl($zaplaconoJedn) . ' zł za bon przy nominale ' . bon_zl($wartosc) . ' zł – więcej niż nominał, sprawdź ilość';
-        }
-    } else {
-        $wartosc = $zaplaconoJedn;
-        $uwagi[] = $z['zrodlo'] === 'api'
-            ? 'nieznany wariant ceny („' . ($wariantId ?: 'brak') . '”) – dopisz nazwę wariantu w konfigu w „warianty”'
-            : 'nieznany wariant ceny (price_id: ' . ($wariantId ?: 'brak') . ') – dopisz go w konfigu w „ceny”';
-    }
-    if ($wartosc <= 0) $uwagi[] = 'wartość bonu 0 zł';
-    $status = $uwagi ? 'held' : 'valid';
+    $statusy = array_unique(array_column($wyliczone, 'status'));
+    $status = count($statusy) === 1 ? $statusy[0] : 'czesciowo';
+    $uwagi = array_merge(...array_map(static fn($w) => $w['uwagi'], $wyliczone));
+    $ilosc = array_sum(array_column($wyliczone, 'ilosc'));
+    $zaplaconoRazem = array_sum(array_column($wyliczone, 'zaplaconoRazem'));
+    $wariantId = implode(' + ', array_unique(array_column($wyliczone, 'wariantId')));
 
     $teraz = bon_teraz(); // chwila utworzenia (historia); terminy bonu liczone od zapłaty
     $zaplata = bon_data_zaplaty($z['zaplacono_at'] ?? null, $teraz);
     $promo = bon_tekst((string)($z['promo'] ?? ''), 100);
     $nip = bon_tekst((string)($z['nip'] ?? ''), 20);
     $wspolne = [
-        'initial_pln' => bon_zl($wartosc),
-        'balance_pln' => bon_zl($wartosc),
-        'price_id' => $wariantId,
         'promo_code' => $promo === '' ? null : $promo,
         'buyer_email' => $email,
         'buyer_name' => bon_tekst((string)($z['imie'] ?? ''), 120) ?: null,
         'buyer_nip' => $nip === '' ? null : $nip,
         'dla' => $z['dla'] ?? null,
         'od' => $z['od'] ?? null,
-        'status' => $status,
-        'status_uwagi' => $uwagi ? mb_substr(implode('; ', $uwagi), 0, 255) : null,
         'easytools_order_id' => $zamowienie,
         'easytools_transaction_id' => $transakcja,
         'created_at' => $zaplata->format('Y-m-d H:i:s'),
@@ -540,18 +514,27 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
         try {
             $pdo->beginTransaction();
             $st = $pdo->prepare($sql);
-            for ($nr = 1; $nr <= $ilosc; $nr++) {
-                $kod = bon_nowy_kod((string)$k['kod_prefix']);
-                // ostatni bon dostaje resztę z dzielenia zapłaconej kwoty
-                $zaplacono = $nr === $ilosc ? $zaplaconoRazem - $zaplaconoJedn * ($ilosc - 1) : $zaplaconoJedn;
-                foreach ($wspolne as $pole => $w) $st->bindValue(':' . $pole, $w, $w === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
-                $st->bindValue(':code', $kod);
-                $st->bindValue(':paid_pln', bon_zl($zaplacono));
-                $st->bindValue(':nr', $nr, PDO::PARAM_INT);
-                $st->execute();
-                $kody[] = $kod;
-                bon_historia($k, $pdo, (int)$pdo->lastInsertId(), 'utworzenie', 'źródło: ' . $z['zrodlo'] . ', status: ' . $status
-                    . ', zapłacono ' . bon_zl($zaplacono) . ' zł' . ($nr > 1 || $ilosc > 1 ? ", sztuka $nr z $ilosc" : ''), 'system', $teraz);
+            $nr = 0;
+            foreach ($wyliczone as $p) {
+                for ($i = 1; $i <= $p['ilosc']; $i++) {
+                    $nr++;
+                    $kod = bon_nowy_kod((string)$k['kod_prefix']);
+                    // ostatni bon pozycji dostaje resztę z dzielenia zapłaconej kwoty pozycji
+                    $zaplacono = $i === $p['ilosc'] ? $p['zaplaconoRazem'] - $p['zaplaconoJedn'] * ($p['ilosc'] - 1) : $p['zaplaconoJedn'];
+                    $wiersz = $wspolne + [
+                        'initial_pln' => bon_zl($p['wartosc']), 'balance_pln' => bon_zl($p['wartosc']), 'price_id' => $p['wariantId'],
+                        'status' => $p['status'], 'status_uwagi' => $p['uwagi'] ? mb_substr(implode('; ', $p['uwagi']), 0, 255) : null,
+                    ];
+                    foreach ($wiersz as $pole => $w) $st->bindValue(':' . $pole, $w, $w === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
+                    $st->bindValue(':code', $kod);
+                    $st->bindValue(':paid_pln', bon_zl($zaplacono));
+                    $st->bindValue(':nr', $nr, PDO::PARAM_INT);
+                    $st->execute();
+                    $kody[] = $kod;
+                    bon_historia($k, $pdo, (int)$pdo->lastInsertId(), 'utworzenie', 'źródło: ' . $z['zrodlo'] . ', status: ' . $p['status']
+                        . ', zapłacono ' . bon_zl($zaplacono) . ' zł' . ($nr > 1 || $ilosc > 1 ? ", sztuka $nr z $ilosc" : '')
+                        . (count($wyliczone) > 1 ? ', pozycja: ' . ($p['wariantId'] ?: '?') : ''), 'system', $teraz);
+                }
             }
             $pdo->commit();
             break;
@@ -585,18 +568,67 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
         }
     }
 
-    if ($status === 'held') {
+    if ($status !== 'valid') {
         bon_powiadom($k, 'Bon WSTRZYMANY – zamówienie ' . $zamowienie, implode("\n", [
-            'Bon(y) czekają na ręczne zatwierdzenie (status held).',
-            'Powód: ' . implode('; ', $uwagi),
+            $status === 'czesciowo' ? 'Część bonów z tego zamówienia czeka na ręczne zatwierdzenie (status held); pozostałe poszły mailem.'
+                : 'Bon(y) czekają na ręczne zatwierdzenie (status held).',
+            'Powód: ' . implode('; ', array_unique($uwagi)),
             'Kody: ' . implode(', ', $kody),
             'Zamówienie Easytools: ' . $zamowienie . ', wariant: ' . ($wariantId ?: 'brak') . ', kod rabatowy: ' . ($promo ?: ($z['zrodlo'] === 'api' ? 'nieznany (API go nie podaje)' : 'brak')),
             'Zapłacono razem: ' . bon_zl($zaplaconoRazem) . ' zł, sztuk: ' . $ilosc . ', źródło: ' . $z['zrodlo'],
+            ...(count($wyliczone) > 1 ? array_map(static fn($p) => '• ' . ($p['wariantId'] ?: '?') . ': ' . $p['ilosc'] . ' szt., '
+                . bon_zl($p['zaplaconoRazem']) . ' zł, ' . ($p['status'] === 'valid' ? 'ważne' : 'wstrzymane'), $wyliczone) : []),
         ]));
     }
-    // trzeci element: zadanie PO odpowiedzi (PDF + mail) – woła je po fastcgi_finish_request; wstrzymane bez maila
-    $poOdpowiedzi = $status === 'valid' ? static fn() => bon_wyslij_zamowienie($k, $pdo, $zamowienie) : null;
+    // trzeci element: zadanie PO odpowiedzi (PDF + mail) – woła je po fastcgi_finish_request; mail idzie tylko z bonami ważnymi
+    $poOdpowiedzi = $status !== 'held' ? static fn() => bon_wyslij_zamowienie($k, $pdo, $zamowienie) : null;
     return [200, ['ok' => true, 'bonow' => count($kody), 'status' => $status], $poOdpowiedzi];
+}
+
+/**
+ * Jedna pozycja zamówienia → ilość, kwoty, wartość bonu, uwagi i status (wydzielone 2026-11-24 dla koszyka mieszanego).
+ * $p: wariant (identyfikator do price_id), nominal (z mapy: liczba zł | 'dowolna' | null), ilosc, zaplacono (grosze za pozycję).
+ */
+function bon_pozycja_wylicz(array $k, array $z, array $p): array {
+    // ilość: pieniądze już wpłynęły, więc nic nie odrzucamy – dziwna ilość = bon wstrzymany do sprawdzenia
+    $uwagi = [];
+    $ilosc = $p['ilosc'] ?? 1;
+    if (is_string($ilosc) && ctype_digit($ilosc)) $ilosc = (int)$ilosc;
+    if (!is_int($ilosc) || $ilosc < 1) {
+        $uwagi[] = 'zła ilość (quantity: ' . json_encode($p['ilosc'] ?? null) . ') – utworzono 1 bon, sprawdź zamówienie';
+        $ilosc = 1;
+    } elseif ($ilosc > 50) {
+        $uwagi[] = "ilość $ilosc > 50 – utworzono 50 bonów, resztę dodaj ręcznie";
+        $ilosc = 50;
+    }
+
+    // --- wartość bonu: nominał wariantu z konfigu; „dowolna” = kwota zapłacona ---
+    $zaplaconoRazem = $p['zaplacono'] ?? null;
+    if (!is_int($zaplaconoRazem) || $zaplaconoRazem < 0) { $uwagi[] = 'brak lub zła kwota zapłacona'; $zaplaconoRazem = 0; }
+    $zaplaconoJedn = intdiv($zaplaconoRazem, $ilosc);
+
+    $wariantId = bon_tekst((string)($p['wariant'] ?? ''), 100);
+    $wariant = $p['nominal'] ?? null;
+    if ($wariant === 'dowolna') {
+        $wartosc = $zaplaconoJedn;
+        if ($wartosc < (int)$k['min_dowolna_pln'] * 100) $uwagi[] = 'dowolna kwota poniżej minimum ' . $k['min_dowolna_pln'] . ' zł';
+    } elseif (is_int($wariant) || is_float($wariant) || (is_string($wariant) && is_numeric($wariant))) {
+        $wartosc = (int)round((float)$wariant * 100);
+        if ($zaplaconoJedn < (int)round($wartosc * (float)$k['prog_wstrzymania'])) {
+            $uwagi[] = 'zapłacono ' . bon_zl($zaplaconoJedn) . ' zł przy nominale ' . bon_zl($wartosc) . ' zł (próg ' . ((float)$k['prog_wstrzymania'] * 100) . '%)';
+        } elseif ($zaplaconoJedn > $wartosc) {
+            // np. ilość nie doszła albo kwota to coś innego niż suma pozycji – mogło przepaść kilka bonów
+            $uwagi[] = 'zapłacono ' . bon_zl($zaplaconoJedn) . ' zł za bon przy nominale ' . bon_zl($wartosc) . ' zł – więcej niż nominał, sprawdź ilość';
+        }
+    } else {
+        $wartosc = $zaplaconoJedn;
+        $uwagi[] = ($z['zrodlo'] ?? '') === 'api'
+            ? 'nieznany wariant ceny („' . ($wariantId ?: 'brak') . '”) – dopisz nazwę wariantu w konfigu w „warianty”'
+            : 'nieznany wariant ceny (price_id: ' . ($wariantId ?: 'brak') . ') – dopisz go w konfigu w „ceny”';
+    }
+    if ($wartosc <= 0) $uwagi[] = 'wartość bonu 0 zł';
+    return ['ilosc' => $ilosc, 'zaplaconoRazem' => $zaplaconoRazem, 'zaplaconoJedn' => $zaplaconoJedn, 'wartosc' => $wartosc,
+        'wariantId' => $wariantId, 'uwagi' => $uwagi, 'status' => $uwagi ? 'held' : 'valid'];
 }
 
 // --- verify (publiczny) ---

@@ -152,8 +152,10 @@ function bon_testy_krok4(array $k, PDO $pdo): array {
         && substr((string)$w6[0]['potwierdzono_at'], 0, 10) === $d('+0 days') && str_contains((string)$odp['opis'], 'pieniądze do ' . $d('+14 days')), json_encode([$odp, $w6], JSON_UNESCAPED_UNICODE));
     $t('rezygnacja w panelu: zarejestrowała Ewa (konto z uprawnieniem)', ($w6[0]['kto'] ?? '') === 'ewa');
     [$kodC] = bon_panel_admin($k, $pdo, $sEwaRez, ['kod' => $b6['code'], 'akcja' => 'cofnij-rezygnacje', 'powod' => 'pomyłka']);
-    [$kodZ] = bon_panel_admin($k, $pdo, $sEwaRez, ['kod' => $b6['code'], 'akcja' => 'zwrot', 'powod' => 'x']);
-    $t('konto z uprawnieniem do rezygnacji: cofnięcie i „Oznacz zwrot” → 403 (tylko admin)', $kodC === 403 && $kodZ === 403
+    // P-11 (2026-11-24, wpis 16:19): „Oznacz zwrot” Ewa może już na bonie Z REZYGNACJĄ; na bonie bez rezygnacji nadal tylko admin
+    $bBez = $nowyBon(200);
+    [$kodZ] = bon_panel_admin($k, $pdo, $sEwaRez, ['kod' => $bBez['code'], 'akcja' => 'zwrot', 'powod' => 'x']);
+    $t('konto z uprawnieniem do rezygnacji: cofnięcie rezygnacji i „Oznacz zwrot” bonu bez rezygnacji → 403 (tylko admin)', $kodC === 403 && $kodZ === 403
         && $wiersz((string)$b6['code'])['status'] === 'withdrawn', "$kodC $kodZ");
 
     $b7 = $nowyBon(200);

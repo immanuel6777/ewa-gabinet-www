@@ -66,10 +66,19 @@ function bon_et_nominal(array $k, string $nazwa): int|float|string|null {
  * bez niej created_at zamówienia (zawsze przed zapłatą, zwykle tego samego dnia) – nie chwila synchronizacji.
  */
 function bon_et_dane_zamowienia(array $zam, ?string $transakcja, ?string $zaplacono = null): array {
-    $linia = null;
-    foreach ((array)($zam['line_items'] ?? []) as $l) if (is_array($l) && empty($l['is_order_bump'])) { $linia = $l; break; }
+    // koszyk mieszany (2026-11-24, wpis 17:30): WSZYSTKIE pozycje bez order bumpów, każda ze swoim wariantem, ilością i kwotą
+    // (amount_total = pozycja razem w groszach; bez niego amount × quantity). Wcześniej brana była tylko pierwsza pozycja.
+    $linie = array_values(array_filter((array)($zam['line_items'] ?? []), static fn($l) => is_array($l) && empty($l['is_order_bump'])));
+    $linia = $linie[0] ?? null;
+    $pozycje = array_map(static fn($l) => [
+        'wariant' => (string)($l['variant_name'] ?? ''),
+        'ilosc' => $l['quantity'] ?? 1,
+        'zaplacono' => is_int($l['amount_total'] ?? null) ? $l['amount_total']
+            : (is_int($l['amount'] ?? null) && is_int($l['quantity'] ?? null) ? $l['amount'] * $l['quantity'] : null),
+    ], $linie);
     $email = (string)($zam['customer']['email'] ?? $zam['customer_email'] ?? '');
     return [
+        'pozycje' => count($pozycje) > 1 ? $pozycje : null, // jedna pozycja: jak dotąd (pola niżej)
         'zrodlo' => 'api',
         'zamowienie' => (string)$zam['id'],
         'transakcja' => $transakcja,
@@ -182,7 +191,13 @@ function bon_synchronizuj(array $k, PDO $pdo, string $zrodlo, ?DateTimeImmutable
                 try { $transakcja = bon_et_transakcja($k, $pelne, $zaplacono); } catch (Throwable) {} // brak id transakcji nie blokuje bonu
                 $dane = bon_et_dane_zamowienia($pelne, $transakcja, $zaplacono);
                 $dane['nominal'] = bon_et_nominal($k, $dane['wariant']);
-                $wpis = ['zamowienie' => $id, 'kwota' => bon_zl((int)$dane['zaplacono']), 'wariant' => $dane['wariant'],
+                if ($dane['pozycje']) {
+                    foreach ($dane['pozycje'] as &$p) $p['nominal'] = bon_et_nominal($k, $p['wariant']);
+                    unset($p);
+                }
+                $wpis = ['zamowienie' => $id,
+                    'kwota' => bon_zl($dane['pozycje'] ? (int)array_sum(array_column($dane['pozycje'], 'zaplacono')) : (int)$dane['zaplacono']),
+                    'wariant' => $dane['pozycje'] ? implode(' + ', array_column($dane['pozycje'], 'wariant')) : $dane['wariant'],
                     'email' => bon_et_maska_email($dane['email']), 'transakcja' => $transakcja !== null];
                 if ($tryb !== 'bon') { $nowe[] = $wpis + ['wynik' => 'raport: bon by powstał']; continue; }
                 if (!filter_var($dane['email'], FILTER_VALIDATE_EMAIL)) { $nowe[] = $wpis + ['wynik' => 'brak e-maila – pominięte']; continue; }

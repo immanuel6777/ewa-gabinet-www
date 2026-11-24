@@ -6,6 +6,7 @@
 
 declare(strict_types=1);
 require __DIR__ . '/lib/panel-http.php';
+require __DIR__ . '/lib/zwroty.php'; // P-11: linia „Płatność w Easytools” dla Bartka i Ewy
 
 [$k, $pdo, $token] = bon_http_start(['GET']);
 try {

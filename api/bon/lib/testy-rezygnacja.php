@@ -29,6 +29,23 @@ function bon_testy_rezygnacja(array $k, PDO $pdo): array {
     $t('verify: rezygnacja_mozliwa true w 14 dniach, false 15. dnia; bez daty zapłaty', ($v['rezygnacja_mozliwa'] ?? null) === true
         && ($v15['rezygnacja_mozliwa'] ?? null) === false && !isset($v['kupiono']) && !isset($v['created_at']), json_encode($v));
 
+    // pytanie 3c (wpis 17:30): 14 dni w czasie polskim do końca 14. dnia, niezależnie od strefy serwera (OVH: Europe/Paris)
+    $strefaSerwera = date_default_timezone_get();
+    date_default_timezone_set('America/New_York'); // serwer w zupełnie innej strefie
+    try {
+        $wwa = new DateTimeZone(BON_STREFA);
+        $zakup = ['created_at' => '2026-03-01 23:50:00']; // zapłata w Polsce późnym wieczorem
+        $t('termin 14 dni (3c): 14. dzień 23:59 tak, 15. dzień 00:01 nie; „teraz” zawsze w Europe/Warsaw',
+            bon_rezygnacja_w_terminie($zakup, (new DateTimeImmutable('2026-03-15 23:59', $wwa))->format('Y-m-d'))
+            && !bon_rezygnacja_w_terminie($zakup, (new DateTimeImmutable('2026-03-16 00:01', $wwa))->format('Y-m-d'))
+            && bon_teraz()->getTimezone()->getName() === BON_STREFA
+            // chwila zapłaty z API (UTC) zapisywana w czasie polskim (data musi być z ostatnich 31 dni – inaczej „teraz”)
+            && bon_data_zaplaty(($u = (new DateTimeImmutable('-2 hours', new DateTimeZone('UTC'))))->format('Y-m-d\TH:i:s\Z'), bon_teraz())->format('Y-m-d H:i')
+                === $u->setTimezone($wwa)->format('Y-m-d H:i'));
+    } finally {
+        date_default_timezone_set($strefaSerwera);
+    }
+
     // zły adres: jawna odmowa, bon bez zmian; wielkość liter i spacje bez znaczenia
     [$h, $o] = bon_rezygnacja_ze_strony($k, $pdo, $b['code'], 'ktos-inny@example.com', $ip);
     $t('rezygnacja: zły adres → 400 powod email, bon nadal ważny', $h === 400 && $o === ['ok' => false, 'powod' => 'email'] && $stan($b['code'])[0] === 'valid');

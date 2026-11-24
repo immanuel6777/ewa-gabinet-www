@@ -145,6 +145,49 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     $t('sync: dowolna kwota 250 zł → bon 250 zł valid', $bd && $bd[0]['initial_pln'] == 250 && $bd[0]['status'] === 'valid');
     $t('sync: 2 sztuki → 2 bony po 200 zł', count($b2) === 2 && $b2[0]['initial_pln'] == 200 && $b2[1]['paid_pln'] == 200);
 
+    // koszyk mieszany (2026-11-24, wpis 17:30): każda pozycja osobno, numery kolejno, jeden mail; order bump pomijany
+    $linia = static fn(string $wariant, int $ilosc, int $razem, bool $bump = false) => ['product_name' => 'Bon podarunkowy na zabiegi podologiczne',
+        'variant_name' => $wariant, 'amount' => intdiv($razem, $ilosc), 'amount_total' => $razem, 'currency' => 'pln', 'quantity' => $ilosc, 'is_order_bump' => $bump, 'access' => []];
+    $jsonlM = $k['_katalog'] . '/bony-mailjet.jsonl';
+    $ileMaili = static fn() => is_file($jsonlM) ? count(file($jsonlM)) : 0;
+    $mieszany = $dodaj(['amount' => 125000, 'quantity' => 3, 'line_items' => [
+        $linia('Bon Szmaragdowy', 1, 20000), $linia('Bon Bursztynowy', 2, 100000), $linia('Dodatek', 1, 5000, true)]]);
+    $przedM = $ileMaili();
+    [$rM, $zad] = bon_synchronizuj($ks, $pdo, 'cron');
+    foreach ($zad as $z) $z();
+    $bm = bon_test_bony($k, $pdo, $mieszany['id']);
+    usort($bm, static fn($a, $b) => $a['nr_w_zamowieniu'] <=> $b['nr_w_zamowieniu']);
+    $t('koszyk mieszany 200 + 2×500 (+ order bump): 3 bony 200/500/500, numery 1–3, wszystkie ważne, zapłacono po pozycjach',
+        count($bm) === 3 && array_map(static fn($b) => (float)$b['initial_pln'], $bm) === [200.0, 500.0, 500.0]
+        && array_column($bm, 'nr_w_zamowieniu') == [1, 2, 3] && array_unique(array_column($bm, 'status')) === ['valid']
+        && (float)$bm[1]['paid_pln'] === 500.0 && $bm[0]['price_id'] === 'Bon Szmaragdowy' && $bm[2]['price_id'] === 'Bon Bursztynowy',
+        json_encode([$bm, $rM], JSON_UNESCAPED_UNICODE));
+    // tylko maile z bonami tego zamówienia (w tym samym przebiegu mogą wyjść zaległe maile innych testów)
+    $zBonami = static function (array $kody) use ($jsonlM, &$przedM): array {
+        $linie = is_file($jsonlM) ? array_slice(file($jsonlM, FILE_IGNORE_NEW_LINES), $przedM) : [];
+        return array_values(array_filter(array_map(static fn($l) => json_decode($l, true) ?: [], $linie),
+            static fn($m) => array_intersect(array_map(static fn($a) => preg_replace('/^bon-|\.pdf$/', '', (string)($a['Filename'] ?? $a['nazwa'] ?? '')), (array)($m['Attachments'] ?? [])), $kody)));
+    };
+    $mm = $zBonami(array_column($bm, 'code'));
+    $t('koszyk mieszany: jeden mail ze wszystkimi 3 PDF-ami', count($mm) === 1 && count($mm[0]['Attachments'] ?? []) === 3, json_encode(array_map(static fn($m) => $m['Attachments'] ?? null, $mm)));
+    bon_synchronizuj($ks, $pdo, 'cron');
+    $t('koszyk mieszany: drugi przebieg synchronizacji – nadal 3 bony', count(bon_test_bony($k, $pdo, $mieszany['id'])) === 3);
+
+    $czesc = $dodaj(['amount' => 55000, 'quantity' => 2, 'line_items' => [$linia('Bon Rubinowy', 1, 30000), $linia('Bon Diamentowy', 1, 25000)]]);
+    $plikPowM = $k['_katalog'] . '/bony-powiadomienia.txt';
+    $powPrzed = (string)@file_get_contents($plikPowM);
+    $przedM = $ileMaili();
+    [, $zad] = bon_synchronizuj($ks, $pdo, 'cron');
+    foreach ($zad as $z) $z();
+    $bc = bon_test_bony($k, $pdo, $czesc['id']);
+    usort($bc, static fn($a, $b) => $a['nr_w_zamowieniu'] <=> $b['nr_w_zamowieniu']);
+    $powNowe = substr((string)@file_get_contents($plikPowM), strlen($powPrzed));
+    $mc = $zBonami(array_column($bc, 'code'));
+    $t('koszyk z nieznanym wariantem: znany ważny i wysłany (1 PDF), nieznany wstrzymany; alert z listą pozycji',
+        count($bc) === 2 && $bc[0]['status'] === 'valid' && $bc[1]['status'] === 'held' && str_contains((string)$bc[1]['status_uwagi'], 'zamówienie z 2 pozycji')
+        && count($mc) === 1 && count($mc[0]['Attachments'] ?? []) === 1
+        && str_contains($powNowe, 'Część bonów') && str_contains($powNowe, '• Bon Diamentowy: 1 szt.'), $powNowe);
+
     // nowe nazwy wariantów (Bartek 2026-11-24): ten sam bon co pod starą nazwą; nazwa w mailu wg rodzaju bonu
     $rub = $dodaj(['amount' => 30000, 'line_items' => [['variant_name' => 'Bon Rubinowy', 'amount' => 30000, 'amount_total' => 30000]]]);
     $szaf = $dodaj(['amount' => 50000, 'line_items' => [['variant_name' => 'bon szafirowy', 'amount' => 50000, 'amount_total' => 50000]]]);

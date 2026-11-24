@@ -120,5 +120,15 @@ function bon_testy_obsluga(array $k, PDO $pdo): array {
     [, $hP] = bon_panel_historia($k, $pdo, $sAdmin, $kodC, $poDobie);
     [$kodF] = bon_panel_admin($k, $pdo, $sAdmin, ['kod' => $kodC, 'akcja' => 'cofnij-realizacje', 'realizacja' => $hP['historia'][0]['id'] ?? 0, 'powod' => 'po czasie'], $poDobie);
     $t('cofnięcie: po 24 h przycisku nie ma, serwer odmawia (409)', ($hP['cofnij_realizacje'] ?? null) === null && $kodF === 409 && $saldo() === ['150.00', 'valid']);
+    // pytanie 3a (wpis 17:30): przy rezygnacji (kwota zwrotu zamrożona w wierszu rezygnacji) cofnięcia realizacji nie ma
+    bon_panel_realizuj($k, $pdo, $sKasa, ['kod' => $kodC, 'kwota_reczna' => '20', 'client_token' => $tok()]);
+    [, $hR] = bon_panel_historia($k, $pdo, $sAdmin, $kodC);
+    $idOst = $hR['cofnij_realizacje']['id'] ?? 0;
+    $dzisR = bon_teraz()->format('Y-m-d');
+    bon_panel_admin($k, $pdo, $sAdmin, ['kod' => $kodC, 'akcja' => 'rezygnacja', 'kanal' => 'mail', 'data' => $dzisR, 'otrzymano' => $dzisR]);
+    [, $hR2] = bon_panel_historia($k, $pdo, $sAdmin, $kodC);
+    [$kodG] = bon_panel_admin($k, $pdo, $sAdmin, ['kod' => $kodC, 'akcja' => 'cofnij-realizacje', 'realizacja' => $idOst, 'powod' => 'po rezygnacji']);
+    $t('cofnięcie (3a): bon z rezygnacją – przycisku nie ma, serwer odmawia (409), saldo bez zmian',
+        $idOst > 0 && ($hR2['cofnij_realizacje'] ?? null) === null && $kodG === 409 && $saldo() === ['130.00', 'withdrawn'], json_encode([$idOst, $kodG, $saldo()]));
     return $wyniki;
 }
