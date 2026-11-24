@@ -89,6 +89,11 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     $t('mail bonu bez Dla/Od: informacja o pustych liniach do wpisania', str_contains($tekstMaila, 'puste linie „Dla” i „Od”'));
     [, $tekstMaila] = bon_mail_tresc($k, [array_replace($b[0], ['dla' => 'Mama', 'od' => 'Ania'])]);
     $t('mail bonu z Dla/Od: bez informacji o pustych liniach', !str_contains($tekstMaila, 'puste linie'));
+    [, $bezTel] = bon_mail_tresc(array_replace($k, ['telefon_pomoc_bony' => '']), $b);
+    [, $zTel, $zTelHtml] = bon_mail_tresc(array_replace($k, ['telefon_pomoc_bony' => '506 102 340', 'telefon_pomoc_bony_godziny' => 'pon.–pt. 9–17']), $b);
+    $t('mail: telefon pomocy z konfigu (tekst i HTML), puste = bez linii', !str_contains($bezTel, 'Pytania o bon')
+        && str_contains($zTel, 'Pytania o bon lub kłopot z plikiem? Zadzwoń: 506 102 340 (pon.–pt. 9–17) albo odpisz na tego maila.')
+        && str_contains($zTelHtml, '506 102 340'));
 
     // drugi przebieg: bez duplikatu i bez ponownego pobierania szczegółów
     $wywolania = [];
@@ -187,6 +192,30 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     [$r] = bon_synchronizuj(array_replace($ks, ['sync_tryb' => 'raport']), $pdo, 'panel');
     $p = bon_synchronizuj_dla_panelu($r);
     $t('raport panelu: tekst, bez e-maili', isset($p['tekst']) && !str_contains(json_encode($p, JSON_UNESCAPED_UNICODE), '@'), json_encode($p, JSON_UNESCAPED_UNICODE));
+    // stan zamówienia dla /bony/dziekujemy (TA-10): pełny adres do 60 min od zapłaty, potem maska; tylko UUID; osobny limit
+    $ip = '203.0.113.' . random_int(1, 250);
+    $s = bon_stan_zamowienia($k, $pdo, $a['id'], $ip);
+    $t('strona podziękowania: bon wysłany → stan wyslany, pełny adres (zapłata 5 min temu), liczba bonów',
+        ($s['stan'] ?? '') === 'wyslany' && ($s['adres'] ?? '') === 'sync@example.com' && ($s['adres_pelny'] ?? null) === true && ($s['bonow'] ?? 0) === 1, json_encode($s));
+    $s = bon_stan_zamowienia($k, $pdo, strtoupper($a['id']) === $a['id'] ? $a['id'] : $a['id'], $ip, bon_teraz()->modify('+2 hours'));
+    $t('strona podziękowania: po 60 min adres zamaskowany, adres_pelny false', ($s['adres'] ?? '') === 's…c@example.com' && ($s['adres_pelny'] ?? null) === false, json_encode($s));
+    $s = bon_stan_zamowienia($k, $pdo, $a['id'], $ip, bon_teraz()->modify('+8 days'));
+    $t('strona podziękowania: zamówienie starsze niż 7 dni → nieznane, bez adresu', $s === ['stan' => 'nieznane'], json_encode($s));
+    $s = bon_stan_zamowienia($k, $pdo, $rabat['id'], $ip);
+    $t('strona podziękowania: bon wstrzymany → stan wstrzymany, bez adresu', $s === ['stan' => 'wstrzymany'], json_encode($s));
+    $t('strona podziękowania: nieznany UUID → nieznane; zły format → null (bez zapytania)', bon_stan_zamowienia($k, $pdo, bon_test_uuid(), $ip) === ['stan' => 'nieznane']
+        && bon_stan_zamowienia($k, $pdo, "x' OR 1=1 --", $ip) === null);
+    $pdo->prepare('UPDATE ' . bon_tabela($k, 'vouchers') . ' SET mail_wyslany_at = NULL WHERE easytools_order_id = ?')->execute([$dwa['id']]);
+    $s = bon_stan_zamowienia($k, $pdo, $dwa['id'], $ip);
+    $t('strona podziękowania: mail jeszcze nie wyszedł → w_toku z adresem, 2 bony', ($s['stan'] ?? '') === 'w_toku' && ($s['bonow'] ?? 0) === 2 && isset($s['adres']), json_encode($s));
+    $ip2 = '198.51.100.' . random_int(1, 250);
+    $ok = 0;
+    for ($i = 0; $i < 12; $i++) if (bon_stan_zamowienia(array_replace($k, ['adres_limit_na_minute' => 10]), $pdo, $a['id'], $ip2) !== null) $ok++;
+    $t('strona podziękowania: limit 10 zapytań na minutę z jednego IP, osobny od verify', $ok === 10 && bon_limit_ok($pdo, $k, $ip2), (string)$ok);
+    $t('maska adresu: jedna litera przed @, brak @', bon_adres_maska('k@wp.pl') === 'k…@wp.pl' && bon_adres_maska('zle') === '…');
+    $zdarzenia = implode('', array_map('file_get_contents', glob($k['_katalog'] . '/bony-zdarzenia/*.log') ?: []));
+    $t('strona podziękowania: adres kupującego nie trafia do dziennika zdarzeń', !str_contains($zdarzenia, 'sync@example.com'));
+
     $t('nominał po nazwie wariantu: wielkość liter i twarda spacja bez znaczenia', bon_et_nominal($k, "bon 300\u{00A0}ZŁ") === 300 && bon_et_nominal($k, 'Bon 999 zł') === null);
 
     return $wyniki;

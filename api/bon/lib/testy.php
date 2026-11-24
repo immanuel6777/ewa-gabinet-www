@@ -12,6 +12,7 @@ require_once __DIR__ . '/diagnostyka.php';
 require_once __DIR__ . '/testy-sync.php';
 require_once __DIR__ . '/testy-krok1.php';
 require_once __DIR__ . '/testy-krok4.php';
+require_once __DIR__ . '/testy-obsluga.php';
 
 /** Payload jak w dokumentacji Easytools (single_product_bought), z nadpisaniami. */
 function bon_test_payload(array $nadpisz = []): array {
@@ -221,7 +222,13 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     // --- PDF i mail (etap 2) ---
     $nb = "\u{00A0}";
     $t('kwota na bonie: 250 zł / 237,50 zł / 1 200 zł', bon_kwota_tekst(25000) === "250{$nb}zł" && bon_kwota_tekst(23750) === "237,50{$nb}zł" && bon_kwota_tekst(120000) === "1{$nb}200{$nb}zł");
-    $t('kolor wstążki: 200 czerwona, 300 złota, 500 zielona', bon_pdf_prog(20000) === 'czerwony' && bon_pdf_prog(30000) === 'zloty' && bon_pdf_prog(50000) === 'zielen' && bon_pdf_prog(23750) === 'czerwony');
+    $kol = static fn(string $id, string $zl) => bon_pdf_kolor($k, ['price_id' => $id, 'initial_pln' => $zl]);
+    $t('tło PDF wg rodzaju: 200 zielone, 300 czerwone, 500 złote, dowolna granatowa (też przy 300 i 500 zł)',
+        $kol('bon-200', '200.00') === 'zielen' && $kol('Bon Rubinowy', '300.00') === 'czerwony' && $kol('Bon 500 zł', '500.00') === 'zloty'
+        && $kol('Bon Szafirowy', '500.00') === 'granat' && $kol('bon-dowolna', '300.00') === 'granat' && $kol('', '237.50') === 'granat'
+        && $kol('', '300.00') === 'czerwony');
+    $t('tła PDF: 4 kolory × przód i tył są w lib/grafika', count(array_filter(['zielen', 'czerwony', 'zloty', 'granat'],
+        static fn($c) => is_file(__DIR__ . "/grafika/tlo-przod-$c.jpg") && is_file(__DIR__ . "/grafika/tlo-tyl-$c.jpg"))) === 4);
     $t('ważność słownie: 1 miesiąc, 3 miesiące, 6 miesięcy, 12 miesięcy, 22 miesiące', bon_miesiace_tekst(1) === '1 miesiąc' && bon_miesiace_tekst(3) === '3 miesiące'
         && bon_miesiace_tekst(6) === '6 miesięcy' && bon_miesiace_tekst(12) === '12 miesięcy' && bon_miesiace_tekst(22) === '22 miesiące');
     $pdfBajty = bon_pdf(['code' => 'EWA-TEST-2345', 'initial_pln' => '300.00', 'expires_at' => '2027-11-21', 'dla' => 'Żaneta Ćwik', 'od' => null], $k);
@@ -524,5 +531,5 @@ function bon_testy(array $kBaza, PDO $pdo): array {
         $tz = $pdo->query("SELECT NOW() AS n, @@session.time_zone AS s, @@system_time_zone AS sys")->fetch();
         $t('MySQL: strefa czasu (informacyjnie – daty liczy PHP)', true, "NOW()={$tz['n']} session={$tz['s']} system={$tz['sys']} PHP=" . bon_teraz()->format('Y-m-d H:i:s'));
     }
-    return array_merge($wyniki, bon_testy_panel($k, $pdo), bon_testy_sync($k, $pdo), bon_testy_krok1($k, $pdo), bon_testy_krok4($k, $pdo));
+    return array_merge($wyniki, bon_testy_panel($k, $pdo), bon_testy_sync($k, $pdo), bon_testy_krok1($k, $pdo), bon_testy_krok4($k, $pdo), bon_testy_obsluga($k, $pdo));
 }

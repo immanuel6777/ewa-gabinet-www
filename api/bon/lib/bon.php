@@ -97,13 +97,20 @@ function bon_wariant_nominal(array $k, string $nazwa): int|float|string|null {
  * inaczej po wartości (200/300/500). Nieznany rodzaj → „Bon podarunkowy”. Nazwa to tylko etykieta, kwota zawsze z initial_pln.
  */
 function bon_nazwa(array $k, array $bon): string {
+    $rodzaj = bon_rodzaj($k, $bon);
+    return $rodzaj === null ? 'Bon podarunkowy' : (string)(((array)($k['nazwy_bonow'] ?? []))[$rodzaj] ?? 'Bon podarunkowy');
+}
+
+/**
+ * Rodzaj bonu: 'dowolna' (po price_id: identyfikator z „ceny” albo nazwa z „warianty”), inaczej 200 / 300 / 500 po wartości;
+ * inna wartość = null. Wspólne dla nazwy w mailu i koloru tła PDF (2026-11-24).
+ */
+function bon_rodzaj(array $k, array $bon): int|string|null {
     $id = (string)($bon['price_id'] ?? '');
-    $rodzaj = $id !== '' ? ((array)($k['ceny'] ?? []))[$id] ?? bon_wariant_nominal($k, $id) : null;
-    $nazwy = (array)($k['nazwy_bonow'] ?? []);
-    if ($rodzaj === 'dowolna') return (string)($nazwy['dowolna'] ?? 'Bon podarunkowy');
+    $zMapy = $id !== '' ? ((array)($k['ceny'] ?? []))[$id] ?? bon_wariant_nominal($k, $id) : null;
+    if ($zMapy === 'dowolna') return 'dowolna';
     $grosze = (int)bon_grosze($bon['initial_pln'] ?? null);
-    if ($grosze > 0 && $grosze % 100 === 0 && isset($nazwy[intdiv($grosze, 100)])) return (string)$nazwy[intdiv($grosze, 100)];
-    return 'Bon podarunkowy';
+    return in_array($grosze, [20000, 30000, 50000], true) ? intdiv($grosze, 100) : null;
 }
 
 // --- daty ---
@@ -324,6 +331,7 @@ const BON_HISTORIA_AKCJE = [
     'waznosc', 'zatwierdz', 'zwrot',                                 // admin w panelu (etap 3)
     'rezygnacja', 'rezygnacja-cofnieta', 'przedluzenie', 'przypomnienie', // krok 2, 5, 6 (cofnięcie: pomyłka albo klient się wycofał)
     'zwrot-zlecony', 'zwrot-potwierdzony', 'zwrot-nieudany',         // krok 3
+    'mail-odbity', 'adres', 'mail-ponownie', 'pdf',                  // 2026-11-24 (TA-11): odbicie, zmiana adresu, ponowna wysyłka, PDF z panelu
 ];
 
 function bon_historia(array $k, PDO $pdo, int $voucherId, string $akcja, string $szczegoly, string $kto, ?DateTimeImmutable $teraz = null): void {
@@ -554,10 +562,10 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
 
 // --- verify (publiczny) ---
 
-// limit zapytań na IP i minutę; true = można
-function bon_limit_ok(PDO $pdo, array $k, string $ip): bool {
+// limit zapytań na IP i minutę; true = można. $cel rozdziela liczniki (verify / adres na stronie podziękowania).
+function bon_limit_ok(PDO $pdo, array $k, string $ip, string $cel = 'limit', ?int $max = null): bool {
     $tab = bon_tabela($k, 'voucher_verify_limit');
-    $klucz = hash('sha256', $ip . '|' . ($k['easytools_webhook_sekret'] ?? '') . '|limit');
+    $klucz = hash('sha256', $ip . '|' . ($k['easytools_webhook_sekret'] ?? '') . '|' . $cel);
     $okno = intdiv(time(), 60);
     $up = $pdo->prepare("UPDATE $tab SET licznik = licznik + 1 WHERE klucz = ? AND okno = ?");
     $up->execute([$klucz, $okno]);
@@ -572,7 +580,43 @@ function bon_limit_ok(PDO $pdo, array $k, string $ip): bool {
     }
     $st = $pdo->prepare("SELECT licznik FROM $tab WHERE klucz = ? AND okno = ?");
     $st->execute([$klucz, $okno]);
-    return (int)$st->fetchColumn() <= (int)$k['verify_limit_na_minute'];
+    return (int)$st->fetchColumn() <= ($max ?? (int)$k['verify_limit_na_minute']);
+}
+
+// --- stan zamówienia dla /bony/dziekujemy (Bartek 2026-11-24, wpisy 10:00 i 10:30; TA-10) ---
+
+/** „kasia.nowak@gmail.com” → „k…k@gmail.com”; jedna litera przed @ → „k…@gmail.com”. Domena w całości. */
+function bon_adres_maska(string $adres): string {
+    $i = strrpos($adres, '@');
+    if ($i === false || $i === 0) return '…';
+    $lok = mb_substr($adres, 0, $i);
+    $n = mb_strlen($lok);
+    return mb_substr($lok, 0, 1) . '…' . ($n > 1 ? mb_substr($lok, -1) : '') . substr($adres, $i);
+}
+
+/**
+ * Stan bonów zamówienia z adresem, na który poszedł bon: pełnym do bon_adres_pelny_min (60) minut od zapłaty, potem zamaskowanym.
+ * Identyfikator zamówienia służy WYŁĄCZNIE do odczytu (bony tworzy tylko synchronizacja z API). Tylko UUID, tylko zamówienia
+ * z ostatnich 7 dni, osobny limit na IP. Adres nigdy nie trafia do dziennika ani do log.php – zwracany jest tylko kupującemu.
+ * Zwraca: null (zły format albo limit – endpoint odpowiada wtedy samym {ok:true}) albo
+ * ['stan' => wyslany|w_toku|wstrzymany|nieznane, + adres, adres_pelny, bonow przy wyslany / w_toku].
+ */
+function bon_stan_zamowienia(array $k, PDO $pdo, string $zamowienie, string $ip, ?DateTimeImmutable $teraz = null): ?array {
+    if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $zamowienie)) return null;
+    if (!bon_limit_ok($pdo, $k, $ip, 'adres', (int)($k['adres_limit_na_minute'] ?? 10))) return null;
+    $teraz ??= bon_teraz();
+    $st = $pdo->prepare('SELECT status, buyer_email, mail_wyslany_at, created_at FROM ' . bon_tabela($k, 'vouchers')
+        . ' WHERE easytools_order_id = ? ORDER BY id');
+    $st->execute([$zamowienie]);
+    $bony = $st->fetchAll();
+    $zaplata = $bony ? new DateTimeImmutable((string)$bony[0]['created_at'], new DateTimeZone(BON_STREFA)) : null;
+    if (!$bony || $zaplata < $teraz->modify('-7 days')) return ['stan' => 'nieznane'];
+    if (array_filter($bony, static fn($b) => $b['status'] === 'held')) return ['stan' => 'wstrzymany'];
+    $adres = trim((string)$bony[0]['buyer_email']);
+    if ($adres === '') return ['stan' => 'nieznane'];
+    $wyslane = !array_filter($bony, static fn($b) => $b['mail_wyslany_at'] === null);
+    $pelny = $teraz->getTimestamp() - $zaplata->getTimestamp() <= 60 * (int)($k['bon_adres_pelny_min'] ?? 60);
+    return ['stan' => $wyslane ? 'wyslany' : 'w_toku', 'adres' => $pelny ? $adres : bon_adres_maska($adres), 'adres_pelny' => $pelny, 'bonow' => count($bony)];
 }
 
 /** Zwraca [kod HTTP, odpowiedź]. Bez danych osobowych: tylko status, saldo, wartość i ważność. */

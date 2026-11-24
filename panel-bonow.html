@@ -107,6 +107,8 @@
           <div data-p-przedluzony-wiersz hidden data-astro-cid-nl2nwxtk><dt data-astro-cid-nl2nwxtk>Przedłużony</dt><dd data-p-przedluzony data-astro-cid-nl2nwxtk></dd></div>
         </dl>
         <p class="info" data-p-rezygnacja hidden data-astro-cid-nl2nwxtk></p>
+        <!-- TA-11: ostatni mail z bonem odbity (kontrola dostarczenia); znika po udanej wysyłce ponownej -->
+        <p class="blad" data-p-odbity hidden data-astro-cid-nl2nwxtk>Mail z bonem NIE dotarł do kupującego. Potwierdź z nim adres i wyślij bon ponownie.</p>
         <!-- jedno bezpłatne przedłużenie o 3 mies. (regulamin), każda rola; dowolną datę zmienia admin niżej -->
         <div class="przedluz" data-p-przedluz hidden data-astro-cid-nl2nwxtk>
           <p data-p-przedluz-tekst data-astro-cid-nl2nwxtk></p>
@@ -515,6 +517,22 @@
         <ul class="historia" data-p-zdarzenia data-astro-cid-nl2nwxtk></ul>
       </section>
 
+      <!-- obsługa kupującego (2026-11-24, TA-11): admin i konto z uprawnieniem rezygnacji (Bartek, Ewa) – serwer daje „obsluga” tylko im -->
+      <section class="karta" data-p-obsluga hidden data-astro-cid-nl2nwxtk>
+        <h2 data-astro-cid-nl2nwxtk>Mail z bonem</h2>
+        <form class="admin-forma formularz" data-p-wyslij-forma data-astro-cid-nl2nwxtk>
+          <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Adres e-mail kupującego</span><input type="email" name="email" required maxlength="190" autocomplete="off" data-astro-cid-nl2nwxtk></label>
+          <label class="pole" data-p-potwierdzenie hidden data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Jak potwierdzono kupującego (wymagane przy zmianie adresu)</span>
+            <input type="text" name="potwierdzenie" maxlength="120" placeholder="np. telefon, podała numer zamówienia" data-astro-cid-nl2nwxtk></label>
+          <p class="podpowiedz" data-astro-cid-nl2nwxtk>Wyśle ponownie wszystkie ważne bony z tego zamówienia. Nowy adres zostaje zapisany przy bonach.</p>
+          <div class="admin-akcje" data-astro-cid-nl2nwxtk>
+            <button class="przycisk obrys" type="submit" data-p-wyslij-przycisk data-astro-cid-nl2nwxtk>Wyślij ponownie</button>
+            <a class="przycisk obrys" data-p-pdf href="#" download data-astro-cid-nl2nwxtk>Pobierz PDF</a>
+          </div>
+        </form>
+        <p class="blad" data-p-blad-wyslij hidden data-astro-cid-nl2nwxtk></p>
+      </section>
+
       <!-- rezygnacja, która przyszła mailem albo na papierze (krok 4): admin i konto z 'rezygnacje' => true (Ewa);
            ze strony /bon dojdzie w kroku 2 -->
       <section class="karta" data-p-rez-sekcja hidden data-astro-cid-nl2nwxtk>
@@ -570,4 +588,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.BTrrWUmJ.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.BY1Qjs_6.js"></script>

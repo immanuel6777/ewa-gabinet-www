@@ -18,7 +18,16 @@ try {
     [$raport, $zadania] = bon_synchronizuj($k, $pdo, $zrodlo);
     if ($zrodlo === 'panel') $raport['kto'] = $sesja['login'];
     if (!isset($raport['pominieto']) || $zrodlo === 'panel') bon_zdarzenie($k, 'synchronizacja', $raport);
-    bon_json(200, $zrodlo === 'panel' ? ['ok' => true, 'raport' => bon_synchronizuj_dla_panelu($raport)] : ['ok' => true]);
+    if ($zrodlo === 'panel') {
+        bon_json(200, ['ok' => true, 'raport' => bon_synchronizuj_dla_panelu($raport)]);
+    } else {
+        // strona podziękowania (2026-11-24, TA-10): {"zamowienie": "<ec_order_id>"} → stan i adres, na który poszedł bon.
+        // Także gdy synchronizacja była pominięta (odstęp). Adres tylko w odpowiedzi, nigdy w dzienniku.
+        $cialo = json_decode((string)file_get_contents('php://input'), true);
+        $zam = is_array($cialo) && is_string($cialo['zamowienie'] ?? null) ? strtolower(trim($cialo['zamowienie'])) : '';
+        $stan = $zam !== '' ? bon_stan_zamowienia($k, $pdo, $zam, (string)($_SERVER['REMOTE_ADDR'] ?? '')) : null;
+        bon_json(200, $stan === null ? ['ok' => true] : ['ok' => true, 'zamowienie' => $stan]);
+    }
 } catch (Throwable $e) {
     error_log('bony/synchronizuj: ' . $e->getMessage());
     bon_zdarzenie($k, 'blad', ['plik' => 'synchronizuj', 'zrodlo' => $zrodlo] + bon_opis_bledu($e));

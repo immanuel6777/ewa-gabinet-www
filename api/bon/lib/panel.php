@@ -198,10 +198,13 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
         'wazny_do_pierwotnie' => !empty($bon['expires_at_pierwotna']) ? substr((string)$bon['expires_at_pierwotna'], 0, 10) : null,
         'przedluzenie' => bon_przedluzenie_okno($bon, $teraz), // null = przycisku „Przedłuż” nie ma
         'rezygnacja' => bon_panel_rezygnacja($k, $pdo, (int)$bon['id']),
+        'mail_odbity' => bon_panel_mail_odbity($zdarzenia), // znacznik „mail nie dotarł” (TA-11), zdejmuje go udana ponowna wysyłka
         'historia' => $historia,
         'zdarzenia' => $zdarzenia,
     ];
     if ($admin || !empty($sesja['rezygnacje'])) {
+        // obsługa kupującego (TA-11): obecny adres do potwierdzenia z kupującym, „Wyślij ponownie” i „Pobierz PDF”
+        $odp['obsluga'] = ['email' => $bon['buyer_email'], 'wyslij' => $bon['status'] === 'valid', 'pdf' => in_array($bon['status'], ['valid', 'used'], true)];
         // formularz „Zarejestruj rezygnację”: tylko bon ważny w bazie z saldem (bon_panel_zarejestruj_rezygnacje sprawdza to samo)
         $saldo = (int)bon_grosze($bon['balance_pln']);
         $odp['rezygnacja_mozliwa'] = $bon['status'] === 'valid' && $saldo > 0;
@@ -225,7 +228,71 @@ const BON_PANEL_ZDARZENIA = [
     'rezygnacja' => 'Rezygnacja z bonu', 'rezygnacja-cofnieta' => 'Rezygnacja cofnięta', 'przedluzenie' => 'Ważność przedłużona',
     'przypomnienie' => 'Przypomnienie o końcu ważności', 'zwrot-zlecony' => 'Zwrot zlecony', 'zwrot-potwierdzony' => 'Zwrot potwierdzony',
     'zwrot-nieudany' => 'Zwrot nieudany',
+    'mail-odbity' => 'Mail z bonem NIE dotarł', 'adres' => 'Zmieniony adres e-mail', 'mail-ponownie' => 'Wysyłka ponowna',
+    'pdf' => 'PDF pobrany w panelu',
 ];
+
+/** Ostatnia wysyłka odbita: najnowsze z „mail” / „mail-odbity” to odbicie (zdarzenia od najnowszych). Znacznik w panelu (TA-11). */
+function bon_panel_mail_odbity(array $zdarzenia): bool {
+    foreach ($zdarzenia as $z) {
+        if ($z['akcja'] === 'mail-odbity') return true;
+        if ($z['akcja'] === 'mail') return false;
+    }
+    return false;
+}
+
+// --- obsługa kupującego (2026-11-24, TA-11): wyślij ponownie, zmiana adresu, PDF. Admin i konto z uprawnieniem rezygnacji
+// (Bartek i Ewa, nie Karolina) – bon działa na okaziciela, więc PDF i zmiana adresu tylko dla nich. ---
+
+/**
+ * [kod HTTP, odpowiedź, ?id zamówienia do wysyłki]. Zmiana adresu: nowy adres przy WSZYSTKICH bonach zamówienia (wysyłka bierze
+ * adres z pierwszego), wymagane „jak potwierdzono kupującego”, wpis w historii ze starym i nowym adresem (szczegóły widzi
+ * tylko admin). Potem wszystkie ważne bony zamówienia do ponownej wysyłki (mail_wyslany_at = NULL) – wysyła wywołujący.
+ */
+function bon_panel_wyslij_ponownie(array $k, PDO $pdo, array $sesja, array $dane, ?DateTimeImmutable $teraz = null): array {
+    if ($sesja['rola'] !== 'admin' && empty($sesja['rezygnacje'])) return [403, ['ok' => false, 'blad' => 'Wysyłkę ponowną i zmianę adresu robią Bartek albo Ewa.']];
+    $teraz ??= bon_teraz();
+    $tabB = bon_tabela($k, 'vouchers');
+    $pdo->beginTransaction();
+    try {
+        $bon = bon_panel_znajdz($k, $pdo, (string)($dane['kod'] ?? ''), true);
+        if (!$bon) { $pdo->rollBack(); return [404, ['ok' => false, 'blad' => 'Nie ma bonu o tym numerze.']]; }
+        if ($bon['status'] !== 'valid') { $pdo->rollBack(); return [409, ['ok' => false, 'blad' => 'Wysłać ponownie można tylko bon ważny.']]; }
+        $zam = (string)$bon['easytools_order_id'];
+        $stary = trim((string)$bon['buyer_email']);
+        $nowy = trim((string)($dane['email'] ?? ''));
+        if ($nowy === '') $nowy = $stary;
+        if (mb_strlen($nowy) > 190 || filter_var($nowy, FILTER_VALIDATE_EMAIL) === false) { $pdo->rollBack(); return [400, ['ok' => false, 'blad' => 'Wpisz poprawny adres e-mail.']]; }
+        $zmiana = mb_strtolower($nowy) !== mb_strtolower($stary);
+        $potw = bon_tekst((string)($dane['potwierdzenie'] ?? ''), 120);
+        if ($zmiana && mb_strlen($potw) < 3) { $pdo->rollBack(); return [400, ['ok' => false, 'blad' => 'Przy zmianie adresu wpisz, jak potwierdzono kupującego (np. telefon, numer zamówienia).']]; }
+        $st = $pdo->prepare("SELECT id, status FROM $tabB WHERE easytools_order_id = ?");
+        $st->execute([$zam]);
+        $bonyZam = $st->fetchAll();
+        if ($zmiana) {
+            $pdo->prepare("UPDATE $tabB SET buyer_email = ? WHERE easytools_order_id = ?")->execute([$nowy, $zam]);
+            foreach ($bonyZam as $b) bon_historia($k, $pdo, (int)$b['id'], 'adres', "$stary → $nowy; potwierdzono: $potw", $sesja['login'], $teraz);
+        }
+        $pdo->prepare("UPDATE $tabB SET mail_wyslany_at = NULL WHERE easytools_order_id = ? AND status = 'valid'")->execute([$zam]);
+        $ile = count(array_filter($bonyZam, static fn($b) => $b['status'] === 'valid'));
+        bon_historia($k, $pdo, (int)$bon['id'], 'mail-ponownie', "na adres $nowy, bonów w mailu: $ile", $sesja['login'], $teraz);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+    return [200, ['ok' => true, 'adres' => $nowy, 'zmiana_adresu' => $zmiana, 'bonow' => $ile], $zam];
+}
+
+/** Bon do pobrania PDF w panelu: [kod HTTP, ?wiersz bonu albo odpowiedź błędu]. Wpis „pdf” w historii (kto, kiedy). */
+function bon_panel_pdf_bon(array $k, PDO $pdo, array $sesja, string $wpisany, ?DateTimeImmutable $teraz = null): array {
+    if ($sesja['rola'] !== 'admin' && empty($sesja['rezygnacje'])) return [403, ['ok' => false, 'blad' => 'PDF bonu pobierają Bartek albo Ewa.']];
+    $bon = bon_panel_znajdz($k, $pdo, $wpisany);
+    if (!$bon) return [404, ['ok' => false, 'blad' => 'Nie ma bonu o tym numerze.']];
+    if (!in_array($bon['status'], ['valid', 'used'], true)) return [409, ['ok' => false, 'blad' => 'PDF można pobrać tylko dla bonu ważnego albo wykorzystanego.']];
+    bon_historia($k, $pdo, (int)$bon['id'], 'pdf', 'PDF pobrany w panelu', $sesja['login'], $teraz);
+    return [200, $bon];
+}
 
 /** Złożona (nieanulowana) rezygnacja bonu albo null. Przed migracją kroku 1 na OVH (brak tabeli) – null, panel działa dalej. */
 function bon_panel_rezygnacja(array $k, PDO $pdo, int $voucherId): ?array {

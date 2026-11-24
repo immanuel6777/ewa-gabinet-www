@@ -50,6 +50,12 @@ function bon_mail_tresc(array $k, array $bony): array {
         "Niewykorzystana kwota zostaje na bonie na kolejną wizytę. Bon jest ważny $miesiace od dnia zakupu.",
         'Termin wizyty można zarezerwować przez Booksy albo telefonicznie: ' . $kontakt['telefon'] . '. Przy rezerwacji wystarczy podać numer bonu.',
     ];
+    // telefon pomocy przy bonach (Bartek 2026-11-24, wpis 09:40): numer Bartka z konfigu, puste = bez linii; wizyty dalej przez gabinet
+    $pomoc = trim((string)($k['telefon_pomoc_bony'] ?? ''));
+    if ($pomoc !== '') {
+        $godz = trim((string)($k['telefon_pomoc_bony_godziny'] ?? ''));
+        $zasady[] = 'Pytania o bon lub kłopot z plikiem? Zadzwoń: ' . $pomoc . ($godz !== '' ? " ($godz)" : '') . ' albo odpisz na tego maila.';
+    }
     // bon z API Easytools nie ma Dla/Od (API ich nie podaje, Bartek 2026-11-23): na PDF zostają puste linie do wpisania ręcznie
     $puste = array_filter($bony, static fn($b) => trim((string)($b['dla'] ?? '')) === '' || trim((string)($b['od'] ?? '')) === '');
     if ($puste) array_unshift($zasady, ($n === 1 ? 'Na bonie są' : 'Na bonach są') . ' puste linie „Dla” i „Od” – można je wpisać ręcznie po wydrukowaniu.');
@@ -389,7 +395,7 @@ function bon_mailjet_status_proba(array $k, int|string $id): array {
  * - zapytania nie przechodzą (zerwanie, błąd HTTP) → czeka; po 72 h jedno powiadomienie „nie da się sprawdzić”, kontrola trwa dalej.
  * Zwraca podsumowanie do dziennika.
  */
-function bon_mail_kontrola(array $k, int $teraz = 0, int $minWiekS = 600): array {
+function bon_mail_kontrola(array $k, int $teraz = 0, int $minWiekS = 600, ?PDO $pdo = null): array {
     $teraz = $teraz ?: time();
     $katalog = bon_mail_katalog_wysylek($k);
     $wynik = ['sprawdzono' => 0, 'dostarczone' => 0, 'problem' => 0, 'czeka' => 0];
@@ -415,9 +421,24 @@ function bon_mail_kontrola(array $k, int $teraz = 0, int $minWiekS = 600): array
             $wynik['problem']++;
             bon_zdarzenie($k, 'mail-dostarczenie', ['zamowienie' => $w['zamowienie'], 'status' => $w['status'], 'id' => $w['id']]);
             if (!$w['powiadomiono']) {
+                // TA-11 (2026-11-24): kupujący i odbity adres z bazy (plik kontroli trzyma tylko kody i MessageID), wpis „mail-odbity”
+                // w historii każdego bonu = znacznik w panelu do udanej ponownej wysyłki. Powiadomienie idzie do gabinetu (mail_powiadomienie).
+                $kto = '';
+                if ($pdo && !empty($w['kody'])) {
+                    try {
+                        $kodyL = array_values((array)$w['kody']);
+                        $st = $pdo->prepare('SELECT id, buyer_email, buyer_name FROM ' . bon_tabela($k, 'vouchers') . ' WHERE code IN (' . implode(',', array_fill(0, count($kodyL), '?')) . ')');
+                        $st->execute($kodyL);
+                        $wiersze = $st->fetchAll();
+                        foreach ($wiersze as $b) bon_historia($k, $pdo, (int)$b['id'], 'mail-odbity', 'Mailjet: ' . implode(', ', array_unique($zle)) . '; adres: ' . $b['buyer_email'], 'system');
+                        if ($wiersze) $kto = 'Kupujący: ' . ($wiersze[0]['buyer_name'] ?: '(bez imienia)') . "\nOdbity adres: " . $wiersze[0]['buyer_email'] . "\n";
+                    } catch (Throwable $e) {
+                        bon_zdarzenie($k, 'blad', ['plik' => 'kontrola (odbicie)'] + bon_opis_bledu($e));
+                    }
+                }
                 bon_powiadom($k, 'Bon: mail NIE dotarł – zamówienie ' . $w['zamowienie'], "Mailjet przyjął mail z bonem, ale go nie dostarczył.\n"
-                    . 'Status: ' . implode(', ', array_unique($zle)) . "\nBony: $kody\n"
-                    . "Sprawdź w Mailjecie (Statystyki → wiadomość) i wyślij bon ponownie albo przekaż go kupującemu inną drogą.");
+                    . 'Status: ' . implode(', ', array_unique($zle)) . "\nBony: $kody\n" . $kto
+                    . "Panel bonów → otwórz bon → „Wyślij ponownie” (można poprawić adres po potwierdzeniu z kupującym).");
                 $w['powiadomiono'] = true;
             }
         } elseif ($statusy && count(array_filter($statusy, static fn($s) => in_array($s, BON_MAIL_DOSTARCZONO, true))) === count($statusy)) {

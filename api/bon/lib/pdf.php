@@ -25,11 +25,16 @@ function bon_pdf_tcpdf(): void {
     require_once __DIR__ . '/pdf-klasa.php';
 }
 
-// kolor wstążki z wartości bonu (jak grafiki sklepu: 200 czerwona, 300 złota, 500 zielona)
-function bon_pdf_prog(int $grosze): string {
-    if ($grosze >= 50000) return 'zielen';
-    if ($grosze >= 30000) return 'zloty';
-    return 'czerwony';
+// kolor tła wg rodzaju bonu (Bartek 2026-11-24, jak karty na /bony): 200 szmaragd (zielen), 300 rubin (czerwony),
+// 500 bursztyn (zloty), dowolna kwota szafir (granat) – także gdy dowolna kwota wynosi 300 albo 500 zł.
+// Inna wartość (np. bon z webhooka na 250 zł bez znanego wariantu) = granat jak dowolna kwota.
+function bon_pdf_kolor(array $k, array $bon): string {
+    return match (bon_rodzaj($k, $bon)) {
+        200 => 'zielen',
+        300 => 'czerwony',
+        500 => 'zloty',
+        default => 'granat',
+    };
 }
 
 // 25000 → „250 zł”, 23750 → „237,50 zł”, 120000 → „1 200 zł” (twarda spacja, żeby kwota się nie łamała)
@@ -73,7 +78,7 @@ function bon_pdf(array $bon, array $k): string {
     bon_pdf_tcpdf();
     $uklad = json_decode((string)file_get_contents(__DIR__ . '/grafika/uklad.json'), true);
     $wartosc = (int)bon_grosze($bon['initial_pln']);
-    $prog = bon_pdf_prog($wartosc);
+    $prog = bon_pdf_kolor($k, $bon);
     $kwota = bon_kwota_tekst($wartosc);
     $kod = (string)$bon['code'];
     $waznosc = bon_data_tekst(substr((string)$bon['expires_at'], 0, 10));
