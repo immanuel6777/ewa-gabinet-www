@@ -44,7 +44,7 @@ return [
     // --- maile ---
     // 2026-11-24 (wpisy 11:45–12:10, POCZTA-ADRESY.md): bon wychodzi z bony@, odpowiedzi na bony@, alerty gabinetu na alerty@.
     // Nadawca musi być zatwierdzony w Mailjet (konto główne) – inaczej Mailjet odrzuci mail, a zapas SMTP go nie uratuje.
-    'mail_nadawca' => 'Gabinet EWA <bony@ewa-gabinet.pl>',
+    'mail_nadawca' => 'EWA Gabinet podologiczny <bony@ewa-gabinet.pl>', // nazwa nadawcy: Bartek 2026-11-24
     'mail_odpowiedz' => 'bony@ewa-gabinet.pl',
     'mail_powiadomienie' => ['alerty@ewa-gabinet.pl'],
     'telefon_pomoc_bony' => '506 102 340',
