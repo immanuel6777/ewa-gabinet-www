@@ -34,7 +34,14 @@ function bon_konfig(): array {
         'verify_limit_na_minute' => 20,
         'mail_tryb' => 'mail',
         // synchronizacja z API Easytools (lib/easytools.php, 2026-11-23): nazwa wariantu z API → nominał
-        'warianty' => ['Bon 200 zł' => 200, 'Bon 300 zł' => 300, 'Bon 500 zł' => 500, 'Dowolna kwota (od 180 zł)' => 'dowolna'],
+        // 2026-11-24: nowe nazwy w Easytools (Bartek 01:50); stare zostają dla wcześniejszych zamówień.
+        // Wpis „warianty” w konfigu ZASTĘPUJE tę mapę w całości (bez scalania), więc musi mieć oba komplety.
+        'warianty' => [
+            'Bon 200 zł' => 200, 'Bon 300 zł' => 300, 'Bon 500 zł' => 500, 'Dowolna kwota (od 180 zł)' => 'dowolna',
+            'Bon Szmaragdowy' => 200, 'Bon Rubinowy' => 300, 'Bon Bursztynowy' => 500, 'Bon Szafirowy' => 'dowolna',
+        ],
+        // nazwa bonu w mailu wg rodzaju (nie wg nazwy z Easytools): nominał 200/300/500 albo 'dowolna'
+        'nazwy_bonow' => [200 => 'Bon Szmaragdowy', 300 => 'Bon Rubinowy', 500 => 'Bon Bursztynowy', 'dowolna' => 'Bon Szafirowy'],
         'sync_tryb' => 'raport',
         'sync_dni' => 7,
         'sync_odstep_s' => 20,
@@ -73,6 +80,30 @@ function bon_grosze($v, string $jednostka = 'pln'): ?int {
 // grosze → tekst do DECIMAL(10,2) i do JSON-a: 15000 → "150.00"
 function bon_zl(int $grosze): string {
     return intdiv($grosze, 100) . '.' . str_pad((string)($grosze % 100), 2, '0', STR_PAD_LEFT);
+}
+
+// --- warianty i nazwy bonów ---
+
+/** nazwa wariantu (Easytools) → nominał z mapy „warianty” (liczba zł | 'dowolna') albo null. Bez wielkości liter i twardych spacji. */
+function bon_wariant_nominal(array $k, string $nazwa): int|float|string|null {
+    $norm = static fn(string $s): string => mb_strtolower(trim(preg_replace('/[\s\x{00A0}]+/u', ' ', $s) ?? ''), 'UTF-8');
+    $szukana = $norm($nazwa);
+    foreach ((array)($k['warianty'] ?? []) as $n => $w) if ($norm((string)$n) === $szukana) return $w;
+    return null;
+}
+
+/**
+ * Nazwa bonu do maila wg rodzaju: z price_id (identyfikator z „ceny” albo nazwa z „warianty”) ustala, czy to dowolna kwota;
+ * inaczej po wartości (200/300/500). Nieznany rodzaj → „Bon podarunkowy”. Nazwa to tylko etykieta, kwota zawsze z initial_pln.
+ */
+function bon_nazwa(array $k, array $bon): string {
+    $id = (string)($bon['price_id'] ?? '');
+    $rodzaj = $id !== '' ? ((array)($k['ceny'] ?? []))[$id] ?? bon_wariant_nominal($k, $id) : null;
+    $nazwy = (array)($k['nazwy_bonow'] ?? []);
+    if ($rodzaj === 'dowolna') return (string)($nazwy['dowolna'] ?? 'Bon podarunkowy');
+    $grosze = (int)bon_grosze($bon['initial_pln'] ?? null);
+    if ($grosze > 0 && $grosze % 100 === 0 && isset($nazwy[intdiv($grosze, 100)])) return (string)$nazwy[intdiv($grosze, 100)];
+    return 'Bon podarunkowy';
 }
 
 // --- daty ---

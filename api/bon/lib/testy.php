@@ -50,6 +50,11 @@ function bon_test_konfig(array $k): array {
         'verify_limit_na_minute' => 1000,
         // wysyłka NIGDY prawdziwa w testach (też na OVH): treść maila do pliku bony-mailjet.jsonl obok konfigu
         'mail_tryb' => 'plik',
+        // test-ovh.php bierze prawdziwy konfig: powiadomienia gabinetu w testach też tylko do pliku (tryb „plik”), z adresem testowym,
+        // a zapas SMTP i jego test wyłączone – scenariusze zapasu ustawiają je same (2026-11-24: 8 fałszywych błędów na OVH)
+        'mail_powiadomienie' => ['powiadomienia-test@example.invalid'],
+        'mail_zapas' => false,
+        'mail_zapas_test_do' => '',
         'mail_nadawca' => 'Gabinet EWA <powiadomienia@ewa-gabinet.pl>',
         'mailjet_test_blad' => false,
         'mail_ponow_przerwy_s' => [0, 0], // testy: ponawianie bez czekania
@@ -96,6 +101,8 @@ function bon_test_bony(array $k, PDO $pdo, $zamowienie): array {
 
 function bon_testy(array $kBaza, PDO $pdo): array {
     $k = bon_test_konfig($kBaza);
+    // na OVH w konfig/bony-mail-wysylki/ leżą prawdziwe wysyłki: test sprawdza, że testy nie DOPISAŁY nowych
+    $wysylkiPrzed = glob($k['_katalog'] . '/bony-mail-wysylki/*.json') ?: [];
     $wyniki = [];
     $t = static function (string $nazwa, bool $ok, string $szczegol = '') use (&$wyniki) { $wyniki[] = [$nazwa, $ok, $szczegol]; };
     $zl = static fn($v) => bon_zl((int)bon_grosze($v));
@@ -266,6 +273,9 @@ function bon_testy(array $kBaza, PDO $pdo): array {
 
     // powiadomienie o nieudanej wysyłce: raz na zamówienie, potem najwyżej raz na dobę (cron ponawia co godzinę)
     $plikPow = $k['_katalog'] . '/bony-powiadomienia.txt';
+    // znaczniki z poprzedniego uruchomienia (na OVH zostają w prawdziwym konfig/) zaniżałyby liczbę powiadomień
+    $znaczniki = array_map(static fn($z) => $k['_katalog'] . '/bony-mail-bledy/' . md5($z) . '.txt', ['ord_powiadom_raz', 'ord_doba']);
+    array_map(static fn($f) => @unlink($f), $znaczniki);
     $ilePow = static fn(string $zam): int => substr_count(is_file($plikPow) ? (string)file_get_contents($plikPow) : '', 'NIE wysłano maila – zamówienie ' . $zam . "\n");
     $p = bon_test_payload(['order_id' => 'ord_powiadom_raz']);
     [, , $zadanie] = bon_test_webhook($kBlad, $pdo, $p);
@@ -275,6 +285,7 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $t('Mailjet błąd 3× z rzędu: jedno powiadomienie', $ilePow($p['order_id']) === 1, (string)$ilePow($p['order_id']));
     $t('powiadomienie o błędzie: po dobie znów wolno', bon_powiadomienie_bledu_czas($k, 'ord_doba', true) && !bon_powiadomienie_bledu_czas($k, 'ord_doba', true)
         && bon_powiadomienie_bledu_czas($k, 'ord_doba', true, 0));
+    array_map(static fn($f) => @unlink($f), $znaczniki);
     $w = bon_wyslij_zamowienie($k, $pdo, $p['order_id']);
     $t('po udanej wysyłce znacznik błędu usunięty', ($w['wyslane'] ?? 0) === 1 && !is_file($k['_katalog'] . '/bony-mail-bledy/' . md5($p['order_id']) . '.txt'));
 
@@ -434,7 +445,7 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     @rmdir($kat0 . '/bony-zdarzenia');
     @rmdir($kat0);
     $k = $kOrg;
-    $t('tryb plik (testy, test-ovh): wysyłka nie trafia do kontroli dostarczenia', !glob($kOrg['_katalog'] . '/bony-mail-wysylki/*.json'));
+    $t('tryb plik (testy, test-ovh): wysyłka nie trafia do kontroli dostarczenia', !array_diff(glob($kOrg['_katalog'] . '/bony-mail-wysylki/*.json') ?: [], $wysylkiPrzed));
 
     // --- podgląd diagnostyczny (log.php): dane osobowe nigdy nie wychodzą ---
     $p = bon_test_payload(['customer_email' => 'jan.kowalski@example.com', 'customer_name' => 'Jan Kowalski', 'promo_code' => 'TEST99',

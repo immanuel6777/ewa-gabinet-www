@@ -123,6 +123,8 @@ if (empty($_GET['zostaw'])) {
     $wiersz('Tabele test_* zostawione (?zostaw=1) – usuń je ręcznie albo uruchom test ponownie bez zostaw.');
 }
 @unlink($k['_katalog'] . '/bony-mailjet.jsonl'); // zapis testowych maili (tryb „plik”) – nic nie poszło do Mailjeta
+@unlink($k['_katalog'] . '/bony-smtp.jsonl'); // zapas SMTP w trybie „plik” – nic nie poszło przez OVH
+@unlink($k['_katalog'] . '/bony-powiadomienia.txt'); // testowe powiadomienia gabinetu (tryb „plik”) – nic nie poszło mailem
 $wiersz('Po teście usuń test_token z konfig/bony.php.');
 
 /** Polecenia migracji przepisane na tabele test_* (nazwy tabel i klucza obcego; komentarze usunięte). */

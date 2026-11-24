@@ -58,10 +58,7 @@ function bon_et_klucz_ok(array $k): bool {
 
 /** nazwa wariantu z API → nominał z mapy „warianty” (liczba zł | 'dowolna') albo null. Bez wielkości liter i twardych spacji. */
 function bon_et_nominal(array $k, string $nazwa): int|float|string|null {
-    $norm = static fn(string $s): string => mb_strtolower(trim(preg_replace('/[\s\x{00A0}]+/u', ' ', $s) ?? ''), 'UTF-8');
-    $szukana = $norm($nazwa);
-    foreach ((array)($k['warianty'] ?? []) as $n => $w) if ($norm((string)$n) === $szukana) return $w;
-    return null;
+    return bon_wariant_nominal($k, $nazwa);
 }
 
 /** Zamówienie z API (include=line_items,customer) → dane dla bon_utworz_bony. */

@@ -36,6 +36,7 @@ function bon_mail_tresc(array $k, array $bony): array {
     foreach ($bony as $b) {
         $lista[] = [
             'kod' => (string)$b['code'],
+            'nazwa' => bon_nazwa($k, $b), // etykieta wg rodzaju bonu (2026-11-24), kwota nadal z nominału
             'kwota' => bon_kwota_tekst((int)bon_grosze($b['initial_pln'])),
             'do' => bon_data_tekst(substr((string)$b['expires_at'], 0, 10)),
             'dla' => (string)($b['dla'] ?? ''),
@@ -56,13 +57,13 @@ function bon_mail_tresc(array $k, array $bony): array {
     $regulamin = 'Pełne zasady bonu: ' . BON_REGULAMIN;
 
     $tekst = "Dzień dobry,\n\n$wstep\n\n";
-    foreach ($lista as $l) $tekst .= "Bon {$l['kod']}: {$l['kwota']}, ważny do {$l['do']}" . ($l['dla'] !== '' ? ", dla: {$l['dla']}" : '') . "\n";
+    foreach ($lista as $l) $tekst .= "{$l['nazwa']} o wartości {$l['kwota']}, numer {$l['kod']}, ważny do {$l['do']}" . ($l['dla'] !== '' ? ", dla: {$l['dla']}" : '') . "\n";
     $tekst .= "\n" . implode("\n", $zasady) . "\n" . $regulamin . "\n\nPozdrawiamy serdecznie\nEWA Gabinet podologiczny\nhttps://www.ewa-gabinet.pl\n";
 
     $e = static fn(string $s) => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
     $wiersze = '';
     foreach ($lista as $l) {
-        $wiersze .= '<tr><td style="padding:6px 12px 6px 0;font-weight:bold">' . $e($l['kod']) . '</td><td style="padding:6px 12px 6px 0">' . $e($l['kwota'])
+        $wiersze .= '<tr><td style="padding:6px 12px 6px 0;font-weight:bold">' . $e($l['kod']) . '</td><td style="padding:6px 12px 6px 0">' . $e($l['nazwa'] . ' o wartości ' . $l['kwota'])
             . '</td><td style="padding:6px 0">ważny do ' . $e($l['do']) . ($l['dla'] !== '' ? ', dla: ' . $e($l['dla']) : '') . '</td></tr>';
     }
     $html = '<!doctype html><html lang="pl"><body style="margin:0;background:#FBF7F4;font-family:Lato,Arial,sans-serif;color:#17504B;font-size:17px;line-height:1.55">'

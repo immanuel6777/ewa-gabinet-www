@@ -140,6 +140,29 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     $t('sync: dowolna kwota 250 zł → bon 250 zł valid', $bd && $bd[0]['initial_pln'] == 250 && $bd[0]['status'] === 'valid');
     $t('sync: 2 sztuki → 2 bony po 200 zł', count($b2) === 2 && $b2[0]['initial_pln'] == 200 && $b2[1]['paid_pln'] == 200);
 
+    // nowe nazwy wariantów (Bartek 2026-11-24): ten sam bon co pod starą nazwą; nazwa w mailu wg rodzaju bonu
+    $rub = $dodaj(['amount' => 30000, 'line_items' => [['variant_name' => 'Bon Rubinowy', 'amount' => 30000, 'amount_total' => 30000]]]);
+    $szaf = $dodaj(['amount' => 50000, 'line_items' => [['variant_name' => 'bon szafirowy', 'amount' => 50000, 'amount_total' => 50000]]]);
+    $nowaNieznana = $dodaj(['line_items' => [['variant_name' => 'Bon Diamentowy']]]);
+    [, $zad] = bon_synchronizuj($ks, $pdo, 'cron');
+    $brub = bon_test_bony($k, $pdo, $rub['id']);
+    $bsz = bon_test_bony($k, $pdo, $szaf['id']);
+    $bnn = bon_test_bony($k, $pdo, $nowaNieznana['id']);
+    $t('nowa nazwa „Bon Rubinowy” → bon 300 zł valid', $brub && $brub[0]['initial_pln'] == 300 && $brub[0]['status'] === 'valid');
+    $t('nowa nazwa „bon szafirowy” (małe litery) → dowolna kwota 500 zł valid', $bsz && $bsz[0]['initial_pln'] == 500 && $bsz[0]['status'] === 'valid');
+    $t('nieznana nowa nazwa → held', $bnn && $bnn[0]['status'] === 'held' && !isset($zad[$nowaNieznana['id']]));
+    $t('nazwa bonu: stara i nowa nazwa wariantu dają tę samą', bon_nazwa($k, $b2[0]) === 'Bon Szmaragdowy' && bon_nazwa($k, $brub[0]) === 'Bon Rubinowy'
+        && bon_nazwa($k, ['price_id' => 'Bon 300 zł', 'initial_pln' => '300.00']) === 'Bon Rubinowy');
+    $t('nazwa bonu: dowolna kwota → Szafirowy także przy 500 zł i 300 zł (stara nazwa)', bon_nazwa($k, $bsz[0]) === 'Bon Szafirowy' && bon_nazwa($k, $bd[0]) === 'Bon Szafirowy'
+        && bon_nazwa($k, ['price_id' => 'Dowolna kwota (od 180 zł)', 'initial_pln' => '300.00']) === 'Bon Szafirowy');
+    $t('nazwa bonu: webhook (bon-500, bon-dowolna) i nieznany rodzaj', bon_nazwa($k, ['price_id' => 'bon-500', 'initial_pln' => '500.00']) === 'Bon Bursztynowy'
+        && bon_nazwa($k, ['price_id' => 'bon-dowolna', 'initial_pln' => '200.00']) === 'Bon Szafirowy'
+        && bon_nazwa($k, ['price_id' => '', 'initial_pln' => '250.00']) === 'Bon podarunkowy');
+    [, $tekstMaila, $htmlMaila] = bon_mail_tresc($k, $brub);
+    $t('mail: „Bon Rubinowy o wartości 300 zł” w tekście i HTML', str_contains($tekstMaila, "Bon Rubinowy o wartości 300\u{00A0}zł, numer " . $brub[0]['code'])
+        && str_contains($htmlMaila, "Bon Rubinowy o wartości 300\u{00A0}zł"), $tekstMaila);
+    foreach ($zad as $z) $z();
+
     // nieudana wcześniej wysyłka: kolejny przebieg ją dokańcza
     $pdo->prepare('UPDATE ' . bon_tabela($k, 'vouchers') . ' SET mail_wyslany_at = NULL WHERE easytools_order_id = ?')->execute([$dow['id']]);
     [, $zad] = bon_synchronizuj($ks, $pdo, 'cron');
