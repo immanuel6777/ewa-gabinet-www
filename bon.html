@@ -34,7 +34,7 @@
 <style>.eyebrow[data-astro-cid-zedojbgr]{font-size:var(--fs-eyebrow-m);color:var(--c-ink-muted);letter-spacing:.06em;text-transform:uppercase;align-items:center;gap:8px;line-height:1.3;display:inline-flex}.kropka[data-astro-cid-zedojbgr]{background:var(--c-coral);border-radius:50%;flex-shrink:0;width:7px;height:7px}@media (width>=900px){.eyebrow[data-astro-cid-zedojbgr]{font-size:var(--fs-eyebrow);gap:10px}.kropka[data-astro-cid-zedojbgr]{width:8px;height:8px}}
 .pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/bon.CEpsEKmV.css">
+<link rel="stylesheet" href="/_astro/bon.DzjWMWMl.css">
 <link rel="stylesheet" href="/_astro/Baza.CUaZgc7R.css">
 <link rel="stylesheet" href="/_astro/KartaBonu.C-N_av8q.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body>
@@ -1908,7 +1908,8 @@
       <form class="szukaj formularz" action="/bon" method="get" data-bon-form data-astro-cid-b3uxbwor>
         <label class="pole" data-astro-cid-b3uxbwor>
           <span class="etykieta" data-astro-cid-b3uxbwor>Numer bonu</span>
-          <input name="nr" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="EWA-XXXX-XXXX" maxlength="20" required data-bon-pole data-astro-cid-b3uxbwor>
+          <!-- maska (src/scripts/maska-numeru-bonu.ts): „EWA-” na stałe, myślnik sam, tylko znaki numeru; bez JS zwykłe pole -->
+          <input name="nr" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="EWA-XXXX-XXXX" maxlength="20" required data-bon-pole data-astro-cid-b3uxbwor>
         </label>
         <button class="przycisk" type="submit" data-astro-cid-b3uxbwor>Sprawdź</button>
       </form>
@@ -2605,4 +2606,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/bon.astro_astro_type_script_index_0_lang.kiEDuXYs.js"></script>
+<script type="module" src="/_astro/bon.astro_astro_type_script_index_0_lang.D2N_7G05.js"></script>
