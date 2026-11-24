@@ -208,6 +208,15 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
         'zdarzenia' => $zdarzenia,
     ];
     if ($admin || !empty($sesja['rezygnacje'])) {
+        // P-15 (wpis 16:51): rabat – „Zapłacono 8 zł · rabat 192 zł · kod XXX”, gdy zapłacono mniej niż nominał (Karolina nie widzi)
+        $odp['rabat'] = bon_panel_rabat($bon);
+        // wpisy 17:33/17:35: czy i kiedy wyszło potwierdzenie rezygnacji; „(tyle zapłacono)”, gdy kwotę zwrotu ogranicza wpłata
+        if ($odp['rezygnacja']) {
+            $odp['rezygnacja']['potwierdzenie'] = function_exists('bon_rezygnacja_stan_potwierdzenia')
+                ? bon_rezygnacja_stan_potwierdzenia($k, $pdo, (int)$bon['id'], $odp['rezygnacja']['zlozono'] . ' 00:00:00') : null;
+            $odp['rezygnacja']['ograniczona_wplata'] = (int)bon_grosze($bon['paid_pln']) < (int)bon_grosze($bon['initial_pln'])
+                && $odp['rezygnacja']['kwota'] === bon_zl((int)bon_grosze($bon['paid_pln']));
+        }
         // P-11: „Zwróć pieniądze” (bon z rezygnacją czekającą na zwrot) i linia „Płatność w Easytools” (API, tylko te konta)
         $r = $odp['rezygnacja'];
         $odp['zwrot'] = $r && $bon['status'] === 'withdrawn' && in_array($r['stan'], ['oczekuje', 'nieudany'], true)
@@ -241,7 +250,7 @@ const BON_PANEL_ZDARZENIA = [
     'przypomnienie' => 'Przypomnienie o końcu ważności', 'zwrot-zlecony' => 'Zwrot zlecony', 'zwrot-potwierdzony' => 'Zwrot potwierdzony',
     'zwrot-nieudany' => 'Zwrot nieudany',
     'mail-odbity' => 'Mail z bonem NIE dotarł', 'adres' => 'Zmieniony adres e-mail', 'mail-ponownie' => 'Wysyłka ponowna',
-    'pdf' => 'PDF pobrany w panelu', 'realizacja-cofnieta' => 'Realizacja cofnięta', 'numer-potwierdzony' => 'Numer potwierdzony przez pacjenta',
+    'pdf' => 'PDF pobrany w panelu', 'realizacja-cofnieta' => 'Realizacja cofnięta', 'numer-potwierdzony' => 'Numer potwierdzony przez pacjenta', 'potwierdzenie' => 'Mail z potwierdzeniem rezygnacji',
 ];
 
 // --- cofnięcie ostatniej realizacji (2026-11-24, wpisy 14:10 i 15:00) ---
@@ -412,11 +421,21 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
             'mail_odbity' => $d['mail_odbity'] ?? false,
             // grupowanie bonów z jednego zamówienia (koszyk mieszany, ilość > 1) – skrót, nie numer zamówienia
             'grupa' => substr(hash('sha256', (string)$b['easytools_order_id']), 0, 10),
+            // P-15: rabat na karcie – tylko Ewa i admin (kasa liczy saldo, nie cenę zakupu); bez sesji (testy, stare wywołania) też
+            'rabat' => ($sesja === null || $sesja['rola'] === 'admin' || !empty($sesja['rezygnacje'])) ? bon_panel_rabat($b) : null,
         ];
     }, $wiersze20);
     // kolejność: najpierw bony, którymi można płacić, potem pozostałe; w każdej grupie najnowsze pierwsze (zapytanie już tak sortuje)
     usort($bony, static fn($a, $b) => ($a['status'] === 'valid' ? 0 : 1) <=> ($b['status'] === 'valid' ? 0 : 1));
     return [200, ['ok' => true, 'typ' => $typ, 'bony' => $bony, 'wiecej' => count($wiersze) > BON_PANEL_SZUKAJ_MAX]];
+}
+
+/** P-15: rabat przy zakupie albo null (zapłacono pełną kwotę). Kwoty jako tekst „8.00”. */
+function bon_panel_rabat(array $bon): ?array {
+    $zaplacono = (int)bon_grosze($bon['paid_pln']);
+    $nominal = (int)bon_grosze($bon['initial_pln']);
+    if ($zaplacono >= $nominal) return null;
+    return ['zaplacono' => bon_zl($zaplacono), 'rabat' => bon_zl($nominal - $zaplacono), 'kod' => $bon['promo_code'] ?: null];
 }
 
 /** Dla kart wyników: ostatnia realizacja (data) i znacznik „mail nie dotarł” – jednym zapytaniem na tabelę. */

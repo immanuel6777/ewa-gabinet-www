@@ -40,7 +40,7 @@ if ($ctx) {
     ignore_user_abort(true);
     @set_time_limit(120);
     try {
-        $w = bon_rezygnacja_maile($k, $ctx);
+        $w = bon_rezygnacja_maile($k, $ctx, $pdo);
         bon_zdarzenie($k, 'mail', ['po' => 'rezygnacja-strona', 'kod' => bon_kod_maska((string)$ctx['bon']['code']),
             'kupujacy' => $w['kupujacy'] === null ? 'ok' : 'błąd', 'obsluga' => ($w['obsluga'] ?? null) === null ? 'ok' : 'błąd']);
     } catch (Throwable $e) {

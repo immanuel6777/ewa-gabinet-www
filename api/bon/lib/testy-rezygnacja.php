@@ -125,5 +125,121 @@ function bon_testy_rezygnacja(array $k, PDO $pdo): array {
     // cofnięcie rezygnacji ze strony w panelu (pomyłka) – istniejąca ścieżka
     [$h] = bon_panel_admin($k, $pdo, ['login' => 'bartek', 'imie' => 'Bartek', 'rola' => 'admin', 'csrf' => 'x'], ['kod' => $b['code'], 'akcja' => 'cofnij-rezygnacje', 'powod' => 'kupujący się pomylił']);
     $t('panel: rezygnację ze strony da się cofnąć („Cofnij rezygnację”) → bon znów ważny', $h === 200 && $stan($b['code'])[0] === 'valid');
+
+    $wyniki = array_merge($wyniki, bon_testy_potwierdzenia($k, $pdo, $nowy, $maile));
+    return $wyniki;
+}
+
+// Wpisy 17:33/17:35 (2026-11-24): potwierdzenie rezygnacji zarejestrowanej w panelu, ponowna wysyłka, mail po cofnięciu;
+// P-15: rabat w panelu; verify.php: wartość przy każdym statusie.
+function bon_testy_potwierdzenia(array $k, PDO $pdo, callable $nowy, callable $maile): array {
+    $wyniki = [];
+    $t = static function (string $nazwa, bool $ok, string $szczegol = '') use (&$wyniki) { $wyniki[] = [$nazwa, $ok, $szczegol]; };
+    $sAdmin = ['login' => 'bartek', 'imie' => 'Bartek', 'rola' => 'admin', 'csrf' => 'x'];
+    $sEwa = ['login' => 'ewa', 'imie' => 'Ewa', 'rola' => 'realizacja', 'rezygnacje' => true, 'csrf' => 'x'];
+    $sKarolina = ['login' => 'karolina', 'imie' => 'Karolina', 'rola' => 'realizacja', 'csrf' => 'x'];
+    $dzis = bon_teraz()->format('Y-m-d');
+    $powiadomienia = static fn(): string => (string)@file_get_contents($k['_katalog'] . '/bony-powiadomienia.txt');
+    $potwHist = static function (string $kod) use ($k, $pdo): array {
+        $b = bon_panel_znajdz($k, $pdo, $kod);
+        $st = $pdo->prepare('SELECT szczegoly, kto FROM ' . bon_tabela($k, 'voucher_admin_log') . " WHERE voucher_id = ? AND akcja = 'potwierdzenie' ORDER BY id");
+        $st->execute([$b['id']]);
+        return $st->fetchAll();
+    };
+    // to samo, co robi admin.php po udanym „Zarejestruj rezygnację”
+    $zarejestruj = static function (array $kk, array $s, string $kod) use ($pdo, $dzis): array {
+        [$h, $o] = bon_panel_admin($kk, $pdo, $s, ['kod' => $kod, 'akcja' => 'rezygnacja', 'kanal' => 'mail', 'data' => $dzis, 'otrzymano' => $dzis]);
+        if ($h !== 200) return [$h, $o, null];
+        [, $p] = bon_panel_wyslij_potwierdzenie($kk, $pdo, $s, $kod);
+        return [$h, $o, $p];
+    };
+
+    // 1. rejestracja w panelu (Ewa) → mail do kupującego, wynik w odpowiedzi i w historii, stała linia w panelu
+    $b = $nowy(200, 'potw-' . random_int(1000, 9999) . '@example.com');
+    $przed = count($maile());
+    [$h, , $p] = $zarejestruj($k, $sEwa, $b['code']);
+    $m = array_slice($maile(), $przed);
+    $hist = $potwHist($b['code']);
+    [, $hP] = bon_panel_historia($k, $pdo, $sEwa, $b['code']);
+    $t('panel rezygnacja (Ewa): potwierdzenie do kupującego – wynik z adresem i godziną, mail z numerem i „(mailem)”, wpis w historii',
+        $h === 200 && ($p['potwierdzenie']['wyslane'] ?? null) === true && ($p['potwierdzenie']['adres'] ?? '') === $b['buyer_email']
+        && preg_match('/^\d\d:\d\d$/', (string)($p['potwierdzenie']['godzina'] ?? '')) === 1 && count($m) === 1
+        && ($m[0]['To'][0]['Email'] ?? '') === $b['buyer_email'] && str_contains((string)($m[0]['Subject'] ?? ''), 'Rezygnacja z bonu ' . $b['code'] . ' – potwierdzenie')
+        && str_contains((string)($m[0]['TextPart'] ?? ''), '(mailem)') && count($hist) === 1 && str_starts_with((string)$hist[0]['szczegoly'], 'wysłane na adres ' . $b['buyer_email'])
+        && $hist[0]['kto'] === 'ewa' && ($hP['rezygnacja']['potwierdzenie']['wyslane'] ?? null) === true,
+        json_encode([$p, $hist, $hP['rezygnacja'] ?? null], JSON_UNESCAPED_UNICODE));
+    $t('panel: bon z historii z typem zdarzenia „Mail z potwierdzeniem rezygnacji”', in_array('potwierdzenie', array_column($hP['zdarzenia'] ?? [], 'akcja'), true));
+
+    // 2. Karolina nie wysyła, bon bez rezygnacji → 409
+    [$hK] = bon_panel_wyslij_potwierdzenie($k, $pdo, $sKarolina, $b['code']);
+    $bBez = $nowy(100, 'potwb-' . random_int(1000, 9999) . '@example.com');
+    [$hB] = bon_panel_wyslij_potwierdzenie($k, $pdo, $sAdmin, $bBez['code']);
+    $t('ponowna wysyłka: Karolina → 403, bon bez rezygnacji → 409', $hK === 403 && $hB === 409, json_encode([$hK, $hB]));
+
+    // 3. nieudana wysyłka: wynik „NIE wyszło”, wpis w historii, alert; potem „Wyślij ponownie” się udaje
+    $kZly = array_replace($k, ['mailjet_test_blad' => true]);
+    $b2 = $nowy(200, 'potwz-' . random_int(1000, 9999) . '@example.com');
+    $alertyPrzed = strlen($powiadomienia());
+    [$h, , $p] = $zarejestruj($kZly, $sAdmin, $b2['code']);
+    $alert = substr($powiadomienia(), $alertyPrzed);
+    [, $hP] = bon_panel_historia($k, $pdo, $sAdmin, $b2['code']);
+    $t('nieudane potwierdzenie: rezygnacja zapisana, wynik wyslane=false z błędem, historia „NIE wysłane”, alert do gabinetu, panel pokazuje „nie wyszło”',
+        $h === 200 && ($p['potwierdzenie']['wyslane'] ?? null) === false && str_starts_with((string)($p['blad'] ?? ''), 'Potwierdzenie NIE wyszło')
+        && str_starts_with((string)($potwHist($b2['code'])[0]['szczegoly'] ?? ''), 'NIE wysłane:') && str_contains($alert, 'potwierdzenie rezygnacji NIE wyszło – ' . $b2['code'])
+        && ($hP['rezygnacja']['potwierdzenie']['wyslane'] ?? null) === false, json_encode([$p, $hP['rezygnacja'] ?? null], JSON_UNESCAPED_UNICODE));
+    [$h, $p] = bon_panel_wyslij_potwierdzenie($k, $pdo, $sEwa, $b2['code']);
+    [, $hP] = bon_panel_historia($k, $pdo, $sAdmin, $b2['code']);
+    $t('„Wyślij potwierdzenie ponownie” po błędzie → wysłane, panel pokazuje ostatni wynik (wysłane)',
+        $h === 200 && ($p['ok'] ?? false) && ($p['potwierdzenie']['wyslane'] ?? null) === true && ($hP['rezygnacja']['potwierdzenie']['wyslane'] ?? null) === true,
+        json_encode([$p, $hP['rezygnacja'] ?? null], JSON_UNESCAPED_UNICODE));
+
+    // 4. cofnięcie rezygnacji: mail „bon znów działa” tylko, gdy kupujący dostał potwierdzenie
+    $zlozono = static function (string $kod) use ($k, $pdo): string {
+        $bb = bon_panel_znajdz($k, $pdo, $kod);
+        $st = $pdo->prepare('SELECT zlozono_at FROM ' . bon_tabela($k, 'voucher_withdrawals') . " WHERE voucher_id = ? AND zwrot_stan <> 'anulowana'");
+        $st->execute([$bb['id']]);
+        return (string)$st->fetchColumn();
+    };
+    $zl = $zlozono($b['code']);
+    bon_panel_admin($k, $pdo, $sAdmin, ['kod' => $b['code'], 'akcja' => 'cofnij-rezygnacje', 'powod' => 'test']);
+    $przed = count($maile());
+    $w = bon_rezygnacja_wycofanie_mail($k, $pdo, bon_panel_znajdz($k, $pdo, $b['code']), $zl, 'bartek');
+    $m = array_slice($maile(), $przed);
+    [, $hP] = bon_panel_historia($k, $pdo, $sAdmin, $b['code']);
+    $t('cofnięcie po wysłanym potwierdzeniu → mail „znów działa”, wpis „wycofanie:” w historii, bez linii rezygnacji w panelu',
+        ($w['wyslane'] ?? null) === true && count($m) === 1 && str_contains((string)($m[0]['Subject'] ?? ''), 'znów działa')
+        && str_starts_with((string)(array_slice($potwHist($b['code']), -1)[0]['szczegoly'] ?? ''), 'wycofanie: wysłane') && empty($hP['rezygnacja']),
+        json_encode([$w, $m], JSON_UNESCAPED_UNICODE));
+    // nowa rezygnacja tego samego bonu: wpis „wycofanie:” nie udaje stanu potwierdzenia nowej rezygnacji
+    $b3 = $nowy(200, 'potwc-' . random_int(1000, 9999) . '@example.com');
+    $zarejestruj($kZly, $sAdmin, $b3['code']);
+    $zl3 = $zlozono($b3['code']);
+    bon_panel_admin($k, $pdo, $sAdmin, ['kod' => $b3['code'], 'akcja' => 'cofnij-rezygnacje', 'powod' => 'test']);
+    $przed = count($maile());
+    $w3 = bon_rezygnacja_wycofanie_mail($k, $pdo, bon_panel_znajdz($k, $pdo, $b3['code']), $zl3, 'bartek');
+    $t('cofnięcie, gdy potwierdzenie nie wyszło → bez maila (null)', $w3 === null && count($maile()) === $przed, json_encode($w3));
+
+    // 5. P-15: rabat tylko przy wpłacie poniżej nominału; Karolina nie widzi
+    $bR = $nowy(200, 'rab-' . random_int(1000, 9999) . '@example.com');
+    $pdo->prepare('UPDATE ' . bon_tabela($k, 'vouchers') . " SET paid_pln = '8.00', promo_code = 'TEST96' WHERE code = ?")->execute([$bR['code']]);
+    [, $hA] = bon_panel_historia($k, $pdo, $sAdmin, $bR['code']);
+    [, $hKa] = bon_panel_historia($k, $pdo, $sKarolina, $bR['code']);
+    [, $hPelny] = bon_panel_historia($k, $pdo, $sAdmin, $bBez['code']);
+    $t('P-15: rabat „zapłacono 8 · rabat 192 · kod” u admina, brak u Karoliny, null przy pełnej wpłacie',
+        ($hA['rabat'] ?? null) === ['zaplacono' => '8.00', 'rabat' => '192.00', 'kod' => 'TEST96'] && !array_key_exists('rabat', $hKa)
+        && array_key_exists('rabat', $hPelny) && $hPelny['rabat'] === null, json_encode([$hA['rabat'] ?? null, $hPelny['rabat'] ?? 'brak']));
+    // rezygnacja bonu z rabatem: kwota = wpłata, znacznik „(tyle zapłacono)”
+    $zarejestruj($k, $sAdmin, $bR['code']);
+    [, $hA] = bon_panel_historia($k, $pdo, $sEwa, $bR['code']);
+    $t('rezygnacja bonu za 8 zł z nominałem 200 → kwota 8.00 i ograniczona_wplata', ($hA['rezygnacja']['kwota'] ?? '') === '8.00'
+        && ($hA['rezygnacja']['ograniczona_wplata'] ?? null) === true, json_encode($hA['rezygnacja'] ?? null));
+
+    // 6. verify.php: wartość przy każdym statusie (wpis 17:26 pkt 3), saldo tylko przy valid/used
+    $bE = $nowy(150, 'ver-' . random_int(1000, 9999) . '@example.com');
+    $pdo->prepare('UPDATE ' . bon_tabela($k, 'vouchers') . " SET status = 'expired' WHERE code = ?")->execute([$bE['code']]);
+    [, $v] = bon_obsluz_verify($k, $bE['code'], '192.0.2.77', static fn() => $pdo);
+    [, $vW] = bon_obsluz_verify($k, $bR['code'], '192.0.2.77', static fn() => $pdo);
+    $t('verify: wartosc przy expired i withdrawn, bez salda', ($v['wartosc'] ?? null) === '150.00' && !array_key_exists('saldo', $v)
+        && ($vW['wartosc'] ?? null) === '200.00' && !array_key_exists('saldo', $vW), json_encode([$v, $vW], JSON_UNESCAPED_UNICODE));
     return $wyniki;
 }

@@ -370,7 +370,7 @@ const BON_HISTORIA_AKCJE = [
     'waznosc', 'zatwierdz', 'zwrot',                                 // admin w panelu (etap 3)
     'rezygnacja', 'rezygnacja-cofnieta', 'przedluzenie', 'przypomnienie', // krok 2, 5, 6 (cofnięcie: pomyłka albo klient się wycofał)
     'zwrot-zlecony', 'zwrot-potwierdzony', 'zwrot-nieudany',         // krok 3
-    'mail-odbity', 'adres', 'mail-ponownie', 'pdf', 'realizacja-cofnieta', 'numer-potwierdzony',                  // 2026-11-24 (TA-11): odbicie, zmiana adresu, ponowna wysyłka, PDF z panelu
+    'mail-odbity', 'adres', 'mail-ponownie', 'pdf', 'realizacja-cofnieta', 'numer-potwierdzony', 'potwierdzenie',                  // 2026-11-24 (TA-11): odbicie, zmiana adresu, ponowna wysyłka, PDF z panelu
 ];
 
 function bon_historia(array $k, PDO $pdo, int $voucherId, string $akcja, string $szczegoly, string $kto, ?DateTimeImmutable $teraz = null): void {
@@ -715,11 +715,10 @@ function bon_obsluz_verify(array $k, string $wpisany, string $ip, ?callable $pdo
         // P-12 (2026-11-24, wpis 16:50): czy /bon ma pokazać „Zgłoś rezygnację z bonu” – ważny, saldo > 0, 14 dni od zapłaty (daty nie zwracamy)
         'rezygnacja_mozliwa' => $status === 'valid' && (int)bon_grosze($bon['balance_pln']) > 0
             && bon_rezygnacja_w_terminie($bon, ($teraz ?? bon_teraz())->format('Y-m-d'))];
-    // saldo tylko dla bonu, którym można płacić albo który się zużył; wstrzymany / zwrócony / wygasły – sam status
-    if ($status === 'valid' || $status === 'used') {
-        $odp['saldo'] = bon_zl((int)bon_grosze($bon['balance_pln']));
-        $odp['wartosc'] = bon_zl((int)bon_grosze($bon['initial_pln']));
-    }
+    // saldo tylko dla bonu, którym można płacić albo który się zużył; wartość (nominał) zawsze – karta na /bon pokazuje właściwą
+    // kwotę także przy bonie wygasłym, z rezygnacją i zwróconym (wpis 17:26 pkt 3)
+    $odp['wartosc'] = bon_zl((int)bon_grosze($bon['initial_pln']));
+    if ($status === 'valid' || $status === 'used') $odp['saldo'] = bon_zl((int)bon_grosze($bon['balance_pln']));
     return [200, $odp];
 }
 

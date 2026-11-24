@@ -88,20 +88,13 @@ function bon_rezygnacja_ze_strony(array $k, PDO $pdo, string $wpisanyKod, string
  * kupujący, link do panelu). Ta sama droga co mail z bonem (Mailjet, przy zerwaniu zapas SMTP OVH). Nieudana wysyłka nie cofa
  * rezygnacji – alert na mail_powiadomienie (alerty@). Zwraca ['kupujacy' => ?błąd, 'obsluga' => ?błąd].
  */
-function bon_rezygnacja_maile(array $k, array $ctx): array {
+function bon_rezygnacja_maile(array $k, array $ctx, ?PDO $pdo = null): array {
     $bon = $ctx['bon'];
     $kod = (string)$bon['code'];
     $kwota = bon_kwota_tekst((int)$ctx['kwota']);
     $kiedy = $ctx['zgloszono']->format('d.m.Y') . ' o ' . $ctx['zgloszono']->format('H:i');
-    $pomoc = trim((string)($k['telefon_pomoc_bony'] ?? ''));
-    $godz = trim((string)($k['telefon_pomoc_bony_godziny'] ?? ''));
-    $tel = $pomoc !== '' ? ' albo zadzwoń: ' . $pomoc . ($godz !== '' ? " ($godz)" : '') : '';
     $wynik = [];
-
-    $tekst = "Dzień dobry,\n\nprzyjęliśmy rezygnację z bonu $kod zgłoszoną $kiedy. Kwota do zwrotu: $kwota. "
-        . "Pieniądze wrócą tą samą metodą płatności w ciągu 14 dni. Bon od tej chwili nie działa.\n\n"
-        . "Jeśli to nie Ty zgłaszałeś(-aś) rezygnację, odpisz na tę wiadomość$tel.\n\nPozdrawiamy serdecznie\nEWA Gabinet podologiczny\nhttps://www.ewa-gabinet.pl\n";
-    $wynik['kupujacy'] = bon_mail_prosty($k, (string)$bon['buyer_email'], "Rezygnacja z bonu $kod – potwierdzenie", $tekst);
+    $wynik['kupujacy'] = bon_rezygnacja_potwierdzenie($k, $pdo, $bon, (int)$ctx['kwota'], $kiedy, 'system', false);
 
     $obsluga = array_values(array_filter((array)($k['mail_obsluga'] ?? [])));
     if ($obsluga) {
@@ -119,6 +112,85 @@ function bon_rezygnacja_maile(array $k, array $ctx): array {
             . implode("\n", array_map(static fn($kto, $b) => "$kto: $b", array_keys($bledy), $bledy)) . "\nPotwierdź kupującemu ręcznie.");
     }
     return $wynik;
+}
+
+// --- potwierdzenie rezygnacji do kupującego (2026-11-24, wpisy 17:33 i 17:35: § 14 ust. 18a obiecuje mail przy KAŻDEJ rezygnacji) ---
+// Ten sam mail dla rezygnacji ze strony /bon, zarejestrowanej w panelu (mail / papier) i wysłanej ponownie. Wynik wysyłki
+// zapisany w historii bonu (akcja 'potwierdzenie'): „wysłane na adres … (GG:MM)” albo „NIE wysłane: …” – z tego panel pokazuje
+// stałą linię przy rezygnacji. Nieudana wysyłka: alert na mail_powiadomienie (alerty@), chyba że $bezAlertu.
+
+/** Wyślij potwierdzenie rezygnacji. $kiedy – data (i godzina) zgłoszenia jako tekst. Zwraca ?błąd. */
+function bon_rezygnacja_potwierdzenie(array $k, ?PDO $pdo, array $bon, int $kwotaGr, string $kiedy, string $kto, bool $alert = true): ?string {
+    $kod = (string)$bon['code'];
+    $kwota = bon_kwota_tekst($kwotaGr);
+    $pomoc = trim((string)($k['telefon_pomoc_bony'] ?? ''));
+    $godz = trim((string)($k['telefon_pomoc_bony_godziny'] ?? ''));
+    $tel = $pomoc !== '' ? ' albo zadzwoń: ' . $pomoc . ($godz !== '' ? " ($godz)" : '') : '';
+    $tekst = "Dzień dobry,\n\nprzyjęliśmy rezygnację z bonu $kod zgłoszoną $kiedy. Kwota do zwrotu: $kwota. "
+        . "Pieniądze wrócą tą samą metodą płatności w ciągu 14 dni. Bon od tej chwili nie działa.\n\n"
+        . "Jeśli to nie Ty zgłaszałeś(-aś) rezygnację, odpisz na tę wiadomość$tel.\n\nPozdrawiamy serdecznie\nEWA Gabinet podologiczny\nhttps://www.ewa-gabinet.pl\n";
+    $adres = (string)$bon['buyer_email'];
+    $blad = bon_mail_prosty($k, $adres, "Rezygnacja z bonu $kod – potwierdzenie", $tekst);
+    if ($pdo) {
+        bon_historia($k, $pdo, (int)$bon['id'], 'potwierdzenie', $blad === null
+            ? 'wysłane na adres ' . $adres . ' (' . bon_teraz()->format('H:i') . ')'
+            : 'NIE wysłane: ' . mb_substr($blad, 0, 150), $kto);
+    }
+    if ($blad !== null && $alert) {
+        bon_powiadom($k, 'Bon: potwierdzenie rezygnacji NIE wyszło – ' . $kod, "Rezygnacja jest zapisana (bon zablokowany), ale mail z potwierdzeniem do kupującego nie wyszedł.\n"
+            . "Bon: $kod\nBłąd: $blad\nW panelu przy rezygnacji: „Wyślij potwierdzenie ponownie”.");
+    }
+    return $blad;
+}
+
+/** Ostatni wynik wysyłki potwierdzenia rezygnacji (z historii, po zgłoszeniu): ['wyslane' => bool, 'opis' => tekst, 'kiedy'] albo null. */
+function bon_rezygnacja_stan_potwierdzenia(array $k, PDO $pdo, int $voucherId, string $odKiedy): ?array {
+    $st = $pdo->prepare('SELECT szczegoly, kiedy FROM ' . bon_tabela($k, 'voucher_admin_log') . " WHERE voucher_id = ? AND akcja = 'potwierdzenie' AND szczegoly NOT LIKE 'wycofanie:%' AND kiedy >= ? ORDER BY kiedy DESC, id DESC LIMIT 1");
+    $st->execute([$voucherId, $odKiedy]);
+    $r = $st->fetch();
+    return $r ? ['wyslane' => str_starts_with((string)$r['szczegoly'], 'wysłane'), 'opis' => (string)$r['szczegoly'], 'kiedy' => (string)$r['kiedy']] : null;
+}
+
+/**
+ * Panel: potwierdzenie rezygnacji zarejestrowanej w panelu (automatycznie po zapisie) albo wysłane ponownie (przycisk).
+ * [kod HTTP, odpowiedź z 'potwierdzenie' => ['wyslane', 'adres', 'godzina'] i ewentualnym 'blad'].
+ */
+function bon_panel_wyslij_potwierdzenie(array $k, PDO $pdo, array $sesja, string $wpisany): array {
+    if ($sesja['rola'] !== 'admin' && empty($sesja['rezygnacje'])) return [403, ['ok' => false, 'blad' => 'Potwierdzenie rezygnacji wysyłają Bartek albo Ewa.']];
+    $kod = bon_normalizuj_kod($wpisany, (string)$k['kod_prefix']);
+    $st = $pdo->prepare('SELECT * FROM ' . bon_tabela($k, 'vouchers') . ' WHERE code = ?');
+    $st->execute([(string)$kod]);
+    $bon = $st->fetch();
+    if (!$bon) return [404, ['ok' => false, 'blad' => 'Nie ma bonu o tym numerze.']];
+    $st = $pdo->prepare('SELECT * FROM ' . bon_tabela($k, 'voucher_withdrawals') . " WHERE voucher_id = ? AND zwrot_stan <> 'anulowana'");
+    $st->execute([$bon['id']]);
+    $w = $st->fetch();
+    if (!$w) return [409, ['ok' => false, 'blad' => 'Ten bon nie ma zarejestrowanej rezygnacji.']];
+    $zl = new DateTimeImmutable((string)$w['zlozono_at'], new DateTimeZone(BON_STREFA));
+    $kiedy = $zl->format('d.m.Y') . match ((string)$w['kanal']) {
+        'strona' => ' o ' . $zl->format('H:i') . ' na stronie /bon', 'mail' => ' (mailem)', default => ' (w gabinecie)',
+    };
+    $blad = bon_rezygnacja_potwierdzenie($k, $pdo, $bon, (int)bon_grosze($w['kwota_pln']), $kiedy, $sesja['login']);
+    $wynik = ['wyslane' => $blad === null, 'adres' => (string)$bon['buyer_email'], 'godzina' => bon_teraz()->format('H:i')];
+    return [200, ['ok' => $blad === null, 'potwierdzenie' => $wynik] + ($blad === null ? [] : ['blad' => 'Potwierdzenie NIE wyszło: ' . $blad])];
+}
+
+/**
+ * Po cofnięciu rezygnacji: mail „rezygnacja wycofana, bon znów działa” – tylko gdy potwierdzenie rezygnacji wcześniej wyszło.
+ * Zwraca null, gdy maila nie było po co wysyłać, inaczej ['wyslane' => bool, 'adres', 'blad' => ?tekst].
+ */
+function bon_rezygnacja_wycofanie_mail(array $k, PDO $pdo, array $bon, string $zlozono, string $kto): ?array {
+    $stan = bon_rezygnacja_stan_potwierdzenia($k, $pdo, (int)$bon['id'], $zlozono);
+    if (!$stan || !$stan['wyslane']) return null; // kupujący nie dostał potwierdzenia – nie ma czego odwoływać
+    $kod = (string)$bon['code'];
+    $tekst = "Dzień dobry,\n\nrezygnacja z bonu $kod została wycofana. Bon znów działa – saldo i data ważności bez zmian.\n\n"
+        . "Jeśli to pomyłka, odpisz na tę wiadomość.\n\nPozdrawiamy serdecznie\nEWA Gabinet podologiczny\nhttps://www.ewa-gabinet.pl\n";
+    $blad = bon_mail_prosty($k, (string)$bon['buyer_email'], "Bon $kod znów działa – rezygnacja wycofana", $tekst);
+    bon_historia($k, $pdo, (int)$bon['id'], 'potwierdzenie', $blad === null ? 'wycofanie: wysłane na adres ' . $bon['buyer_email'] : 'wycofanie: NIE wysłane: ' . mb_substr($blad, 0, 150), $kto);
+    if ($blad !== null) {
+        bon_powiadom($k, 'Bon: mail o wycofaniu rezygnacji NIE wyszedł – ' . $kod, "Rezygnacja cofnięta (bon znów ważny), ale mail do kupującego nie wyszedł.\nBon: $kod\nBłąd: $blad\nNapisz do kupującego ręcznie.");
+    }
+    return ['wyslane' => $blad === null, 'adres' => (string)$bon['buyer_email'], 'blad' => $blad];
 }
 
 /** Mail tekstowy (bez załączników) tą samą drogą co mail z bonem: Mailjet, przy zerwaniu połączenia zapas SMTP OVH. Zwraca ?błąd. */
