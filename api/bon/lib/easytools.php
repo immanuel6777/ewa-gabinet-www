@@ -28,7 +28,9 @@ function bon_et_api(array $k, string $metoda, string $sciezka, array $q = [], ?a
     $naglowki = ['Authorization: Bearer ' . (string)$k['easytools_api_key'], 'Accept: application/json'];
     if (!empty($k['easytools_sklep'])) $naglowki[] = 'X-Easycart-Store: ' . $k['easytools_sklep'];
     $c = curl_init($url);
-    $opcje = [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 5, CURLOPT_CUSTOMREQUEST => $metoda];
+    // REVIEW nr 5: panel przy kasie podaje easytools_timeout = 4 s; synchronizacja, cron i zwroty – domyślne 15 s
+    $limit = max(1, (int)($k['easytools_timeout'] ?? 15));
+    $opcje = [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => $limit, CURLOPT_CONNECTTIMEOUT => min(5, $limit), CURLOPT_CUSTOMREQUEST => $metoda];
     if ($body !== null) {
         $naglowki[] = 'Content-Type: application/json';
         $opcje[CURLOPT_POSTFIELDS] = json_encode($body);
@@ -77,7 +79,13 @@ function bon_et_dane_zamowienia(array $zam, ?string $transakcja, ?string $zaplac
             : (is_int($l['amount'] ?? null) && is_int($l['quantity'] ?? null) ? $l['amount'] * $l['quantity'] : null),
     ], $linie);
     $email = (string)($zam['customer']['email'] ?? $zam['customer_email'] ?? '');
+    // REVIEW nr 10: kontrola sumy – pozycje bonów razem vs kwota zamówienia bez order bumpów (tylko gdy wszystkie kwoty są znane)
+    $bumpy = array_filter((array)($zam['line_items'] ?? []), static fn($l) => is_array($l) && !empty($l['is_order_bump']));
+    $bumpyRazem = array_sum(array_map(static fn($l) => is_int($l['amount_total'] ?? null) ? $l['amount_total'] : 0, $bumpy));
+    $znane = $pozycje && is_int($zam['amount'] ?? null) && !in_array(null, array_column($pozycje, 'zaplacono'), true)
+        && !array_filter($bumpy, static fn($l) => !is_int($l['amount_total'] ?? null));
     return [
+        'kontrola_razem' => $znane ? ['pozycje' => array_sum(array_column($pozycje, 'zaplacono')), 'zamowienie' => $zam['amount'] - $bumpyRazem] : null,
         'pozycje' => count($pozycje) > 1 ? $pozycje : null, // jedna pozycja: jak dotąd (pola niżej)
         'zrodlo' => 'api',
         'zamowienie' => (string)$zam['id'],

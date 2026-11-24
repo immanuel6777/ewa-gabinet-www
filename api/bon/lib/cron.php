@@ -30,6 +30,13 @@ try {
     } catch (Throwable $e) {
         bon_zdarzenie($k, 'blad', ['plik' => 'cron (zwroty)'] + bon_opis_bledu($e));
     }
+    // REVIEW nr 3 (A1): zwrot w Easytools spoza panelu przy działającym bonie → alert (bez blokowania)
+    try {
+        $a1 = bon_zwroty_a1($k, $pdo);
+        if ($a1['sprawdzono'] > 0 || $a1['bledy'] > 0) bon_zdarzenie($k, 'a1-kontrola', $a1);
+    } catch (Throwable $e) {
+        bon_zdarzenie($k, 'blad', ['plik' => 'cron (A1)'] + bon_opis_bledu($e));
+    }
     echo json_encode($raport, JSON_UNESCAPED_UNICODE), "\n";
 } catch (Throwable $e) {
     error_log('bony/cron: ' . $e->getMessage());

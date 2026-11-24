@@ -142,5 +142,34 @@ function bon_testy_obsluga(array $k, PDO $pdo): array {
     [$kodG] = bon_panel_admin($k, $pdo, $sAdmin, ['kod' => $kodC, 'akcja' => 'cofnij-realizacje', 'realizacja' => $idOst, 'powod' => 'po rezygnacji']);
     $t('cofnięcie (3a): bon z rezygnacją – przycisku nie ma, serwer odmawia (409), saldo bez zmian',
         $idOst > 0 && ($hR2['cofnij_realizacje'] ?? null) === null && $kodG === 409 && $saldo() === ['130.00', 'withdrawn'], json_encode([$idOst, $kodG, $saldo()]));
+
+    // REVIEW nr 4 (R4): jeden zakup + 2× „Wyślij ponownie” (Karolina) → jedno „Sprzedano bon” u gabinetu (katalog tymczasowy)
+    $kat4 = sys_get_temp_dir() . '/bony-sprzedano-' . bin2hex(random_bytes(4));
+    @mkdir($kat4, 0700, true);
+    $k4 = array_replace($k, ['_katalog' => $kat4]);
+    $sprzedano = static fn() => substr_count((string)@file_get_contents($kat4 . '/bony-powiadomienia.txt'), '== Sprzedano bon');
+    $ponownie = static function (array $kk, string $kodP, array $s) use ($pdo): array {
+        [, , $zamP] = bon_panel_wyslij_ponownie($kk, $pdo, $s, ['kod' => $kodP]) + [2 => null];
+        return $zamP !== null ? bon_wyslij_zamowienie($kk, $pdo, $zamP, true) : [];
+    };
+    $p4 = bon_test_payload(['price_custom_id' => 'bon-200', 'amount_paid' => 200]);
+    [, , $z4] = bon_test_webhook($k4, $pdo, $p4);
+    if ($z4) $z4();
+    $kod4 = (string)bon_test_bony($k4, $pdo, $p4['order_id'])[0]['code'];
+    $w1 = $ponownie($k4, $kod4, $sKasa);
+    $w2 = $ponownie($k4, $kod4, $sKasa);
+    $t('REVIEW R4: zakup + 2× „Wyślij ponownie” → jedno „Sprzedano bon”, obie wysyłki udane, w wyniku sprzedano_pominiete',
+        $sprzedano() === 1 && ($w1['wyslane'] ?? 0) === 1 && ($w2['wyslane'] ?? 0) === 1 && ($w2['sprzedano_pominiete'] ?? false), json_encode([$sprzedano(), $w1, $w2]));
+    // pierwsza wysyłka nieudana → pierwsza udana „Wyślij ponownie” to jedyne „Sprzedano” (gabinet musi się dowiedzieć o sprzedaży)
+    $p5 = bon_test_payload(['price_custom_id' => 'bon-200', 'amount_paid' => 200]);
+    [, , $z5] = bon_test_webhook(array_replace($k4, ['mailjet_test_blad' => true]), $pdo, $p5);
+    $przed5 = $sprzedano();
+    if ($z5) $z5();
+    $kod5 = (string)bon_test_bony($k4, $pdo, $p5['order_id'])[0]['code'];
+    $ponownie(array_replace($k4, ['mailjet_test_blad' => false]), $kod5, $sKasa);
+    $t('REVIEW R4: pierwsza wysyłka nieudana, „Wyślij ponownie” udana → jedno „Sprzedano bon”', $sprzedano() === $przed5 + 1, (string)($sprzedano() - $przed5));
+    foreach (glob($kat4 . '/*/*') ?: [] as $f) @unlink($f);
+    foreach (glob($kat4 . '/*') ?: [] as $f) is_dir($f) ? @rmdir($f) : @unlink($f);
+    @rmdir($kat4);
     return $wyniki;
 }

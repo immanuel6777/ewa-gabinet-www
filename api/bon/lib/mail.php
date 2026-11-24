@@ -222,8 +222,11 @@ function bon_powiadomienie_bledu_czas(array $k, string $zamowienie, bool $blad, 
 /**
  * Wysyła PDF-y niewysłanych, ważnych bonów zamówienia. Bezpieczne do wielokrotnego wywołania.
  * Zwraca ['wyslane' => liczba bonów, 'blad' => ?string, 'pominieto' => ?string].
+ * $ponownie (REVIEW nr 4): „Wyślij ponownie” z panelu (wyslij.php) – gdy każdy ważny bon zamówienia był już wcześniej wysłany
+ * (wpis „mail” w historii), gabinet dostał już „Sprzedano bon”: bez drugiego maila, w wyniku sprzedano_pominiete (do dziennika).
+ * Samo mail_wyslany_at nie wystarcza – „Wyślij ponownie” zeruje je przed wysyłką.
  */
-function bon_wyslij_zamowienie(array $k, PDO $pdo, string $zamowienie): array {
+function bon_wyslij_zamowienie(array $k, PDO $pdo, string $zamowienie, bool $ponownie = false): array {
     $tab = bon_tabela($k, 'vouchers');
     // skrót, bo GET_LOCK przyjmuje najwyżej 64 znaki, a order_id z Easytools może mieć do 64
     $blokada = 'bon_mail_' . md5($tab . '|' . $zamowienie);
@@ -236,6 +239,13 @@ function bon_wyslij_zamowienie(array $k, PDO $pdo, string $zamowienie): array {
 
         // bony tego zamówienia wysłane we wcześniejszej próbie (np. 1. paczka przeszła, 2. nie) – powiadomienie o sprzedaży i tak idzie
         $wczesniej = (int)$pdo->query("SELECT COUNT(*) FROM $tab WHERE easytools_order_id = " . $pdo->quote($zamowienie) . ' AND mail_wyslany_at IS NOT NULL')->fetchColumn();
+        $juzSprzedano = false;
+        if ($ponownie) {
+            $niewyslane = $pdo->prepare("SELECT COUNT(*) FROM $tab b WHERE b.easytools_order_id = ? AND b.status = 'valid' AND NOT EXISTS
+                (SELECT 1 FROM " . bon_tabela($k, 'voucher_admin_log') . " l WHERE l.voucher_id = b.id AND l.akcja = 'mail')");
+            $niewyslane->execute([$zamowienie]);
+            $juzSprzedano = (int)$niewyslane->fetchColumn() === 0;
+        }
         $wyslane = 0;
         $blad = null;
         $mailjet = [];
@@ -299,6 +309,9 @@ function bon_wyslij_zamowienie(array $k, PDO $pdo, string $zamowienie): array {
                     . "Bony: {$kody}\nWysłane w tej próbie: $wyslane\n"
                     . "Synchronizacja (cron co godzinę) sama ponawia wysyłkę. Kolejne przypomnienie o tym zamówieniu najwcześniej za 24 h.");
             }
+        } elseif ($juzSprzedano) {
+            bon_powiadomienie_bledu_czas($k, $zamowienie, false);
+            return ['zamowienie' => $zamowienie, 'wyslane' => $wyslane, 'blad' => null, 'pominieto' => null, 'mailjet' => $mailjet, 'sprzedano_pominiete' => true];
         } else {
             bon_powiadomienie_bledu_czas($k, $zamowienie, false);
             $suma = array_sum(array_map(static fn($b) => (int)bon_grosze($b['initial_pln']), $bony));

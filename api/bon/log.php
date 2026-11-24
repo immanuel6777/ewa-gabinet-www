@@ -34,6 +34,19 @@ if (($_GET['siec'] ?? '') === '1') {
     exit;
 }
 
+// ?adres=1 (REVIEW nr 14): co serwer widzi jako adres WYWOŁUJĄCEGO (osoby z tokenem, nie klientów) – REMOTE_ADDR i nagłówki
+// pośrednika. Zapytanie z dwóch sieci: ten sam REMOTE_ADDR przy różnych publicznych IP = pośrednik, limity liczone wspólnie.
+if (($_GET['adres'] ?? '') === '1') {
+    header('Content-Type: application/json; charset=utf-8');
+    $naglowki = [];
+    foreach (['HTTP_X_FORWARDED_FOR', 'HTTP_X_REAL_IP', 'HTTP_FORWARDED', 'HTTP_X_CLIENT_IP', 'HTTP_CF_CONNECTING_IP', 'HTTP_X_FORWARDED_PROTO'] as $n) {
+        if (isset($_SERVER[$n])) $naglowki[$n] = mb_substr((string)$_SERVER[$n], 0, 200);
+    }
+    echo json_encode(['remote_addr' => (string)($_SERVER['REMOTE_ADDR'] ?? ''), 'naglowki_posrednika' => $naglowki],
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    exit;
+}
+
 $liczba = static fn(string $nazwa, int $domyslnie, int $max): int => max(1, min($max, (int)($_GET[$nazwa] ?? $domyslnie)));
 header('Content-Type: application/json; charset=utf-8');
 echo json_encode(bon_diagnostyka($k, $liczba('n', 10, 50), $liczba('dni', 2, 14), $liczba('bony', 20, 100), $liczba('z', 40, 200)),

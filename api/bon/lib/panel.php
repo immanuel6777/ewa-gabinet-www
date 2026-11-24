@@ -223,9 +223,31 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
         $r = $odp['rezygnacja'];
         $odp['zwrot'] = $r && $bon['status'] === 'withdrawn' && in_array($r['stan'], ['oczekuje', 'nieudany'], true)
             ? ['kwota' => $r['kwota'], 'zamowienie' => $bon['easytools_order_id'], 'email' => $bon['buyer_email'], 'ponowienie' => $r['stan'] === 'nieudany',
-               'transakcja' => !empty($bon['easytools_transaction_id'])]
+               'transakcja' => !empty($bon['easytools_transaction_id']), 'blokada' => null, 'oznacz' => false, 'przyjety' => false]
             : null;
-        if (function_exists('bon_panel_platnosc')) $odp['platnosc'] = bon_panel_platnosc($k, $bon);
+        // REVIEW nr 5: API Easytools w tym żądaniu tylko przy bonie z rezygnacją albo na „Sprawdź płatność” (historia.php?platnosc=1
+        // → $k['_platnosc_z_api']), z timeoutem 4 s – otwarcie zwykłego bonu przy kasie nie czeka na Easytools
+        $pRaw = null;
+        $zApi = $bon['status'] === 'withdrawn' || !empty($k['_platnosc_z_api']);
+        if ($zApi && function_exists('bon_et_platnosc') && !empty($bon['easytools_transaction_id'])) {
+            $pRaw = bon_et_platnosc(array_replace($k, ['easytools_timeout' => 4]), (string)$bon['easytools_transaction_id']);
+        }
+        // REVIEW nr 1–2: przycisk pokazuje kwotę, która naprawdę wyjdzie; przy zwrocie spoza panelu albo zablokowanym ponowieniu –
+        // bez przycisku, z powodem i „Oznacz zwrot” (ta sama ocena co w bon_panel_zwroc)
+        if ($odp['zwrot'] && $pRaw && !isset($pRaw['blad'])) {
+            $stW = $pdo->prepare('SELECT * FROM ' . bon_tabela($k, 'voucher_withdrawals') . ' WHERE voucher_id = ?');
+            $stW->execute([$bon['id']]);
+            if ($wiersz = $stW->fetch()) {
+                $ocena = bon_zwrot_ocena($k, $pdo, $bon, $wiersz, $pRaw);
+                $odp['zwrot']['kwota'] = bon_zl($ocena['kwota']);
+                $odp['zwrot']['blokada'] = $ocena['blokada'];
+                $odp['zwrot']['oznacz'] = $ocena['oznacz'];
+                $odp['zwrot']['przyjety'] = $ocena['kod'] === 'przyjety';
+            }
+        }
+        if (function_exists('bon_panel_platnosc')) {
+            $odp['platnosc'] = !$zApi && !empty($bon['easytools_transaction_id']) ? ['na_zadanie' => true] : bon_panel_platnosc($k, $bon, $pRaw);
+        }
         // obsługa kupującego (TA-11): obecny adres do potwierdzenia z kupującym, „Wyślij ponownie” i „Pobierz PDF”
         $odp['obsluga'] = ['email' => $bon['buyer_email'], 'wyslij' => $bon['status'] === 'valid', 'pdf' => in_array($bon['status'], ['valid', 'used'], true)];
         // formularz „Zarejestruj rezygnację”: tylko bon ważny w bazie z saldem (bon_panel_zarejestruj_rezygnacje sprawdza to samo)
@@ -759,7 +781,9 @@ function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
                 // pieniądze oddane ręcznie w Easytools: oczekująca rezygnacja → 'zlecony' z zwrot_ref = 'recznie', żeby lista
                 // oczekujących w kroku 3 nie zleciła drugiego zwrotu przez API (krok 3 nie odpytuje transakcji dla 'recznie')
                 $pdo->prepare('UPDATE ' . bon_tabela($k, 'voucher_withdrawals') . " SET zwrot_stan = 'zlecony', zwrot_zlecono_at = ?, zwrot_kwota_pln = kwota_pln, zwrot_ref = 'recznie'
-                               WHERE voucher_id = ? AND zwrot_stan = 'oczekuje'")->execute([$teraz->format('Y-m-d H:i:s'), $bon['id']]);
+                               WHERE voucher_id = ? AND zwrot_stan IN ('oczekuje', 'nieudany')")->execute([$teraz->format('Y-m-d H:i:s'), $bon['id']]);
+                // REVIEW nr 2: także po nieudanym zleceniu (kilka bonów po HTTP 0 → „Oznacz zwrot”), inaczej ten zwrot zostałby
+                // nieznany panelowi i blokował zwrot przyciskiem pozostałych bonów zamówienia
                 $opis .= '; rezygnacja zamknięta (zwrot ręczny w Easytools)';
             }
         } elseif ($akcja === 'rezygnacja') {

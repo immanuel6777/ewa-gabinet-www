@@ -22,7 +22,7 @@ try {
     [$kod, $odp, $zam] = bon_panel_wyslij_ponownie($k, $pdo, $sesja, $d) + [2 => null];
     if ($zam !== null) {
         @set_time_limit(120);
-        $w = bon_wyslij_zamowienie($k, $pdo, $zam);
+        $w = bon_wyslij_zamowienie($k, $pdo, $zam, true); // REVIEW nr 4: bez drugiego „Sprzedano bon” (wpis w dzienniku niżej)
         bon_zdarzenie($k, 'mail', ['po' => 'ponownie', 'kto' => $sesja['login'], 'zmiana_adresu' => $odp['zmiana_adresu']] + $w);
         $odp['wyslane'] = (int)($w['wyslane'] ?? 0);
         if (!empty($w['blad'])) {

@@ -552,6 +552,16 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
         foreach ($wyliczone as &$w) if ($w['uwagi']) $w['uwagi'][] = 'zamówienie z ' . count($wyliczone) . ' pozycji';
         unset($w);
     }
+    // REVIEW nr 10 (bezpiecznik): suma pozycji ≠ kwota zamówienia (np. rabat na koszyk niewidoczny w pozycjach) → „zapłacono”
+    // przy bonach byłoby złe (zwrot proporcjonalny oddałby rabat), więc WSZYSTKIE bony zamówienia held z uwagą; alert niżej
+    $kr = $z['kontrola_razem'] ?? null;
+    if (is_array($kr) && (int)$kr['pozycje'] !== (int)$kr['zamowienie']) {
+        foreach ($wyliczone as &$w) {
+            $w['status'] = 'held';
+            $w['uwagi'][] = 'suma pozycji ' . bon_zl((int)$kr['pozycje']) . ' zł ≠ kwota zamówienia ' . bon_zl((int)$kr['zamowienie']) . ' zł (rabat na koszyk?) – sprawdź „zapłacono” przy bonach';
+        }
+        unset($w);
+    }
     $statusy = array_unique(array_column($wyliczone, 'status'));
     $status = count($statusy) === 1 ? $statusy[0] : 'czesciowo';
     $uwagi = array_merge(...array_map(static fn($w) => $w['uwagi'], $wyliczone));

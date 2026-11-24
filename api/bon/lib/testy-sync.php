@@ -196,6 +196,20 @@ function bon_testy_sync(array $k, PDO $pdo): array {
         && count($mc) === 1 && count($mc[0]['Attachments'] ?? []) === 1
         && str_contains($powNowe, 'Część bonów') && str_contains($powNowe, '• Bon Diamentowy: 1 szt.'), $powNowe);
 
+    // REVIEW nr 10 (R9): suma pozycji ≠ kwota zamówienia (rabat na koszyk, którego pozycje nie pokazują) → wszystkie bony held + alert
+    $rozjazd = $dodaj(['amount' => 45000, 'quantity' => 2, 'line_items' => [$linia('Bon Szmaragdowy', 1, 20000), $linia('Bon Rubinowy', 1, 30000)]]);
+    $powPrzed = (string)@file_get_contents($plikPowM);
+    $przedM = $ileMaili();
+    [, $zad] = bon_synchronizuj($ks, $pdo, 'cron');
+    foreach ($zad as $z) $z();
+    $br = bon_test_bony($k, $pdo, $rozjazd['id']);
+    $powNowe = substr((string)@file_get_contents($plikPowM), strlen($powPrzed));
+    $t('REVIEW nr 10: koszyk 200+300, zamówienie 450 zł → oba bony wstrzymane z uwagą o sumie, alert, bez maila z bonami',
+        count($br) === 2 && array_unique(array_column($br, 'status')) === ['held'] && str_contains((string)$br[0]['status_uwagi'], 'suma pozycji 500.00 zł')
+        && str_contains($powNowe, 'Bon WSTRZYMANY') && str_contains($powNowe, 'kwota zamówienia 450.00 zł') && !$zBonami(array_column($br, 'code')),
+        json_encode([$br, $powNowe], JSON_UNESCAPED_UNICODE));
+    // kontrola: zgodna suma z order bumpem (125000 = 20000 + 100000 + 5000 bump) nie wstrzymuje – test „koszyk mieszany” wyżej
+
     // nowe nazwy wariantów (Bartek 2026-11-24): ten sam bon co pod starą nazwą; nazwa w mailu wg rodzaju bonu
     $rub = $dodaj(['amount' => 30000, 'line_items' => [['variant_name' => 'Bon Rubinowy', 'amount' => 30000, 'amount_total' => 30000]]]);
     $szaf = $dodaj(['amount' => 50000, 'line_items' => [['variant_name' => 'bon szafirowy', 'amount' => 50000, 'amount_total' => 50000]]]);

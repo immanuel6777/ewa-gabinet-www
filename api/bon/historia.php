@@ -12,6 +12,8 @@ require __DIR__ . '/lib/rezygnacja.php'; // wpis 17:35: stan potwierdzenia rezyg
 [$k, $pdo, $token] = bon_http_start(['GET']);
 try {
     $sesja = bon_http_wymagaj_sesji($k, $pdo, $token);
+    // REVIEW nr 5: ?platnosc=1 – „Sprawdź płatność w Easytools” (bez tego API tylko przy bonie z rezygnacją)
+    if (!empty($_GET['platnosc'])) $k['_platnosc_z_api'] = true;
     // P-10: ?uchwyt=… (bon z wyników wyszukiwania po e-mailu / zamówieniu) – numer zamaskowany do potwierdzenia (poza adminem)
     [$kod, $odp] = isset($_GET['uchwyt'])
         ? bon_panel_historia_uchwyt($k, $pdo, $sesja, (string)$_GET['uchwyt'])
