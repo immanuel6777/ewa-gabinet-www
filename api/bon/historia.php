@@ -10,7 +10,10 @@ require __DIR__ . '/lib/panel-http.php';
 [$k, $pdo, $token] = bon_http_start(['GET']);
 try {
     $sesja = bon_http_wymagaj_sesji($k, $pdo, $token);
-    [$kod, $odp] = bon_panel_historia($k, $pdo, $sesja, (string)($_GET['code'] ?? $_GET['kod'] ?? ''));
+    // P-10: ?uchwyt=… (bon z wyników wyszukiwania po e-mailu / zamówieniu) – numer zamaskowany do potwierdzenia (poza adminem)
+    [$kod, $odp] = isset($_GET['uchwyt'])
+        ? bon_panel_historia_uchwyt($k, $pdo, $sesja, (string)$_GET['uchwyt'])
+        : bon_panel_historia($k, $pdo, $sesja, (string)($_GET['code'] ?? $_GET['kod'] ?? ''));
     bon_json($kod, $odp);
 } catch (Throwable $e) {
     error_log('bony/historia: ' . $e->getMessage());

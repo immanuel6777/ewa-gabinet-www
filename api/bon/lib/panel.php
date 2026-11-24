@@ -234,7 +234,7 @@ const BON_PANEL_ZDARZENIA = [
     'przypomnienie' => 'Przypomnienie o końcu ważności', 'zwrot-zlecony' => 'Zwrot zlecony', 'zwrot-potwierdzony' => 'Zwrot potwierdzony',
     'zwrot-nieudany' => 'Zwrot nieudany',
     'mail-odbity' => 'Mail z bonem NIE dotarł', 'adres' => 'Zmieniony adres e-mail', 'mail-ponownie' => 'Wysyłka ponowna',
-    'pdf' => 'PDF pobrany w panelu', 'realizacja-cofnieta' => 'Realizacja cofnięta',
+    'pdf' => 'PDF pobrany w panelu', 'realizacja-cofnieta' => 'Realizacja cofnięta', 'numer-potwierdzony' => 'Numer potwierdzony przez pacjenta',
 ];
 
 // --- cofnięcie ostatniej realizacji (2026-11-24, wpisy 14:10 i 15:00) ---
@@ -283,7 +283,10 @@ function bon_panel_mail_odbity(array $zdarzenia): bool {
  * tylko admin). Potem wszystkie ważne bony zamówienia do ponownej wysyłki (mail_wyslany_at = NULL) – wysyła wywołujący.
  */
 function bon_panel_wyslij_ponownie(array $k, PDO $pdo, array $sesja, array $dane, ?DateTimeImmutable $teraz = null): array {
-    if ($sesja['rola'] !== 'admin' && empty($sesja['rezygnacje'])) return [403, ['ok' => false, 'blad' => 'Wysyłkę ponowną i zmianę adresu robią Bartek albo Ewa.']];
+    // P-10 (2026-11-24): wysyłka ponowna NA TEN SAM adres kupującego – każda rola (pacjent bez bonu przy sobie, przycisk przy masce);
+    // zmiana adresu nadal tylko Bartek i Ewa
+    $uprawniony = $sesja['rola'] === 'admin' || !empty($sesja['rezygnacje']);
+    if (!$uprawniony && trim((string)($dane['email'] ?? '')) !== '') return [403, ['ok' => false, 'blad' => 'Zmianę adresu robią Bartek albo Ewa.']];
     $teraz ??= bon_teraz();
     $tabB = bon_tabela($k, 'vouchers');
     $pdo->beginTransaction();
@@ -351,7 +354,7 @@ function bon_panel_rezygnacja(array $k, PDO $pdo, int $voucherId): ?array {
 const BON_PANEL_SZUKAJ_MAX = 20;
 
 /** [kod HTTP, odpowiedź]: {typ: kod, kod} albo {typ: email|zamowienie, bony: [...], wiecej}. */
-function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $teraz = null): array {
+function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $teraz = null, ?array $sesja = null): array {
     $q = trim($q);
     $kod = bon_normalizuj_kod($q, (string)$k['kod_prefix']);
     if ($kod !== null) return [200, ['ok' => true, 'typ' => 'kod', 'kod' => $kod]];
@@ -371,8 +374,12 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
     $st = $pdo->prepare("SELECT * FROM $tab WHERE LOWER($kolumna) = ? ORDER BY created_at DESC, id DESC LIMIT " . (BON_PANEL_SZUKAJ_MAX + 1));
     $st->execute([$wartosc]);
     $wiersze = $st->fetchAll();
-    $bony = array_map(static fn($b) => [
-        'kod' => $b['code'],
+    // P-10 (2026-11-24): poza adminem numer bonu znalezionego po e-mailu / zamówieniu jest zamaskowany – zamiast numeru uchwyt
+    // związany z sesją; pełny numer dopiero po potwierdzeniu 4 ostatnich znaków przez pacjenta (bon_panel_potwierdz_numer)
+    $maskuj = $sesja !== null && $sesja['rola'] !== 'admin';
+    $bony = array_map(static fn($b) => ($maskuj
+        ? ['kod' => null, 'kod_maska' => bon_panel_maska((string)$b['code']), 'uchwyt' => bon_panel_uchwyt($k, $sesja, (int)$b['id'])]
+        : ['kod' => $b['code']]) + [
         'status' => bon_status_efektywny($b, $teraz),
         'saldo' => bon_zl((int)bon_grosze($b['balance_pln'])),
         'wartosc' => bon_zl((int)bon_grosze($b['initial_pln'])),
@@ -380,6 +387,61 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
         'kupiono' => substr((string)$b['created_at'], 0, 10),
     ], array_slice($wiersze, 0, BON_PANEL_SZUKAJ_MAX));
     return [200, ['ok' => true, 'typ' => $typ, 'bony' => $bony, 'wiecej' => count($wiersze) > BON_PANEL_SZUKAJ_MAX]];
+}
+
+// --- P-10 (2026-11-24, wpis 14:35): bon znaleziony po e-mailu kupującego albo zamówieniu – numer zamaskowany do potwierdzenia ---
+// Numer bonu jest tajny, adres kupującego nie: ktoś znający adres mógłby przyjść „z bonem”. Poza adminem wyszukiwanie po e-mailu /
+// zamówieniu nie zwraca numeru, tylko uchwyt (id bonu + HMAC z csrf sesji – ważny tylko w tej sesji). Bez pełnego numeru nie ma
+// realizacji (redeem.php wymaga numeru), PDF-u ani zmian. Pełny numer: po wpisaniu 4 ostatnich znaków podanych przez pacjenta.
+const BON_P10_PROB_NA_GODZINE = 5;
+
+function bon_panel_maska(string $kod): string {
+    return explode('-', $kod)[0] . '-••••-••••';
+}
+
+function bon_panel_uchwyt(array $k, array $sesja, int $id): string {
+    return $id . '.' . substr(hash_hmac('sha256', 'uchwyt|' . $id, (string)$sesja['csrf'] . '|' . (string)($k['easytools_webhook_sekret'] ?? '')), 0, 24);
+}
+
+/** Bon z uchwytu tej sesji albo null (zły, z innej sesji, nieistniejący bon). */
+function bon_panel_z_uchwytu(array $k, PDO $pdo, array $sesja, string $uchwyt): ?array {
+    if (!preg_match('/^(\d{1,10})\.[a-f0-9]{24}$/', $uchwyt, $m) || !hash_equals(bon_panel_uchwyt($k, $sesja, (int)$m[1]), $uchwyt)) return null;
+    $st = $pdo->prepare('SELECT * FROM ' . bon_tabela($k, 'vouchers') . ' WHERE id = ?');
+    $st->execute([(int)$m[1]]);
+    return $st->fetch() ?: null;
+}
+
+/**
+ * Bon otwarty z wyników wyszukiwania (uchwyt). Admin dostaje pełny bon jak po numerze. Pozostali: te same dane (saldo, ważność,
+ * stan, historia), ale numer zamaskowany i bez czynności, które wymagają numeru albo go ujawniają (realizacja, PDF, przedłużenie,
+ * cofnięcia, rezygnacja); zostaje „Wyślij bon ponownie na adres kupującego” (bez zmiany adresu).
+ */
+function bon_panel_historia_uchwyt(array $k, PDO $pdo, array $sesja, string $uchwyt, ?DateTimeImmutable $teraz = null): array {
+    $bon = bon_panel_z_uchwytu($k, $pdo, $sesja, $uchwyt);
+    if (!$bon) return [404, ['ok' => false, 'blad' => 'Nie udało się otworzyć bonu – wyszukaj go jeszcze raz.']];
+    [$kod, $odp] = bon_panel_historia($k, $pdo, $sesja, (string)$bon['code'], $teraz);
+    if ($kod !== 200 || $sesja['rola'] === 'admin') return [$kod, $odp];
+    return [200, array_replace($odp, [
+        'kod' => null, 'kod_maska' => bon_panel_maska((string)$bon['code']), 'zamaskowany' => true, 'uchwyt' => $uchwyt,
+        'przedluzenie' => null, 'cofnij_realizacje' => null, 'rezygnacja_mozliwa' => false,
+        'obsluga' => ['email' => null, 'wyslij' => $bon['status'] === 'valid', 'pdf' => false],
+    ])];
+}
+
+/** Potwierdzenie numeru przez pacjenta: 4 ostatnie znaki. [kod HTTP, odpowiedź] – po sukcesie pełny numer. Limit 5 prób na bon na godzinę. */
+function bon_panel_potwierdz_numer(array $k, PDO $pdo, array $sesja, string $uchwyt, string $koncowka, ?DateTimeImmutable $teraz = null): array {
+    $bon = bon_panel_z_uchwytu($k, $pdo, $sesja, $uchwyt);
+    if (!$bon) return [404, ['ok' => false, 'blad' => 'Nie udało się otworzyć bonu – wyszukaj go jeszcze raz.']];
+    if (!bon_limit_ok($pdo, $k, 'bon|' . $bon['id'], 'p10', BON_P10_PROB_NA_GODZINE, 3600)) {
+        return [429, ['ok' => false, 'blad' => 'Za dużo prób dla tego bonu. Spróbuj za godzinę albo wyślij bon ponownie na adres kupującego.']];
+    }
+    $wpisane = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $koncowka) ?? '');
+    $prawdziwe = substr(str_replace('-', '', (string)$bon['code']), -4);
+    if (strlen($wpisane) !== 4 || !hash_equals($prawdziwe, $wpisane)) {
+        return [403, ['ok' => false, 'blad' => 'To nie ten numer. Poproś pacjenta o bon albo wyślij go ponownie na adres kupującego.']];
+    }
+    bon_historia($k, $pdo, (int)$bon['id'], 'numer-potwierdzony', 'numer potwierdzony przez pacjenta (4 ostatnie znaki)', $sesja['login'], $teraz);
+    return [200, ['ok' => true, 'kod' => $bon['code']]];
 }
 
 // --- przedłużenie o 3 miesiące (krok 4): każda rola panelu; reguły w bon_przedluz (lib/bon.php) ---

@@ -13,6 +13,12 @@ require __DIR__ . '/lib/mail.php';
 try {
     $sesja = bon_http_wymagaj_sesji($k, $pdo, $token);
     $d = bon_http_json_body($sesja);
+    if (isset($d['uchwyt'])) {
+        // P-10: bon z zamaskowanym numerem – wysyłka ponowna tylko na ten sam adres kupującego (bez zmiany adresu)
+        $bonU = bon_panel_z_uchwytu($k, $pdo, $sesja, (string)$d['uchwyt']);
+        if (!$bonU) { bon_json(404, ['ok' => false, 'blad' => 'Nie udało się otworzyć bonu – wyszukaj go jeszcze raz.']); exit; }
+        $d = ['kod' => $bonU['code']];
+    }
     [$kod, $odp, $zam] = bon_panel_wyslij_ponownie($k, $pdo, $sesja, $d) + [2 => null];
     if ($zam !== null) {
         @set_time_limit(120);

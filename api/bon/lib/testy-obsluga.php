@@ -42,9 +42,10 @@ function bon_testy_obsluga(array $k, PDO $pdo): array {
     @rmdir($kat0);
 
     // --- uprawnienia ---
-    [$kodH] = bon_panel_wyslij_ponownie($k, $pdo, $sKasa, ['kod' => $kod]);
+    // P-10 (2026-11-24): kasa może wysłać ponownie NA TEN SAM adres (pacjent bez bonu), zmiana adresu i PDF nadal nie
+    [$kodH] = bon_panel_wyslij_ponownie($k, $pdo, $sKasa, ['kod' => $kod, 'email' => 'inny@example.com', 'potwierdzenie' => 'x']);
     [$kodP] = bon_panel_pdf_bon($k, $pdo, $sKasa, $kod);
-    $t('kasa (bez uprawnienia): wyślij ponownie i PDF → 403', $kodH === 403 && $kodP === 403);
+    $t('kasa (bez uprawnienia): zmiana adresu i PDF → 403, adres bez zmian', $kodH === 403 && $kodP === 403 && bon_test_bony($k, $pdo, $p['order_id'])[0]['buyer_email'] === $stary);
     [, $h] = bon_panel_historia($k, $pdo, $sEwa, $kod);
     $t('Ewa (uprawnienie rezygnacji): widzi obecny adres i przyciski, bez szczegółów historii', ($h['obsluga']['email'] ?? '') === $stary
         && ($h['obsluga']['wyslij'] ?? false) && ($h['obsluga']['pdf'] ?? false), json_encode($h['obsluga'] ?? null));

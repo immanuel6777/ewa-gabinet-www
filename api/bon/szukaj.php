@@ -10,7 +10,7 @@ require __DIR__ . '/lib/panel-http.php';
 try {
     $sesja = bon_http_wymagaj_sesji($k, $pdo, $token);
     $d = bon_http_json_body($sesja);
-    [$kod, $odp] = bon_panel_szukaj($k, $pdo, (string)($d['q'] ?? ''));
+    [$kod, $odp] = bon_panel_szukaj($k, $pdo, (string)($d['q'] ?? ''), null, $sesja); // P-10: poza adminem numery zamaskowane
     bon_json($kod, $odp);
     // bez wpisanego tekstu (e-mail = dane osobowe): tylko rodzaj wyszukiwania i liczba wyników
     bon_zdarzenie($k, 'szukaj', ['http' => $kod, 'kto' => $sesja['login'], 'typ' => (string)($odp['typ'] ?? ''), 'wynikow' => count($odp['bony'] ?? [])]);

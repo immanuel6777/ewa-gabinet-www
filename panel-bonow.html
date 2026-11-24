@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="/_astro/kokarda-czerwona-satyna.CzBMHDtY.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.DzKTunaL.css">
+<link rel="stylesheet" href="/_astro/panel-bonow.BNlqXEVI.css">
 <link rel="stylesheet" href="/_astro/Baza.CUaZgc7R.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
     <a class="przeskocz" href="#tresc">Przejdź do treści</a>
@@ -83,7 +83,7 @@
         </label>
         <button class="przycisk" type="submit" data-astro-cid-nl2nwxtk>Szukaj</button>
       </form>
-      <p class="podpowiedz" data-astro-cid-nl2nwxtk>Możesz też zeskanować kod QR z bonu aparatem telefonu – bon otworzy się od razu tutaj. Klient bez bonu? Wpisz e-mail, którym płacił.</p>
+      <p class="podpowiedz" data-astro-cid-nl2nwxtk>Możesz też zeskanować kod QR z bonu aparatem telefonu – bon otworzy się od razu tutaj. Pacjent bez bonu przy sobie? Znajdź bon po e-mailu kupującego, a potem poproś o cztery ostatnie znaki numeru.</p>
       <p class="blad" data-p-blad hidden data-astro-cid-nl2nwxtk></p>
 
       <!-- wyniki wyszukiwania po e-mailu albo zamówieniu (krok 4) -->
@@ -107,6 +107,17 @@
           <div data-p-przedluzony-wiersz hidden data-astro-cid-nl2nwxtk><dt data-astro-cid-nl2nwxtk>Przedłużony</dt><dd data-p-przedluzony data-astro-cid-nl2nwxtk></dd></div>
         </dl>
         <p class="info" data-p-rezygnacja hidden data-astro-cid-nl2nwxtk></p>
+        <!-- P-10: bon znaleziony po e-mailu / zamówieniu – numer zamaskowany do potwierdzenia przez pacjenta (poza adminem) -->
+        <div class="maska" data-p-maska hidden data-astro-cid-nl2nwxtk>
+          <p data-astro-cid-nl2nwxtk>Bon znaleziony po e-mailu albo numerze zamówienia. Zanim zrealizujesz, poproś pacjenta o <strong data-astro-cid-nl2nwxtk>cztery ostatnie znaki numeru bonu</strong> (z maila albo wydruku).</p>
+          <form class="maska-forma formularz" data-p-maska-forma data-astro-cid-nl2nwxtk>
+            <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Cztery ostatnie znaki numeru</span>
+              <input name="koncowka" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="4" minlength="4" required placeholder="np. 9PHZ" data-astro-cid-nl2nwxtk></label>
+            <button class="przycisk" type="submit" data-astro-cid-nl2nwxtk>Potwierdź numer</button>
+          </form>
+          <p class="blad" data-p-blad-maska hidden data-astro-cid-nl2nwxtk></p>
+          <button class="przycisk obrys" type="button" data-p-maska-wyslij data-astro-cid-nl2nwxtk>Wyślij bon ponownie na adres kupującego</button>
+        </div>
         <!-- TA-11: ostatni mail z bonem odbity (kontrola dostarczenia); znika po udanej wysyłce ponownej -->
         <p class="blad" data-p-odbity hidden data-astro-cid-nl2nwxtk>Mail z bonem NIE dotarł do kupującego. Potwierdź z nim adres i wyślij bon ponownie.</p>
         <!-- jedno bezpłatne przedłużenie o 3 mies. (regulamin), każda rola; dowolną datę zmienia admin niżej -->
@@ -610,4 +621,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.DPcpbHW3.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.DSbumd78.js"></script>
