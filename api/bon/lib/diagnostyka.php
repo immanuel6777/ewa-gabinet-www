@@ -169,6 +169,8 @@ function bon_diagnostyka(array $k, int $ile = 10, int $dni = 2, int $bony = 20, 
                 'test_aktywny' => bon_zapas_wymuszony($k),
             ],
         ],
+        // 2026-11-24 (wpis 11:30): skąd jest każde ustawienie jawne (kod / repo / serwer) i co Bartek ma usunąć z pliku na serwerze
+        'ustawienia' => bon_ustawienia_zrodla($k),
         'pliki_logu' => array_map(static fn($p) => ['plik' => basename($p), 'bajtow' => filesize($p), 'zmieniono' => date('c', (int)filemtime($p))],
             array_slice(array_reverse(glob($k['_katalog'] . '/bony-webhook-log/*.log') ?: []), 0, 14)),
         'zdarzenia' => bon_log_zdarzenia($k, $zdarzen, $dni),

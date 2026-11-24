@@ -531,5 +531,40 @@ function bon_testy(array $kBaza, PDO $pdo): array {
         $tz = $pdo->query("SELECT NOW() AS n, @@session.time_zone AS s, @@system_time_zone AS sys")->fetch();
         $t('MySQL: strefa czasu (informacyjnie – daty liczy PHP)', true, "NOW()={$tz['n']} session={$tz['s']} system={$tz['sys']} PHP=" . bon_teraz()->format('Y-m-d H:i:s'));
     }
+    // --- ustawienia z repo (2026-11-24, wpis 11:30): kod ← lib/ustawienia.php ← konfig na serwerze ---
+    $katU = sys_get_temp_dir() . '/bony-ustawienia-' . bin2hex(random_bytes(4));
+    @mkdir($katU, 0700, true);
+    file_put_contents("$katU/serwer.php", "<?php return ['db_dsn' => 'sqlite::memory:', 'prog_wstrzymania' => 0.8, 'telefon_pomoc_bony' => '111 222 333'];");
+    file_put_contents("$katU/repo.php", "<?php return ['prog_wstrzymania' => 0, 'telefon_pomoc_bony' => '506 102 340', 'sync_dni' => 3];");
+    $envK = getenv('BONY_KONFIG');
+    $envU = getenv('BONY_USTAWIENIA');
+    try {
+        putenv("BONY_KONFIG=$katU/serwer.php");
+        putenv("BONY_USTAWIENIA=$katU/repo.php");
+        $kU = bon_konfig();
+        $zr = bon_ustawienia_zrodla($kU);
+        $t('ustawienia: tylko w repo → z repo (sync_dni 3), w obu → serwer wygrywa (próg 0.8, telefon), brak w obu → kod (waznosc 6)',
+            $kU['sync_dni'] === 3 && $kU['prog_wstrzymania'] === 0.8 && $kU['telefon_pomoc_bony'] === '111 222 333' && $kU['waznosc_miesiecy'] === 6, json_encode($zr));
+        $t('ustawienia: log.php podaje źródło i listę „do usunięcia z serwera” z ostrzeżeniem o innej wartości',
+            $zr['ustawienia']['sync_dni'] === 'repo' && $zr['ustawienia']['prog_wstrzymania'] === 'serwer' && $zr['ustawienia']['waznosc_miesiecy'] === 'kod'
+            && $zr['do_usuniecia'] === ['prog_wstrzymania', 'telefon_pomoc_bony'] && $zr['serwer_nadpisuje_inaczej'] === ['prog_wstrzymania', 'telefon_pomoc_bony']
+            && !array_key_exists('db_dsn', $zr['ustawienia']), json_encode($zr));
+        putenv('BONY_USTAWIENIA=brak');
+        $kB = bon_konfig();
+        $t('ustawienia: brak pliku w repo → jak dotąd (serwer + domyślne w kodzie)', $kB['sync_dni'] === 7 && $kB['prog_wstrzymania'] === 0.8 && !isset($kB['easytools_produkt_uuid']));
+        putenv('BONY_USTAWIENIA');
+        $uR = bon_ustawienia_repo();
+        $tajne = ['easytools_api_key', 'easytools_webhook_sekret', 'db_dsn', 'db_uzytkownik', 'db_haslo', 'mailjet_api_key', 'mailjet_api_secret',
+            'mail_smtp_haslo', 'panel_konta', 'log_token', 'test_token'];
+        $t('lib/ustawienia.php w repo: same ustawienia jawne, żadnych sekretów ani kont', $uR && !array_intersect(array_keys($uR), $tajne)
+            && !array_diff(array_keys($uR), BON_USTAWIENIA_JAWNE), json_encode(array_keys($uR)));
+    } finally {
+        putenv($envK === false ? 'BONY_KONFIG' : "BONY_KONFIG=$envK");
+        putenv($envU === false ? 'BONY_USTAWIENIA' : "BONY_USTAWIENIA=$envU");
+        @unlink("$katU/serwer.php");
+        @unlink("$katU/repo.php");
+        @rmdir($katU);
+    }
+
     return array_merge($wyniki, bon_testy_panel($k, $pdo), bon_testy_sync($k, $pdo), bon_testy_krok1($k, $pdo), bon_testy_krok4($k, $pdo), bon_testy_obsluga($k, $pdo));
 }

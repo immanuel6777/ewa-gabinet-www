@@ -19,8 +19,10 @@ function bon_konfig(): array {
     if (!is_file($plik)) throw new RuntimeException('brak konfiguracji bonów');
     $k = require $plik;
     if (!is_array($k)) throw new RuntimeException('konfiguracja bonów nie zwraca tablicy');
+    // 2026-11-24 (wpis 11:30): domyślne w kodzie ← lib/ustawienia.php z repo ← konfig/bony.php na serwerze (serwer wygrywa)
+    $k['_serwer_klucze'] = array_keys($k);
     $k['_katalog'] = dirname($plik);
-    return $k + [
+    return $k + bon_ustawienia_repo() + [
         'webhook_tryb' => 'log',
         'tabele_przedrostek' => '',
         'kwota_jednostka' => 'pln',
@@ -46,6 +48,41 @@ function bon_konfig(): array {
         'sync_dni' => 7,
         'sync_odstep_s' => 20,
     ];
+}
+
+/** Ustawienia jawne z repo (lib/ustawienia.php); BONY_USTAWIENIA podmienia plik (testy), 'brak' = bez pliku. Zły plik = wyjątek. */
+function bon_ustawienia_repo(): array {
+    $plik = getenv('BONY_USTAWIENIA') ?: __DIR__ . '/ustawienia.php';
+    if ($plik === 'brak' || !is_file($plik)) return [];
+    $u = require $plik;
+    if (!is_array($u)) throw new RuntimeException('lib/ustawienia.php nie zwraca tablicy');
+    return $u;
+}
+
+/** Ustawienia jawne (wpis 11:30) – w log.php ze źródłem wartości: kod / repo / serwer. */
+const BON_USTAWIENIA_JAWNE = [
+    'sync_tryb', 'sync_od', 'sync_dni', 'sync_odstep_s', 'warianty', 'nazwy_bonow', 'ceny', 'prog_wstrzymania', 'min_dowolna_pln',
+    'waznosc_miesiecy', 'kod_prefix', 'verify_limit_na_minute', 'mail_nadawca', 'mail_odpowiedz', 'mail_powiadomienie',
+    'telefon_pomoc_bony', 'telefon_pomoc_bony_godziny', 'mail_zapas', 'mail_smtp_host', 'mail_smtp_port', 'mail_smtp_user',
+    'webhook_tryb', 'kwota_jednostka', 'easytools_tryb', 'easytools_produkt_uuid', 'bon_adres_pelny_min',
+];
+
+/**
+ * Skąd jest każde ustawienie jawne: ['zrodlo' => kod|repo|serwer, 'inne_niz_repo' => bool]. Bez wartości (adresy w mail_*).
+ * „do_usuniecia” = klucze jawne w pliku na serwerze – po sprzątaniu lista ma być pusta (serwer trzyma tylko sekrety i konta).
+ */
+function bon_ustawienia_zrodla(array $k): array {
+    $repo = bon_ustawienia_repo();
+    $serwer = array_flip((array)($k['_serwer_klucze'] ?? []));
+    $wynik = ['ustawienia' => [], 'do_usuniecia' => [], 'serwer_nadpisuje_inaczej' => []];
+    foreach (BON_USTAWIENIA_JAWNE as $kl) {
+        $zrodlo = isset($serwer[$kl]) ? 'serwer' : (array_key_exists($kl, $repo) ? 'repo' : 'kod');
+        $inne = $zrodlo === 'serwer' && array_key_exists($kl, $repo) && $repo[$kl] != ($k[$kl] ?? null);
+        $wynik['ustawienia'][$kl] = $zrodlo;
+        if ($zrodlo === 'serwer') $wynik['do_usuniecia'][] = $kl;
+        if ($inne) $wynik['serwer_nadpisuje_inaczej'][] = $kl;
+    }
+    return $wynik;
 }
 
 function bon_pdo(array $k): PDO {
