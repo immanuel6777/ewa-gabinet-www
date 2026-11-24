@@ -317,20 +317,75 @@ function bon_tekst(?string $v, int $max): string {
     return mb_substr(trim($v), 0, $max, 'UTF-8');
 }
 
+// --- wspólny szablon HTML maili bonów (wpis 19:26): ten sam wygląd co mail z bonem dla potwierdzeń, maili obsługi i alertów ---
+// Kolory i typografia jak na stronie (--c-ink #17504B, --c-akcja #236E66, Lato). Wersja tekstowa zostaje osobno (text/plain).
+
+/**
+ * Cały dokument HTML maila: nagłówek, treść (gotowy HTML), przyciski [[tekst, adres], …] i stopka.
+ * $wewnetrzny – mail do gabinetu (bony@, alerty@): stopka „System bonów”, bez pozdrowień dla klienta.
+ */
+function bon_mail_szablon(string $naglowek, string $trescHtml, array $przyciski = [], bool $wewnetrzny = false): string {
+    $e = static fn(string $s) => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+    $guziki = '';
+    foreach ($przyciski as [$napis, $adres]) {
+        $guziki .= '<p style="margin:22px 0"><a href="' . $e((string)$adres) . '" style="display:inline-block;background:#236E66;color:#ffffff;'
+            . 'text-decoration:none;padding:13px 24px;border-radius:999px;font-weight:bold;font-size:17px">' . $e((string)$napis) . '</a></p>';
+    }
+    $stopka = $wewnetrzny
+        ? '<p style="margin-top:28px;color:#3E6863;font-size:14px">System bonów · ewa-gabinet.pl</p>'
+        : '<p>Pozdrawiamy serdecznie<br>EWA Gabinet podologiczny<br><a href="https://www.ewa-gabinet.pl" style="color:#17504B">www.ewa-gabinet.pl</a></p>';
+    return '<!doctype html><html lang="pl"><body style="margin:0;background:#FBF7F4;font-family:Lato,Arial,sans-serif;color:#17504B;font-size:17px;line-height:1.55">'
+        . '<div style="max-width:560px;margin:0 auto;padding:28px 22px;background:#ffffff">'
+        . '<p style="font-size:24px;font-weight:300;margin:0 0 16px">' . $e($naglowek) . '</p>'
+        . $trescHtml . $guziki . $stopka
+        . '</div></body></html>';
+}
+
+/**
+ * Tekst maila → HTML treści: akapity po pustych liniach, w akapicie <br>, adresy https klikalne. Podpis „Pozdrawiamy serdecznie…”
+ * z końca tekstu pomijamy – w HTML daje go stopka szablonu.
+ */
+function bon_mail_tekst_na_html(string $tekst): string {
+    $tekst = preg_replace('/\n+Pozdrawiamy serdecznie\n.*$/su', '', rtrim($tekst)) ?? $tekst;
+    $akapity = preg_split('/\n\s*\n/', trim($tekst)) ?: [];
+    $html = '';
+    foreach ($akapity as $a) {
+        $a = htmlspecialchars($a, ENT_QUOTES, 'UTF-8');
+        $a = preg_replace('#https://[^\s<]+#', '<a href="$0" style="color:#17504B">$0</a>', $a) ?? $a;
+        $html .= '<p>' . nl2br($a, false) . '</p>';
+    }
+    return $html;
+}
+
+/** HTML alertu gabinetu: szablon wewnętrzny, przycisk „Otwórz bon w panelu”, gdy w treści jest numer bonu (pierwszy z treści). */
+function bon_powiadom_html(string $temat, string $tresc): string {
+    $przyciski = [];
+    if (preg_match('/\bEWA-[A-Z0-9]{4}-[A-Z0-9]{4}\b/', $temat . "\n" . $tresc, $m)) {
+        $przyciski[] = ['Otwórz bon w panelu', 'https://www.ewa-gabinet.pl/panel-bonow?nr=' . rawurlencode($m[0])];
+    }
+    return bon_mail_szablon($temat, bon_mail_tekst_na_html($tresc), $przyciski, true);
+}
+
 // --- powiadomienia (etap 1: mail() z OVH; etap 2: Mailjet) ---
 function bon_powiadom(array $k, string $temat, string $tresc): bool {
     $do = (array)($k['mail_powiadomienie'] ?? []);
     if (!$do) return false;
-    if ($k['mail_tryb'] === 'plik') { // testy: zamiast wysyłki dopisanie do pliku obok konfiguracji
+    $html = bon_powiadom_html($temat, $tresc);
+    if ($k['mail_tryb'] === 'plik') { // testy: zamiast wysyłki dopisanie do pliku obok konfiguracji (+ ostatni HTML do podglądu)
+        @file_put_contents($k['_katalog'] . '/bony-powiadomienie-ostatnie.html', $html);
         return (bool)file_put_contents($k['_katalog'] . '/bony-powiadomienia.txt', "== $temat\n$tresc\n\n", FILE_APPEND);
     }
+    // wpis 19:26: tekst + HTML w szablonie maili bonów (multipart/alternative); bez List-*/Precedence – to mail transakcyjny
+    $granica = 'bony-' . bin2hex(random_bytes(8));
     $naglowki = [
         'From: ' . ($k['mail_nadawca'] ?? 'Bony ewa-gabinet.pl <bony@ewa-gabinet.pl>'),
         'MIME-Version: 1.0',
-        'Content-Type: text/plain; charset=UTF-8',
-        'Content-Transfer-Encoding: 8bit',
+        'Content-Type: multipart/alternative; boundary="' . $granica . '"',
     ];
-    $ok = @mail(implode(', ', $do), '=?UTF-8?B?' . base64_encode($temat) . '?=', $tresc, implode("\r\n", $naglowki));
+    $cialo = "--$granica\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($tresc))
+        . "--$granica\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($html))
+        . "--$granica--\r\n";
+    $ok = @mail(implode(', ', $do), '=?UTF-8?B?' . base64_encode($temat) . '?=', $cialo, implode("\r\n", $naglowki));
     if (!$ok) error_log('bony: mail() nie wysłał powiadomienia: ' . $temat);
     return $ok;
 }

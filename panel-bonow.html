@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="/_astro/sciezka-bonow.B4U7Ywh7.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.3Xj8wKZJ.css">
+<link rel="stylesheet" href="/_astro/panel-bonow.DrwHyHPA.css">
 <link rel="stylesheet" href="/_astro/Baza.CUaZgc7R.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
     <a class="przeskocz" href="#tresc">Przejdź do treści</a>
@@ -94,7 +94,21 @@
       </section>
 
       <section class="karta bon" data-p-bon hidden data-astro-cid-nl2nwxtk>
-        <p class="status" data-p-status data-astro-cid-nl2nwxtk></p>
+        <!-- wpis 19:33: jeden pasek stanu (kolor stanu, zdanie główne + „kto, kiedy, skąd”) zamiast powtórzeń w trzech miejscach -->
+        <div class="stan" data-p-stan data-astro-cid-nl2nwxtk>
+          <p class="stan-glowne" data-astro-cid-nl2nwxtk><span class="status" data-p-status data-astro-cid-nl2nwxtk></span> <span data-p-stan-zdanie data-astro-cid-nl2nwxtk></span></p>
+          <p class="stan-drobne" data-p-stan-drobne hidden data-astro-cid-nl2nwxtk></p>
+          <p class="stan-drobne" data-p-rezygnacja hidden data-astro-cid-nl2nwxtk></p>
+        </div>
+        <!-- jeden przycisk główny zależny od stanu i roli: ważny → „Zrealizuj”, rezygnacja (Bartek, Ewa) → „Zwróć pieniądze” -->
+        <div class="glowny" data-p-glowny hidden data-astro-cid-nl2nwxtk>
+          <button class="przycisk" type="button" data-p-zrealizuj data-astro-cid-nl2nwxtk>Zrealizuj</button>
+        </div>
+        <!-- P-11: zwrot pieniędzy z panelu (Bartek i Ewa) – przycisk główny przy rezygnacji -->
+        <div class="zwrot" data-p-zwrot-sekcja hidden data-astro-cid-nl2nwxtk>
+          <button class="przycisk" type="button" data-p-zwroc data-astro-cid-nl2nwxtk>Zwróć pieniądze</button>
+          <p class="blad" data-p-blad-zwrot hidden data-astro-cid-nl2nwxtk></p>
+        </div>
         <p class="saldo" data-p-saldo data-astro-cid-nl2nwxtk></p>
         <div class="pasek-salda" data-pasek-salda hidden data-astro-cid-5cigxnkc>
   <div class="tor" role="meter" aria-label="Saldo bonu" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-astro-cid-5cigxnkc><span class="wypelnienie" data-astro-cid-5cigxnkc></span></div>
@@ -106,7 +120,6 @@
           <div data-p-dla-wiersz data-astro-cid-nl2nwxtk><dt data-astro-cid-nl2nwxtk>Dla</dt><dd data-p-dla data-astro-cid-nl2nwxtk></dd></div>
           <div data-p-przedluzony-wiersz hidden data-astro-cid-nl2nwxtk><dt data-astro-cid-nl2nwxtk>Przedłużony</dt><dd data-p-przedluzony data-astro-cid-nl2nwxtk></dd></div>
         </dl>
-        <p class="info" data-p-rezygnacja hidden data-astro-cid-nl2nwxtk></p>
         <!-- wpisy 17:33/17:35: czy potwierdzenie rezygnacji wyszło do kupującego (Bartek i Ewa) -->
         <div class="rez-potw" data-p-rez-potw hidden data-astro-cid-nl2nwxtk>
           <p data-p-rez-potw-tekst data-astro-cid-nl2nwxtk></p>
@@ -115,11 +128,7 @@
         </div>
         <!-- P-15: rabat przy zakupie (Bartek i Ewa) -->
         <p class="podpowiedz" data-p-rabat hidden data-astro-cid-nl2nwxtk></p>
-        <!-- P-11: zwrot pieniędzy z panelu (Bartek i Ewa) + stan płatności w Easytools -->
-        <div class="zwrot" data-p-zwrot-sekcja hidden data-astro-cid-nl2nwxtk>
-          <button class="przycisk" type="button" data-p-zwroc data-astro-cid-nl2nwxtk>Zwróć pieniądze</button>
-          <p class="blad" data-p-blad-zwrot hidden data-astro-cid-nl2nwxtk></p>
-        </div>
+        <!-- P-11: stan płatności w Easytools (Bartek i Ewa) -->
         <p class="podpowiedz" data-p-platnosc hidden data-astro-cid-nl2nwxtk></p>
         <p class="blad" data-p-platnosc-ostrzezenie hidden data-astro-cid-nl2nwxtk></p>
         <!-- P-10: bon znaleziony po e-mailu / zamówieniu – numer zamaskowany do potwierdzenia przez pacjenta (poza adminem) -->
@@ -589,7 +598,11 @@
       <!-- tylko admin -->
       <section class="karta admin" data-p-admin hidden data-astro-cid-nl2nwxtk>
         <h2 data-astro-cid-nl2nwxtk>Administracja</h2>
-        <dl class="dane" data-p-admin-dane data-astro-cid-nl2nwxtk></dl>
+        <!-- wpis 19:33: „Zamówienie i kupujący” zwinięte domyślnie -->
+        <details class="zwijane" data-astro-cid-nl2nwxtk>
+          <summary data-astro-cid-nl2nwxtk>Zamówienie i kupujący</summary>
+          <dl class="dane" data-p-admin-dane data-astro-cid-nl2nwxtk></dl>
+        </details>
         <form class="admin-forma formularz" data-p-waznosc data-astro-cid-nl2nwxtk>
           <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Nowa data ważności</span><input type="date" name="data" required data-astro-cid-nl2nwxtk></label>
           <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Powód (np. zgoda Ewy)</span><input type="text" name="powod" maxlength="150" data-astro-cid-nl2nwxtk></label>
@@ -639,4 +652,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.BKNhpZCf.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.DXNxMi-5.js"></script>

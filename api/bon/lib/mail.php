@@ -77,15 +77,11 @@ function bon_mail_tresc(array $k, array $bony): array {
         $wiersze .= '<tr><td style="padding:6px 12px 6px 0;font-weight:bold">' . $e($l['kod']) . '</td><td style="padding:6px 12px 6px 0">' . $e($l['nazwa'] . ' o wartości ' . $l['kwota'])
             . '</td><td style="padding:6px 0">ważny do ' . $e($l['do']) . ($l['dla'] !== '' ? ', dla: ' . $e($l['dla']) : '') . '</td></tr>';
     }
-    $html = '<!doctype html><html lang="pl"><body style="margin:0;background:#FBF7F4;font-family:Lato,Arial,sans-serif;color:#17504B;font-size:17px;line-height:1.55">'
-        . '<div style="max-width:560px;margin:0 auto;padding:28px 22px;background:#ffffff">'
-        . '<p style="font-size:24px;font-weight:300;margin:0 0 16px">Bon podarunkowy</p>'
-        . '<p>Dzień dobry,</p><p>' . $e($wstep) . '</p>'
+    $html = bon_mail_szablon('Bon podarunkowy',
+        '<p>Dzień dobry,</p><p>' . $e($wstep) . '</p>'
         . '<table style="border-collapse:collapse;margin:8px 0 16px">' . $wiersze . '</table>'
         . '<ul style="padding-left:20px;color:#3E6863">' . implode('', array_map(static fn($z) => '<li>' . $e($z) . '</li>', $zasady)) . '</ul>'
-        . '<p style="color:#3E6863">Pełne zasady bonu: <a href="' . $e(BON_REGULAMIN) . '" style="color:#17504B">regulamin bonów</a></p>'
-        . '<p>Pozdrawiamy serdecznie<br>EWA Gabinet podologiczny<br><a href="https://www.ewa-gabinet.pl" style="color:#17504B">www.ewa-gabinet.pl</a></p>'
-        . '</div></body></html>';
+        . '<p style="color:#3E6863">Pełne zasady bonu: <a href="' . $e(BON_REGULAMIN) . '" style="color:#17504B">regulamin bonów</a></p>');
     return [$temat, $tekst, $html];
 }
 

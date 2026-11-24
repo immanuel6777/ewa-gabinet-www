@@ -243,7 +243,24 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
         $odp['kupiono'] = (string)$bon['created_at'];
         $odp['zaplacono'] = bon_zl((int)bon_grosze($bon['paid_pln']));
     }
+    if (!$admin && empty($sesja['rezygnacje'])) $odp = bon_panel_dla_kasy($odp);
     return [200, $odp];
+}
+
+/**
+ * Wpis 19:33 – ZASADA KWOT DLA KASY (Karolina): tylko kwoty do realizacji. Bon ważny: saldo i wartość jak dotąd. Bon nieaktywny:
+ * bez kwot („Bon nieaktywny”). Nigdy: zapłacono, rabat, kwota i termin zwrotu, przeliczenia, zdarzenia zwrotu.
+ */
+function bon_panel_dla_kasy(array $odp): array {
+    $odp['nieaktywny'] = ($odp['status'] ?? '') !== 'valid';
+    if ($odp['nieaktywny']) { $odp['saldo'] = null; $odp['wartosc'] = null; }
+    if (!empty($odp['rezygnacja'])) {
+        $r = $odp['rezygnacja'];
+        $odp['rezygnacja'] = ['kanal' => $r['kanal'], 'zlozono' => $r['zlozono'], 'otrzymano' => $r['otrzymano'], 'godzina' => $r['godzina']];
+    }
+    $odp['zdarzenia'] = array_values(array_filter((array)($odp['zdarzenia'] ?? []), static fn($z) => !str_starts_with((string)$z['akcja'], 'zwrot')));
+    foreach (['rabat', 'zwrot', 'platnosc', 'zaplacono', 'rezygnacja_kwota', 'rezygnacja_kwota_przeliczona'] as $klucz) unset($odp[$klucz]);
+    return $odp;
 }
 
 const BON_PANEL_ZDARZENIA = [
@@ -411,16 +428,19 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
     // P-10 (2026-11-24): poza adminem numer bonu znalezionego po e-mailu / zamówieniu jest zamaskowany – zamiast numeru uchwyt
     // związany z sesją; pełny numer dopiero po potwierdzeniu 4 ostatnich znaków przez pacjenta (bon_panel_potwierdz_numer)
     $maskuj = $sesja !== null && $sesja['rola'] !== 'admin';
-    $bony = array_map(static function ($b) use ($k, $sesja, $maskuj, $teraz, $dodatki) {
+    $kasa = $sesja !== null && $sesja['rola'] !== 'admin' && empty($sesja['rezygnacje']); // wpis 19:33: kasa bez kwot bonu nieaktywnego
+    $bony = array_map(static function ($b) use ($k, $sesja, $maskuj, $kasa, $teraz, $dodatki) {
         $status = bon_status_efektywny($b, $teraz);
+        $bezKwot = $kasa && $status !== 'valid';
         $doKonca = (int)$teraz->setTime(0, 0)->diff(new DateTimeImmutable(substr((string)$b['expires_at'], 0, 10), new DateTimeZone(BON_STREFA)))->format('%r%a');
         $d = $dodatki[(int)$b['id']] ?? [];
         return ($maskuj
             ? ['kod' => null, 'kod_maska' => bon_panel_maska((string)$b['code']), 'uchwyt' => bon_panel_uchwyt($k, $sesja, (int)$b['id'])]
             : ['kod' => $b['code']]) + [
             'status' => $status,
-            'saldo' => bon_zl((int)bon_grosze($b['balance_pln'])),
-            'wartosc' => bon_zl((int)bon_grosze($b['initial_pln'])),
+            'saldo' => $bezKwot ? null : bon_zl((int)bon_grosze($b['balance_pln'])),
+            'wartosc' => $bezKwot ? null : bon_zl((int)bon_grosze($b['initial_pln'])),
+            'nieaktywny' => $status !== 'valid',
             'wazny_do' => substr((string)$b['expires_at'], 0, 10),
             'kupiono' => substr((string)$b['created_at'], 0, 10),
             // karty wyników (Bartek 2026-11-24): nazwa i kolor bonu, „Dla”, ostatnia realizacja, kończąca się ważność, ostrzeżenia
@@ -436,6 +456,7 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
             'rabat' => ($sesja === null || $sesja['rola'] === 'admin' || !empty($sesja['rezygnacje'])) ? bon_panel_rabat($b) : null,
         ];
     }, $wiersze20);
+    if ($kasa) $bony = array_map(static function ($c) { unset($c['rabat']); return $c; }, $bony); // wpis 19:33: kasa bez pola rabatu
     // kolejność: najpierw bony, którymi można płacić, potem pozostałe; w każdej grupie najnowsze pierwsze (zapytanie już tak sortuje)
     usort($bony, static fn($a, $b) => ($a['status'] === 'valid' ? 0 : 1) <=> ($b['status'] === 'valid' ? 0 : 1));
     return [200, ['ok' => true, 'typ' => $typ, 'bony' => $bony, 'wiecej' => count($wiersze) > BON_PANEL_SZUKAJ_MAX]];

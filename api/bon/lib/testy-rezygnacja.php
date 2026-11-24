@@ -128,6 +128,39 @@ function bon_testy_rezygnacja(array $k, PDO $pdo): array {
 
     $wyniki = array_merge($wyniki, bon_testy_potwierdzenia($k, $pdo, $nowy, $maile));
     $wyniki = array_merge($wyniki, bon_testy_zwrot_proporcjonalny($k, $pdo));
+    $wyniki = array_merge($wyniki, bon_testy_szablon_maili($k, $pdo, $nowy, $maile));
+    return $wyniki;
+}
+
+// Wpis 19:26: wszystkie maile bonów w jednym szablonie (bon_mail_szablon), „to pomyłka” jako mailto, przycisk panelu w mailach wewnętrznych.
+function bon_testy_szablon_maili(array $k, PDO $pdo, callable $nowy, callable $maile): array {
+    $wyniki = [];
+    $t = static function (string $nazwa, bool $ok, string $szczegol = '') use (&$wyniki) { $wyniki[] = [$nazwa, $ok, $szczegol]; };
+    $b = $nowy(200, 'szablon-' . random_int(1000, 9999) . '@example.com');
+    [, $ctx] = array_slice(bon_rezygnacja_ze_strony($k, $pdo, $b['code'], (string)$b['buyer_email'], '192.0.2.150'), 1, 2) + [1 => null];
+    $przed = count($maile());
+    bon_rezygnacja_maile(array_replace($k, ['mail_obsluga' => ['obsluga-szablon@example.com'], 'mail_odpowiedz' => 'bony@ewa-gabinet.pl']), $ctx, $pdo);
+    $m = array_slice($maile(), $przed);
+    $doK = array_values(array_filter($m, static fn($x) => ($x['To'][0]['Email'] ?? '') === $b['buyer_email']))[0] ?? [];
+    $doO = array_values(array_filter($m, static fn($x) => ($x['To'][0]['Email'] ?? '') === 'obsluga-szablon@example.com'))[0] ?? [];
+    $hK = (string)($doK['HTMLPart'] ?? '');
+    $hO = (string)($doO['HTMLPart'] ?? '');
+    [, , $hBon] = bon_mail_tresc($k, [$b]);
+    $wspolne = static fn(string $h) => str_contains($h, 'max-width:560px') && str_contains($h, 'background:#FBF7F4') && str_contains($h, 'font-size:24px;font-weight:300');
+    $t('szablon: mail z bonem, potwierdzenie rezygnacji i mail obsługi mają ten sam wygląd (tło, szerokość, nagłówek)',
+        $wspolne($hBon) && $wspolne($hK) && $wspolne($hO), json_encode([strlen($hBon), strlen($hK), strlen($hO)]));
+    $t('potwierdzenie: przycisk „Zmieniam zdanie / to nie ja” = mailto na bony@ z tematem i numerem; tekst z adresem i telefonem; podpis gabinetu',
+        str_contains($hK, 'href="mailto:bony@ewa-gabinet.pl?subject=') && str_contains($hK, rawurlencode($b['code']))
+        && str_contains($hK, 'Zmieniam zdanie / to nie ja – zostaw bon aktywny') && str_contains($hK, 'Pozdrawiamy serdecznie')
+        && substr_count($hK, 'Pozdrawiamy serdecznie') === 1
+        && str_contains((string)($doK['TextPart'] ?? ''), 'Napisz na bony@ewa-gabinet.pl (temat: Cofnięcie rezygnacji – bon ' . $b['code'] . ')'),
+        $hK);
+    $t('mail obsługi (bony@): szablon wewnętrzny z przyciskiem „Otwórz bon w panelu” i klikalnym adresem, bez pozdrowień dla klienta',
+        str_contains($hO, 'Otwórz bon w panelu') && str_contains($hO, 'href="https://www.ewa-gabinet.pl/panel-bonow?nr=' . $b['code'] . '"')
+        && str_contains($hO, 'System bonów') && !str_contains($hO, 'Pozdrawiamy serdecznie'), $hO);
+    $hA = bon_powiadom_html('Bon: test – ' . $b['code'], "Linia 1\nZamówienie: x\n\nPanel: https://www.ewa-gabinet.pl/panel-bonow?nr=" . $b['code']);
+    $t('alert (alerty@): ten sam szablon, przycisk do bonu z treści, tekst <script> zabezpieczony',
+        $wspolne($hA) && str_contains($hA, 'Otwórz bon w panelu') && !str_contains(bon_powiadom_html('x', '<script>a</script>'), '<script>'), $hA);
     return $wyniki;
 }
 
@@ -178,7 +211,7 @@ function bon_testy_zwrot_proporcjonalny(array $k, PDO $pdo): array {
 
     // koszyk mieszany z rabatem 10%: 200 + 2×500, zapłacono 180 + 900 → bony 180/450/450; wykorzystane 100 z 500 → zwrot 360
     $zam = bon_test_uuid();
-    bon_utworz_bony(array_replace($k, ['prog_wstrzymania' => 0.8]), $pdo, ['zamowienie' => $zam, 'email' => 'koszyk-' . random_int(1000, 9999) . '@example.com',
+    bon_utworz_bony(array_replace($k, ['prog_wstrzymania' => 0.8]), $pdo, ['zamowienie' => $zam, 'zrodlo' => 'api', 'email' => 'koszyk-' . random_int(1000, 9999) . '@example.com',
         'waluta' => 'pln', 'promo' => 'RABAT10', 'pozycje' => [
             ['wariant' => 'Bon Szmaragdowy', 'nominal' => 200, 'ilosc' => 1, 'zaplacono' => 18000],
             ['wariant' => 'Bon Bursztynowy', 'nominal' => 500, 'ilosc' => 2, 'zaplacono' => 90000],
@@ -198,7 +231,7 @@ function bon_testy_zwrot_proporcjonalny(array $k, PDO $pdo): array {
     $szafir = static function (int $gr, string $promo) use ($kS, $pdo, $plikPow): array {
         $przed = strlen((string)@file_get_contents($plikPow));
         $zam = bon_test_uuid();
-        bon_utworz_bony($kS, $pdo, ['zamowienie' => $zam, 'email' => 'szafir-' . random_int(1000, 9999) . '@example.com', 'waluta' => 'pln', 'promo' => $promo,
+        bon_utworz_bony($kS, $pdo, ['zamowienie' => $zam, 'zrodlo' => 'api', 'email' => 'szafir-' . random_int(1000, 9999) . '@example.com', 'waluta' => 'pln', 'promo' => $promo,
             'pozycje' => [['wariant' => 'Bon Szafirowy', 'nominal' => 'dowolna', 'ilosc' => 1, 'zaplacono' => $gr]]]);
         $b = bon_test_bony($kS, $pdo, $zam)[0] ?? [];
         return [$b['status'] ?? '', (string)($b['status_uwagi'] ?? ''), substr((string)@file_get_contents($plikPow), $przed)];

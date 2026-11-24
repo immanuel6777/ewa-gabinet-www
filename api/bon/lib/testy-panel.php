@@ -157,5 +157,93 @@ function bon_testy_panel(array $k, PDO $pdo): array {
     [$kod] = bon_panel_admin($k, $pdo, $sB, ['kod' => $bInny, 'akcja' => 'kasuj']);
     $t('admin: nieznana akcja → 400', $kod === 400);
 
+    return array_merge($wyniki, bon_testy_kwoty_kasy($k, $pdo));
+}
+
+/**
+ * Wpis 19:33 – ZASADA KWOT DLA KASY (Karolina), rola × stan. Kasa: tylko kwoty do realizacji (bon ważny: saldo i wartość),
+ * bon nieaktywny bez kwot; nigdy „zapłacono”, „rabat”, „zwrot”, kwota zapłacona – w całej odpowiedzi JSON (widok bonu i karty).
+ * Ewa i admin: wszystkie kwoty jak dotąd.
+ */
+function bon_testy_kwoty_kasy(array $k, PDO $pdo): array {
+    $wyniki = [];
+    $t = static function (string $nazwa, bool $ok, string $szczegol = '') use (&$wyniki) { $wyniki[] = [$nazwa, $ok, $szczegol]; };
+    if (!function_exists('bon_panel_zarejestruj_rezygnacje') && is_file(__DIR__ . '/rezygnacja.php')) require_once __DIR__ . '/rezygnacja.php';
+    $tab = bon_tabela($k, 'vouchers');
+    $tabW = bon_tabela($k, 'voucher_withdrawals');
+    $sKasa = ['login' => 'karolina', 'imie' => 'Karolina', 'rola' => 'realizacja', 'csrf' => 'x'];
+    $sEwa = ['login' => 'ewa', 'imie' => 'Ewa', 'rola' => 'realizacja', 'rezygnacje' => true, 'csrf' => 'x'];
+    $sAdmin = ['login' => 'bartek', 'imie' => 'Bartek', 'rola' => 'admin', 'csrf' => 'x'];
+    $email = 'kwoty-' . random_int(10000, 99999) . '@example.com';
+    $dzis = bon_teraz()->format('Y-m-d');
+    $nowy = static function (int $zl, ?string $zaplacono = null, ?string $promo = null) use ($k, $pdo, $tab, $email): array {
+        $p = bon_test_payload(['price_custom_id' => "bon-$zl", 'amount_paid' => $zl, 'customer_email' => $email]);
+        bon_test_webhook($k, $pdo, $p);
+        $b = bon_test_bony($k, $pdo, $p['order_id'])[0];
+        if ($zaplacono !== null) $pdo->prepare("UPDATE $tab SET paid_pln = ?, promo_code = ? WHERE id = ?")->execute([$zaplacono, $promo, $b['id']]);
+        return $b;
+    };
+    $ustaw = static fn(int $id, string $sql, array $w = []) => $pdo->prepare("UPDATE $tab SET $sql WHERE id = ?")->execute([...$w, $id]);
+    $rez = static fn(string $kod) => bon_panel_admin($k, $pdo, $sAdmin, ['kod' => $kod, 'akcja' => 'rezygnacja', 'kanal' => 'mail', 'data' => $dzis, 'otrzymano' => $dzis]);
+
+    $stany = [];
+    $stany['aktywny pełny'] = [$nowy(200), true];
+    $b = $nowy(300);
+    bon_panel_realizuj($k, $pdo, $sEwa, ['kod' => $b['code'], 'kwota_reczna' => '100', 'client_token' => bin2hex(random_bytes(12))]);
+    $stany['aktywny częściowo'] = [$b, true];
+    $stany['aktywny z rabatem (8 zł)'] = [$nowy(200, '8.00', 'KWOTY96'), true];
+    $b = $nowy(300, '100.00');
+    $ustaw((int)$b['id'], "status = 'held'");
+    $stany['wstrzymany'] = [$b, false];
+    $b = $nowy(200, '8.00', 'KWOTY96');
+    $rez($b['code']);
+    $stany['rezygnacja'] = [$b, false];
+    $b = $nowy(200, '8.00', 'KWOTY96');
+    $rez($b['code']);
+    $pdo->prepare("UPDATE $tabW SET zwrot_stan = 'zlecony', zwrot_kwota_pln = '8.00', zwrot_zlecono_at = ? WHERE voucher_id = ?")->execute([bon_teraz()->format('Y-m-d H:i:s'), $b['id']]);
+    bon_historia($k, $pdo, (int)$b['id'], 'zwrot-zlecony', 'kwota 8.00 zł', 'ewa');
+    $stany['zwrot w toku'] = [$b, false];
+    $b = $nowy(200, '8.00', 'KWOTY96');
+    $rez($b['code']);
+    bon_panel_admin($k, $pdo, $sAdmin, ['kod' => $b['code'], 'akcja' => 'zwrot', 'powod' => 'test']);
+    $stany['zwrócony'] = [$b, false];
+    $b = $nowy(200);
+    $ustaw((int)$b['id'], 'expires_at = ?', [bon_teraz()->modify('-3 days')->format('Y-m-d')]);
+    $stany['wygasły'] = [$b, false];
+    $b = $nowy(200);
+    $ustaw((int)$b['id'], 'przedluzony_at = ?, expires_at_pierwotna = ?', [bon_teraz()->format('Y-m-d H:i:s'), bon_teraz()->modify('-1 day')->format('Y-m-d')]);
+    $stany['przedłużony'] = [$b, true];
+
+    $zakazane = '/zap(ł|l)acono|rabat|zwrot|zwrócon|"8\.00"|KWOTY96/iu';
+    $zleKasa = [];
+    $zleEwa = [];
+    foreach ($stany as $nazwa => [$bon, $aktywny]) {
+        [$h, $o] = bon_panel_historia($k, $pdo, $sKasa, (string)$bon['code']);
+        $json = json_encode($o, JSON_UNESCAPED_UNICODE);
+        if ($h !== 200) { $zleKasa[] = "$nazwa: HTTP $h"; continue; }
+        if (preg_match($zakazane, $json, $m)) $zleKasa[] = "$nazwa: w odpowiedzi „{$m[0]}”";
+        if ($aktywny && ($o['saldo'] === null || $o['wartosc'] === null)) $zleKasa[] = "$nazwa: brak salda przy bonie ważnym";
+        if (!$aktywny && ($o['saldo'] !== null || $o['wartosc'] !== null || empty($o['nieaktywny']))) $zleKasa[] = "$nazwa: kwota przy bonie nieaktywnym";
+        [, $oE] = bon_panel_historia($k, $pdo, $sEwa, (string)$bon['code']);
+        if ($oE['saldo'] === null || $oE['wartosc'] === null) $zleEwa[] = "$nazwa: Ewa bez salda";
+        if (str_contains($nazwa, 'rabatem') && ($oE['rabat']['zaplacono'] ?? '') !== '8.00') $zleEwa[] = "$nazwa: Ewa bez rabatu";
+        if (in_array($nazwa, ['rezygnacja', 'zwrot w toku'], true) && ($oE['rezygnacja']['kwota'] ?? '') !== '8.00') $zleEwa[] = "$nazwa: Ewa bez kwoty zwrotu";
+    }
+    $t('kwoty kasy (19:33): ' . count($stany) . ' stanów – bon ważny z saldem i wartością, nieaktywny bez kwot, nigdzie zapłacono/rabat/zwrot/8.00',
+        !$zleKasa, implode('; ', $zleKasa));
+    $t('kwoty Ewy (19:33): te same stany – saldo zawsze, rabat i kwota zwrotu tam, gdzie są', !$zleEwa, implode('; ', $zleEwa));
+
+    // karty wyszukiwania po e-mailu (to samo dla kasy)
+    [, $sk] = bon_panel_szukaj($k, $pdo, $email, null, $sKasa);
+    $jsonS = json_encode($sk, JSON_UNESCAPED_UNICODE);
+    $karty = $sk['bony'] ?? [];
+    $nieakt = array_filter($karty, static fn($c) => $c['status'] !== 'valid');
+    $t('kwoty kasy w kartach wyszukiwania: ' . count($karty) . ' kart, nieaktywne bez kwot, nigdzie zapłacono/rabat/zwrot/8.00',
+        count($karty) === count($stany) && !preg_match($zakazane, $jsonS)
+        && !array_filter($nieakt, static fn($c) => $c['saldo'] !== null || $c['wartosc'] !== null)
+        && !array_filter($karty, static fn($c) => $c['status'] === 'valid' && $c['saldo'] === null), $jsonS);
+    [, $skA] = bon_panel_szukaj($k, $pdo, $email, null, $sAdmin);
+    $t('karty admina: kwoty przy wszystkich, rabat przy bonie z kodem', !array_filter($skA['bony'] ?? [], static fn($c) => $c['saldo'] === null)
+        && (bool)array_filter($skA['bony'] ?? [], static fn($c) => ($c['rabat']['kod'] ?? '') === 'KWOTY96'));
     return $wyniki;
 }

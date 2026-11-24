@@ -144,9 +144,12 @@ function bon_testy_krok4(array $k, PDO $pdo): array {
     [$kod] = $rez($sAdmin, (string)$b5['code'], ['kanal' => 'mail', 'data' => $d('+0 days')]);
     $t('rezygnacja w panelu: druga na tym samym bonie → 409', $kod === 409);
     [, $h] = bon_panel_historia($k, $pdo, $sEwa, (string)$b5['code']);
-    $t('rezygnacja w panelu: kasa widzi status, datę oświadczenia i kwotę zwrotu', ($h['status'] ?? '') === 'withdrawn'
-        && ($h['rezygnacja']['zlozono'] ?? '') === $d('+0 days') && ($h['rezygnacja']['kwota'] ?? '') === '135.00' && ($h['zdarzenia'][0]['akcja'] ?? '') === 'rezygnacja'
-        && ($h['rezygnacja']['otrzymano'] ?? '') === $d('+0 days') && ($h['rezygnacja']['zwrot_do'] ?? '') === $d('+14 days'));
+    // wpis 19:33: kasa widzi status i daty oświadczenia, ale NIE kwotę ani termin zwrotu (i bez salda bonu nieaktywnego)
+    [, $hE] = bon_panel_historia($k, $pdo, $sEwa + ['rezygnacje' => true], (string)$b5['code']);
+    $t('rezygnacja w panelu: kasa widzi status i daty oświadczenia, bez kwoty i terminu zwrotu; Ewa widzi kwotę 135 i termin', ($h['status'] ?? '') === 'withdrawn'
+        && ($h['rezygnacja']['zlozono'] ?? '') === $d('+0 days') && !isset($h['rezygnacja']['kwota']) && ($h['zdarzenia'][0]['akcja'] ?? '') === 'rezygnacja'
+        && ($h['rezygnacja']['otrzymano'] ?? '') === $d('+0 days') && !isset($h['rezygnacja']['zwrot_do']) && $h['saldo'] === null
+        && ($hE['rezygnacja']['kwota'] ?? '') === '135.00' && ($hE['rezygnacja']['zwrot_do'] ?? '') === $d('+14 days'), json_encode($h['rezygnacja'] ?? null));
 
     $b6 = $nowyBon(200);
     $ustaw($b6['code'], ['created_at' => $dzis->modify('-15 days')->format('Y-m-d') . ' 08:00:00']);

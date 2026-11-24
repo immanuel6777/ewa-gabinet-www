@@ -104,7 +104,10 @@ function bon_rezygnacja_maile(array $k, array $ctx, ?PDO $pdo = null): array {
             . 'Panel: https://www.ewa-gabinet.pl/panel-bonow?nr=' . rawurlencode($kod) . "\n\n"
             . "Zwrot: w Easytools (transakcja zamówienia), potem w panelu „Oznacz zwrot”. Pieniądze w ciągu 14 dni od zgłoszenia.\n"
             . "Odpowiedź na tę wiadomość trafi do kupującego.\n";
-        foreach ($obsluga as $do) $wynik['obsluga'] = bon_mail_prosty($kZ, (string)$do, "Rezygnacja z bonu $kod (zgłoszona na stronie)", $tekstO);
+        foreach ($obsluga as $do) $wynik['obsluga'] = bon_mail_prosty($kZ, (string)$do, "Rezygnacja z bonu $kod (zgłoszona na stronie)", $tekstO, [
+            'naglowek' => 'Rezygnacja ze strony /bon', 'wewnetrzny' => true,
+            'przyciski' => [['Otwórz bon w panelu', 'https://www.ewa-gabinet.pl/panel-bonow?nr=' . rawurlencode($kod)]],
+        ]);
     }
     $bledy = array_filter($wynik);
     if ($bledy) {
@@ -125,14 +128,21 @@ function bon_rezygnacja_potwierdzenie(array $k, ?PDO $pdo, array $bon, int $kwot
     $kwota = bon_kwota_tekst($kwotaGr);
     $pomoc = trim((string)($k['telefon_pomoc_bony'] ?? ''));
     $godz = trim((string)($k['telefon_pomoc_bony_godziny'] ?? ''));
-    $tel = $pomoc !== '' ? ' albo zadzwoń: ' . $pomoc . ($godz !== '' ? " ($godz)" : '') : '';
+    $tel = $pomoc !== '' ? ' albo zadzwonić: ' . $pomoc . ($godz !== '' ? " ($godz)" : '') : '';
     // wpis 18:00: bon kupiony z rabatem – kwota niższa niż saldo, bo przeliczona do zapłaconej ceny
     $przel = $kwotaGr < (int)bon_grosze($bon['balance_pln']) ? ' (saldo bonu przeliczone do zapłaconej ceny)' : '';
+    // wpis 19:26: „to pomyłka” = mailto na bony@ z gotowym tematem i treścią; cofa Ewa albo Bartek w panelu (samoobsługa linkiem – po starcie)
+    $mailtoDo = trim((string)($k['mail_odpowiedz'] ?? '')) ?: 'bony@ewa-gabinet.pl';
+    $mailto = 'mailto:' . $mailtoDo . '?subject=' . rawurlencode("Cofnięcie rezygnacji – bon $kod")
+        . '&body=' . rawurlencode("Dzień dobry,\n\nproszę o cofnięcie rezygnacji z bonu $kod i zostawienie bonu aktywnego (zmieniam zdanie / to nie ja zgłaszałem(-am) rezygnację).\n\nPozdrawiam");
     $tekst = "Dzień dobry,\n\nprzyjęliśmy rezygnację z bonu $kod zgłoszoną $kiedy. Kwota do zwrotu: $kwota$przel. "
         . "Pieniądze wrócą tą samą metodą płatności w ciągu 14 dni. Bon od tej chwili nie działa.\n\n"
-        . "Jeśli to nie Ty zgłaszałeś(-aś) rezygnację, odpisz na tę wiadomość$tel.\n\nPozdrawiamy serdecznie\nEWA Gabinet podologiczny\nhttps://www.ewa-gabinet.pl\n";
+        . "Zmieniasz zdanie albo to nie Ty zgłaszałeś(-aś) rezygnację? Napisz na $mailtoDo (temat: Cofnięcie rezygnacji – bon $kod), "
+        . "a zostawimy bon aktywny. Możesz też odpisać na tę wiadomość$tel.\n\nPozdrawiamy serdecznie\nEWA Gabinet podologiczny\nhttps://www.ewa-gabinet.pl\n";
     $adres = (string)$bon['buyer_email'];
-    $blad = bon_mail_prosty($k, $adres, "Rezygnacja z bonu $kod – potwierdzenie", $tekst);
+    $blad = bon_mail_prosty($k, $adres, "Rezygnacja z bonu $kod – potwierdzenie", $tekst, [
+        'naglowek' => 'Rezygnacja z bonu', 'przyciski' => [['Zmieniam zdanie / to nie ja – zostaw bon aktywny', $mailto]],
+    ]);
     if ($pdo) {
         bon_historia($k, $pdo, (int)$bon['id'], 'potwierdzenie', $blad === null
             ? 'wysłane na adres ' . $adres . ' (' . bon_teraz()->format('H:i') . ')'
@@ -187,7 +197,7 @@ function bon_rezygnacja_wycofanie_mail(array $k, PDO $pdo, array $bon, string $z
     $kod = (string)$bon['code'];
     $tekst = "Dzień dobry,\n\nrezygnacja z bonu $kod została wycofana. Bon znów działa – saldo i data ważności bez zmian.\n\n"
         . "Jeśli to pomyłka, odpisz na tę wiadomość.\n\nPozdrawiamy serdecznie\nEWA Gabinet podologiczny\nhttps://www.ewa-gabinet.pl\n";
-    $blad = bon_mail_prosty($k, (string)$bon['buyer_email'], "Bon $kod znów działa – rezygnacja wycofana", $tekst);
+    $blad = bon_mail_prosty($k, (string)$bon['buyer_email'], "Bon $kod znów działa – rezygnacja wycofana", $tekst, ['naglowek' => 'Bon znów działa']);
     bon_historia($k, $pdo, (int)$bon['id'], 'potwierdzenie', $blad === null ? 'wycofanie: wysłane na adres ' . $bon['buyer_email'] : 'wycofanie: NIE wysłane: ' . mb_substr($blad, 0, 150), $kto);
     if ($blad !== null) {
         bon_powiadom($k, 'Bon: mail o wycofaniu rezygnacji NIE wyszedł – ' . $kod, "Rezygnacja cofnięta (bon znów ważny), ale mail do kupującego nie wyszedł.\nBon: $kod\nBłąd: $blad\nNapisz do kupującego ręcznie.");
@@ -195,10 +205,12 @@ function bon_rezygnacja_wycofanie_mail(array $k, PDO $pdo, array $bon, string $z
     return ['wyslane' => $blad === null, 'adres' => (string)$bon['buyer_email'], 'blad' => $blad];
 }
 
-/** Mail tekstowy (bez załączników) tą samą drogą co mail z bonem: Mailjet, przy zerwaniu połączenia zapas SMTP OVH. Zwraca ?błąd. */
-function bon_mail_prosty(array $k, string $do, string $temat, string $tekst): ?string {
-    $html = '<!doctype html><html lang="pl"><body style="font-family:Lato,Arial,sans-serif;color:#17504B;font-size:16px;line-height:1.55">'
-        . nl2br(htmlspecialchars($tekst, ENT_QUOTES, 'UTF-8')) . '</body></html>';
+/**
+ * Mail bez załączników tą samą drogą co mail z bonem: Mailjet, przy zerwaniu połączenia zapas SMTP OVH. Zwraca ?błąd.
+ * HTML w szablonie maila z bonem (wpis 19:26, bon_mail_szablon); $o: naglowek, przyciski [[tekst, adres]], wewnetrzny (bony@, alerty@).
+ */
+function bon_mail_prosty(array $k, string $do, string $temat, string $tekst, array $o = []): ?string {
+    $html = bon_mail_szablon((string)($o['naglowek'] ?? 'Bon podarunkowy'), bon_mail_tekst_na_html($tekst), (array)($o['przyciski'] ?? []), !empty($o['wewnetrzny']));
     $odp = bon_zapas_wymuszony($k)
         ? ['blad' => 'test zapasu', 'polaczenie' => true]
         : bon_mailjet_wyslij($k, $do, $temat, $tekst, $html, []);
