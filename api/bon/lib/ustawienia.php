@@ -42,9 +42,11 @@ return [
     'bon_adres_pelny_min' => 60,         // /bony/dziekujemy: pełny adres do tylu minut od zapłaty, potem zamaskowany
 
     // --- maile ---
-    'mail_nadawca' => 'Gabinet EWA <powiadomienia@ewa-gabinet.pl>',
-    'mail_odpowiedz' => 'kontakt@ewa-gabinet.pl',
-    'mail_powiadomienie' => ['powiadomienia@ewa-gabinet.pl'], // skrzynka przekierowana do Bartka
+    // 2026-11-24 (wpisy 11:45–12:10, POCZTA-ADRESY.md): bon wychodzi z bony@, odpowiedzi na bony@, alerty gabinetu na alerty@.
+    // Nadawca musi być zatwierdzony w Mailjet (konto główne) – inaczej Mailjet odrzuci mail, a zapas SMTP go nie uratuje.
+    'mail_nadawca' => 'Gabinet EWA <bony@ewa-gabinet.pl>',
+    'mail_odpowiedz' => 'bony@ewa-gabinet.pl',
+    'mail_powiadomienie' => ['alerty@ewa-gabinet.pl'],
     'telefon_pomoc_bony' => '506 102 340',
     'telefon_pomoc_bony_godziny' => 'pon.–pt. 9–17',
 
@@ -52,5 +54,5 @@ return [
     'mail_zapas' => true,
     'mail_smtp_host' => 'ssl0.ovh.net',
     'mail_smtp_port' => 465,
-    'mail_smtp_user' => 'powiadomienia@ewa-gabinet.pl',
+    'mail_smtp_user' => 'bony@ewa-gabinet.pl', // login = skrzynka nadawcy (OVH wymaga tej samej koperty); hasło bony@ w konfigu na serwerze
 ];

@@ -171,6 +171,8 @@ function bon_diagnostyka(array $k, int $ile = 10, int $dni = 2, int $bony = 20, 
         ],
         // 2026-11-24 (wpis 11:30): skąd jest każde ustawienie jawne (kod / repo / serwer) i co Bartek ma usunąć z pliku na serwerze
         'ustawienia' => bon_ustawienia_zrodla($k),
+        // 2026-11-24 (wpis 12:10): nadawca maila z bonem zatwierdzony w Mailjet? (status adresu i domeny, bez samego adresu)
+        'mailjet_nadawca' => function_exists('bon_mailjet_nadawca') ? bon_mailjet_nadawca($k) : null,
         'pliki_logu' => array_map(static fn($p) => ['plik' => basename($p), 'bajtow' => filesize($p), 'zmieniono' => date('c', (int)filemtime($p))],
             array_slice(array_reverse(glob($k['_katalog'] . '/bony-webhook-log/*.log') ?: []), 0, 14)),
         'zdarzenia' => bon_log_zdarzenia($k, $zdarzen, $dni),

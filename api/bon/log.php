@@ -7,6 +7,7 @@
 
 declare(strict_types=1);
 require __DIR__ . '/lib/diagnostyka.php';
+require_once __DIR__ . '/lib/mail.php'; // status nadawcy w Mailjet (bon_mailjet_nadawca, 2026-11-24)
 
 header('X-Robots-Tag: noindex');
 header('Cache-Control: no-store');

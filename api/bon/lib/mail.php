@@ -354,6 +354,36 @@ function bon_mailjet_status(array $k, int|string $id): array {
     return $wynik;
 }
 
+/**
+ * Czy nadawca z mail_nadawca jest zatwierdzony w Mailjet (konto z kluczem z konfigu) – do log.php (2026-11-24, wpis 12:10:
+ * niezatwierdzony nadawca = Mailjet odrzuca mail, a zapas SMTP tego nie ratuje, bo to nie błąd połączenia; tak było 23.11).
+ * Sprawdza adres i całą domenę („*@domena”). Bez adresu w wyniku (log.php nie pokazuje adresów). 'zatwierdzony' null = nie wiadomo.
+ */
+function bon_mailjet_nadawca(array $k): array {
+    if (($k['mail_tryb'] ?? '') === 'plik') return ['zatwierdzony' => null, 'pominieto' => 'tryb plik'];
+    $w = bon_mail_wiadomosc($k, 'x@example.com', '', '', '', []);
+    $adres = (string)($w['od'] ?? '');
+    if ($adres === '') return ['zatwierdzony' => null, 'blad' => 'zły mail_nadawca'];
+    $wynik = ['zatwierdzony' => false, 'adres' => null, 'domena' => null];
+    foreach (['adres' => $adres, 'domena' => '*' . substr($adres, (int)strrpos($adres, '@'))] as $co => $email) {
+        $ch = curl_init('https://api.mailjet.com/v3/REST/sender?' . http_build_query(['Email' => $email]));
+        curl_setopt_array($ch, [
+            CURLOPT_USERPWD => (string)($k['mailjet_api_key'] ?? '') . ':' . (string)($k['mailjet_api_secret'] ?? ''),
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 4, CURLOPT_TIMEOUT => 6,
+        ]);
+        $odp = curl_exec($ch);
+        $kod = (int)curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $blad = $odp === false ? 'cURL ' . curl_errno($ch) . ': ' . curl_error($ch) : null;
+        curl_close($ch);
+        if ($blad !== null || $kod !== 200) { $wynik[$co] = $blad ?? "HTTP $kod"; continue; }
+        $dane = (array)(json_decode((string)$odp, true)['Data'] ?? []);
+        $wynik[$co] = $dane ? (string)($dane[0]['Status'] ?? '?') : 'brak na liście nadawców';
+        if (in_array('Active', array_column($dane, 'Status'), true)) $wynik['zatwierdzony'] = true;
+    }
+    if (!$wynik['zatwierdzony'] && (str_starts_with((string)$wynik['adres'], 'cURL') || str_starts_with((string)$wynik['adres'], 'HTTP'))) $wynik['zatwierdzony'] = null;
+    return $wynik;
+}
+
 /** Jedno zapytanie o status. 'zerwane' => true = błąd połączenia (cURL), Mailjet nic nie odpowiedział. */
 function bon_mailjet_status_proba(array $k, int|string $id): array {
     if ($k['mail_tryb'] === 'plik') {

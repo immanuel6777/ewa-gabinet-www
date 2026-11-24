@@ -558,6 +558,8 @@ function bon_testy(array $kBaza, PDO $pdo): array {
             'mail_smtp_haslo', 'panel_konta', 'log_token', 'test_token'];
         $t('lib/ustawienia.php w repo: same ustawienia jawne, żadnych sekretów ani kont', $uR && !array_intersect(array_keys($uR), $tajne)
             && !array_diff(array_keys($uR), BON_USTAWIENIA_JAWNE), json_encode(array_keys($uR)));
+        $t('lib/ustawienia.php: nadawca i login SMTP to ta sama skrzynka (OVH wymaga tej samej koperty, inaczej zapas odpada)',
+            preg_match('/<([^>]+)>/', (string)($uR['mail_nadawca'] ?? ''), $mN) === 1 && strtolower($mN[1]) === strtolower((string)($uR['mail_smtp_user'] ?? '')));
     } finally {
         putenv($envK === false ? 'BONY_KONFIG' : "BONY_KONFIG=$envK");
         putenv($envU === false ? 'BONY_USTAWIENIA' : "BONY_USTAWIENIA=$envU");
