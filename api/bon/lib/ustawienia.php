@@ -47,6 +47,8 @@ return [
     'mail_nadawca' => 'EWA Gabinet podologiczny <bony@ewa-gabinet.pl>', // nazwa nadawcy: Bartek 2026-11-24
     'mail_odpowiedz' => 'bony@ewa-gabinet.pl',
     'mail_powiadomienie' => ['alerty@ewa-gabinet.pl'],
+    // sprawy klientów (rezygnacja ze strony /bon, P-12): Reply-To = kupujący, link do panelu; awarie dalej na alerty@
+    'mail_obsluga' => ['bony@ewa-gabinet.pl'],
     'telefon_pomoc_bony' => '506 102 340',
     'telefon_pomoc_bony_godziny' => 'pon.–pt. 9–17',
 

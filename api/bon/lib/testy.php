@@ -13,6 +13,7 @@ require_once __DIR__ . '/testy-sync.php';
 require_once __DIR__ . '/testy-krok1.php';
 require_once __DIR__ . '/testy-krok4.php';
 require_once __DIR__ . '/testy-obsluga.php';
+require_once __DIR__ . '/testy-rezygnacja.php';
 
 /** Payload jak w dokumentacji Easytools (single_product_bought), z nadpisaniami. */
 function bon_test_payload(array $nadpisz = []): array {
@@ -573,5 +574,5 @@ function bon_testy(array $kBaza, PDO $pdo): array {
         @rmdir($katU);
     }
 
-    return array_merge($wyniki, bon_testy_panel($k, $pdo), bon_testy_sync($k, $pdo), bon_testy_krok1($k, $pdo), bon_testy_krok4($k, $pdo), bon_testy_obsluga($k, $pdo));
+    return array_merge($wyniki, bon_testy_panel($k, $pdo), bon_testy_sync($k, $pdo), bon_testy_krok1($k, $pdo), bon_testy_krok4($k, $pdo), bon_testy_obsluga($k, $pdo), bon_testy_rezygnacja($k, $pdo));
 }

@@ -66,6 +66,7 @@ const BON_USTAWIENIA_JAWNE = [
     'telefon_pomoc_bony', 'telefon_pomoc_bony_godziny', 'mail_zapas', 'mail_smtp_host', 'mail_smtp_port', 'mail_smtp_user',
     'webhook_tryb', 'kwota_jednostka', 'easytools_tryb', 'easytools_produkt_uuid', 'bon_adres_pelny_min',
     'mail_zapas_test_do', // przełącznik testu zapasu – z repo zamiast FTP (wpis 11:35)
+    'mail_obsluga',       // P-12: adres obsługi klientów (bony@)
 ];
 
 /**
@@ -601,10 +602,12 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
 // --- verify (publiczny) ---
 
 // limit zapytań na IP i minutę; true = można. $cel rozdziela liczniki (verify / adres na stronie podziękowania).
-function bon_limit_ok(PDO $pdo, array $k, string $ip, string $cel = 'limit', ?int $max = null): bool {
+// $oknoS: długość okna w sekundach (60 = minuta; 3600 = godzina dla limitu prób rezygnacji na bon). Okno zapisane jako numer
+// minuty jego początku, więc sprzątanie (okna starsze niż 60 min) działa tak samo dla obu długości.
+function bon_limit_ok(PDO $pdo, array $k, string $ip, string $cel = 'limit', ?int $max = null, int $oknoS = 60): bool {
     $tab = bon_tabela($k, 'voucher_verify_limit');
     $klucz = hash('sha256', $ip . '|' . ($k['easytools_webhook_sekret'] ?? '') . '|' . $cel);
-    $okno = intdiv(time(), 60);
+    $okno = intdiv(time(), $oknoS) * intdiv($oknoS, 60);
     $up = $pdo->prepare("UPDATE $tab SET licznik = licznik + 1 WHERE klucz = ? AND okno = ?");
     $up->execute([$klucz, $okno]);
     if ($up->rowCount() === 0) {
@@ -663,12 +666,15 @@ function bon_obsluz_verify(array $k, string $wpisany, string $ip, ?callable $pdo
     if ($kod === null) return [400, ['ok' => false, 'blad' => 'zły format kodu']];
     $pdo = $pdoFabryka ? $pdoFabryka($k) : bon_pdo($k);
     if (!bon_limit_ok($pdo, $k, $ip)) return [429, ['ok' => false, 'blad' => 'za dużo zapytań – spróbuj za minutę']];
-    $st = $pdo->prepare('SELECT status, initial_pln, balance_pln, expires_at FROM ' . bon_tabela($k, 'vouchers') . ' WHERE code = ?');
+    $st = $pdo->prepare('SELECT status, initial_pln, balance_pln, expires_at, created_at FROM ' . bon_tabela($k, 'vouchers') . ' WHERE code = ?');
     $st->execute([$kod]);
     $bon = $st->fetch();
     if (!$bon) return [404, ['ok' => false, 'znaleziono' => false]];
     $status = bon_status_efektywny($bon, $teraz);
-    $odp = ['ok' => true, 'znaleziono' => true, 'kod' => $kod, 'status' => $status, 'wazny_do' => substr((string)$bon['expires_at'], 0, 10)];
+    $odp = ['ok' => true, 'znaleziono' => true, 'kod' => $kod, 'status' => $status, 'wazny_do' => substr((string)$bon['expires_at'], 0, 10),
+        // P-12 (2026-11-24, wpis 16:50): czy /bon ma pokazać „Zgłoś rezygnację z bonu” – ważny, saldo > 0, 14 dni od zapłaty (daty nie zwracamy)
+        'rezygnacja_mozliwa' => $status === 'valid' && (int)bon_grosze($bon['balance_pln']) > 0
+            && bon_rezygnacja_w_terminie($bon, ($teraz ?? bon_teraz())->format('Y-m-d'))];
     // saldo tylko dla bonu, którym można płacić albo który się zużył; wstrzymany / zwrócony / wygasły – sam status
     if ($status === 'valid' || $status === 'used') {
         $odp['saldo'] = bon_zl((int)bon_grosze($bon['balance_pln']));

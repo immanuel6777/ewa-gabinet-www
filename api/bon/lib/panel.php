@@ -341,6 +341,7 @@ function bon_panel_rezygnacja(array $k, PDO $pdo, int $voucherId): ?array {
     // zlozono = wysłanie / złożenie oświadczenia (termin 14 dni), otrzymano = dzień, w którym gabinet je dostał (od niego bon
     // zablokowany i od niego 14 dni na zwrot pieniędzy – decyzja 3, 2026-11-23)
     return ['zlozono' => substr((string)$w['zlozono_at'], 0, 10), 'otrzymano' => $otrzymano,
+        'godzina' => $w['kanal'] === 'strona' ? substr((string)$w['zlozono_at'], 11, 5) : null, // P-12: zgłoszona na /bon – z godziną
         'zwrot_do' => (new DateTimeImmutable($otrzymano, new DateTimeZone(BON_STREFA)))->modify('+14 days')->format('Y-m-d'),
         'kanal' => (string)$w['kanal'], 'kwota' => bon_zl((int)bon_grosze($w['kwota_pln'])), 'stan' => (string)$w['zwrot_stan']];
 }
