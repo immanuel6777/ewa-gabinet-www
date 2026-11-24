@@ -1,8 +1,14 @@
 <?php
-// Panel realizacji bonów – zmiany administracyjne (etap 3: 2026-11-21). Tylko konto z rolą admin (Bartek), JSON + X-CSRF.
+// Panel realizacji bonów – zmiany administracyjne (etap 3: 2026-11-21). Konto z rolą admin (Bartek), JSON + X-CSRF;
+// akcję „rezygnacja” także konto z 'rezygnacje' => true w konfigu (Ewa, decyzja 1 z 2026-11-23).
 //   POST {kod, akcja: waznosc, data: RRRR-MM-DD, powod} – ręczna zmiana daty ważności (indywidualne zgody Ewy, poza regulaminem)
 //   POST {kod, akcja: zatwierdz}                       – bon wstrzymany → ważny, potem PDF mailem do kupującego
-//   POST {kod, akcja: zwrot, powod}                    – oznaczenie zwrotu (same pieniądze zwraca się w Easytools)
+//   POST {kod, akcja: zwrot, powod}                    – oznaczenie zwrotu (same pieniądze zwraca się w Easytools);
+//                                                         przy rezygnacji zamyka ją jako zwrot ręczny (krok 3 nie zleci drugiego)
+//   POST {kod, akcja: rezygnacja, kanal: mail|gabinet, data: RRRR-MM-DD, otrzymano: RRRR-MM-DD, powod}
+//                                                       – rezygnacja mailem / na papierze (krok 4); data = dzień wysłania lub
+//                                                         złożenia oświadczenia (termin 14 dni), otrzymano = dzień, w którym
+//                                                         doszło do gabinetu (blokada bonu, 14 dni na zwrot); po terminie z powodem
 //   POST {kod, akcja: cofnij-rezygnacje, powod}        – rezygnacja złożona pomyłkowo albo wycofana, tylko przed zleceniem zwrotu
 // Każda zmiana trafia do voucher_admin_log (kto, kiedy, co). Logika: lib/panel.php.
 

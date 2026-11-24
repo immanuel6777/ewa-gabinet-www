@@ -134,6 +134,83 @@ function bon_status_efektywny(array $bon, ?DateTimeImmutable $teraz = null): str
     return (string)$bon['status'];
 }
 
+// --- terminy z regulaminu (krok 4, 2026-11-23; te same funkcje użyją /bon w krokach 2 i 5) ---
+// Daty w czasie polskim, liczone na dniach kalendarzowych (bez godzin). created_at bonu = chwila ZAPŁATY (bon_data_zaplaty),
+// nie utworzenia wiersza – regulamin liczy 14 dni i 6 miesięcy „od dnia zapłaty”.
+
+/**
+ * Chwila zapłaty zamówienia (2026-11-23): od jej dnia liczą się 14 dni na rezygnację i 6 miesięcy ważności. Bon utworzony
+ * przez synchronizację po północy nie może dostać dnia utworzenia zamiast dnia zapłaty.
+ * $zrodlo: tekst daty z API (ISO 8601: „date” transakcji, awaryjnie created_at zamówienia) albo liczba sekund unix
+ * (webhook: timestamp). Brak, nieczytelna albo spoza [teraz − 30 dni, teraz + 5 min] → $teraz.
+ */
+function bon_data_zaplaty(mixed $zrodlo, DateTimeImmutable $teraz): DateTimeImmutable {
+    $strefa = new DateTimeZone(BON_STREFA);
+    try {
+        if (is_int($zrodlo) || (is_string($zrodlo) && ctype_digit($zrodlo))) $d = new DateTimeImmutable('@' . (int)$zrodlo);
+        elseif (is_string($zrodlo) && trim($zrodlo) !== '') $d = new DateTimeImmutable($zrodlo, $strefa);
+        else return $teraz;
+    } catch (Throwable) {
+        return $teraz;
+    }
+    $d = $d->setTimezone($strefa);
+    if ($d > $teraz->modify('+5 minutes') || $d < $teraz->modify('-30 days')) return $teraz;
+    return $d;
+}
+
+/** Ostatni dzień na rezygnację: dzień zapłaty + 14 (dzień zapłaty się nie liczy; 14. dzień jeszcze w terminie, 15. już nie). */
+function bon_rezygnacja_termin(array $bon): string {
+    $zaplata = new DateTimeImmutable(substr((string)$bon['created_at'], 0, 10), new DateTimeZone(BON_STREFA));
+    return $zaplata->modify('+14 days')->format('Y-m-d');
+}
+
+/** Czy oświadczenie z dnia $data (RRRR-MM-DD: wysłanie maila / listu, złożenie w gabinecie, formularz na /bon) mieści się w terminie. */
+function bon_rezygnacja_w_terminie(array $bon, string $data): bool {
+    return $data >= substr((string)$bon['created_at'], 0, 10) && $data <= bon_rezygnacja_termin($bon);
+}
+
+const BON_PRZEDLUZENIE_MIESIECY = 3;
+const BON_PRZEDLUZENIE_OKNO_DNI = 30;
+
+/**
+ * Jedno bezpłatne przedłużenie o 3 miesiące: bon ważny w bazie (także „po terminie” liczony z daty), saldo > 0, jeszcze nieprzedłużany,
+ * dziś w oknie od 30 dni przed końcem ważności do 30 dni po nim. Nowa data = obecny koniec + 3 mies. (arytmetyka bon_waznosc).
+ * Zwraca ['od','do','nowa'] albo null (przedłużenie niemożliwe).
+ */
+function bon_przedluzenie_okno(array $bon, ?DateTimeImmutable $teraz = null): ?array {
+    if (!array_key_exists('przedluzony_at', $bon)) return null; // przed migracją kroku 1 na OVH: bez przycisku (UPDATE by się wywalił)
+    if ($bon['status'] !== 'valid' || !empty($bon['przedluzony_at']) || (int)bon_grosze($bon['balance_pln']) <= 0) return null;
+    $koniec = new DateTimeImmutable(substr((string)$bon['expires_at'], 0, 10), new DateTimeZone(BON_STREFA));
+    $od = $koniec->modify('-' . BON_PRZEDLUZENIE_OKNO_DNI . ' days')->format('Y-m-d');
+    $do = $koniec->modify('+' . BON_PRZEDLUZENIE_OKNO_DNI . ' days')->format('Y-m-d');
+    $dzis = ($teraz ?? bon_teraz())->format('Y-m-d');
+    if ($dzis < $od || $dzis > $do) return null;
+    return ['od' => $od, 'do' => $do, 'nowa' => bon_waznosc($koniec, BON_PRZEDLUZENIE_MIESIECY)];
+}
+
+/**
+ * Przedłużenie (panel: każda rola; /bon w kroku 5: klient). Wołać w transakcji, z bonem odczytanym FOR UPDATE.
+ * Zwraca [kod HTTP, odpowiedź]. UPDATE z warunkiem przedluzony_at IS NULL – drugie kliknięcie / drugie urządzenie nie przedłuży dwa razy.
+ */
+function bon_przedluz(array $k, PDO $pdo, array $bon, string $kto, ?DateTimeImmutable $teraz = null): array {
+    $teraz ??= bon_teraz();
+    $okno = bon_przedluzenie_okno($bon, $teraz);
+    if (!$okno) {
+        $powod = !empty($bon['przedluzony_at']) ? 'Bon był już przedłużany – drugie bezpłatne przedłużenie nie przysługuje.'
+            : ($bon['status'] !== 'valid' || (int)bon_grosze($bon['balance_pln']) <= 0 ? 'Tego bonu nie można przedłużyć.'
+            : 'Przedłużenie jest możliwe od 30 dni przed końcem ważności do 30 dni po nim.');
+        return [409, ['ok' => false, 'blad' => $powod]];
+    }
+    $stara = substr((string)$bon['expires_at'], 0, 10);
+    $up = $pdo->prepare('UPDATE ' . bon_tabela($k, 'vouchers') . ' SET expires_at = ?, expires_at_pierwotna = ?, przedluzony_at = ?
+                         WHERE id = ? AND przedluzony_at IS NULL AND status = \'valid\'');
+    $up->execute([$okno['nowa'], $stara, $teraz->format('Y-m-d H:i:s'), $bon['id']]);
+    if ($up->rowCount() !== 1) return [409, ['ok' => false, 'blad' => 'Bon był już przedłużany – drugie bezpłatne przedłużenie nie przysługuje.']];
+    $opis = "$stara → {$okno['nowa']} (o " . BON_PRZEDLUZENIE_MIESIECY . ' mies.)';
+    bon_historia($k, $pdo, (int)$bon['id'], 'przedluzenie', $opis, $kto, $teraz);
+    return [200, ['ok' => true, 'akcja' => 'przedluzenie', 'opis' => 'ważność przedłużona: ' . $opis, 'wazny_do' => $okno['nowa']]];
+}
+
 // --- kody ---
 
 function bon_nowy_kod(string $prefix = 'EWA'): string {
@@ -319,6 +396,7 @@ function bon_obsluz_webhook(array $k, string $raw, array $naglowki, ?callable $p
         'promo' => is_scalar($d['promo_code'] ?? null) ? (string)$d['promo_code'] : '',
         'dla' => bon_pole_wlasne($d['custom_fields'] ?? null, (array)$k['pole_dla']),
         'od' => bon_pole_wlasne($d['custom_fields'] ?? null, (array)$k['pole_od']),
+        'zaplacono_at' => $d['timestamp'] ?? null, // chwila zdarzenia w Easytools (webhook przychodzi zaraz po zapłacie)
     ]);
 }
 
@@ -327,7 +405,8 @@ function bon_obsluz_webhook(array $k, string $raw, array $naglowki, ?callable $p
  * $z (już znormalizowane przez wołającego):
  *   zrodlo 'webhook'|'api', zamowienie (UUID), transakcja (?UUID transakcji Easytools), email, imie, nip, waluta,
  *   ilosc (surowa wartość), zaplacono (?int grosze za całe zamówienie), wariant (identyfikator do kolumny price_id),
- *   nominal (z mapy: liczba zł | 'dowolna' | null = nieznany wariant), promo, dla, od.
+ *   nominal (z mapy: liczba zł | 'dowolna' | null = nieznany wariant), promo, dla, od,
+ *   zaplacono_at (opcjonalnie: chwila zapłaty, zob. bon_data_zaplaty – z niej created_at i expires_at).
  * Zwraca [200, odpowiedź, ?callable wysyłka PDF po odpowiedzi]. Powtórka (klucz unikalny zamówienie+nr) niczego nie dubluje,
  * a jej callable dokańcza nieudaną wcześniej wysyłkę.
  */
@@ -381,7 +460,8 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
     if ($wartosc <= 0) $uwagi[] = 'wartość bonu 0 zł';
     $status = $uwagi ? 'held' : 'valid';
 
-    $teraz = bon_teraz();
+    $teraz = bon_teraz(); // chwila utworzenia (historia); terminy bonu liczone od zapłaty
+    $zaplata = bon_data_zaplaty($z['zaplacono_at'] ?? null, $teraz);
     $promo = bon_tekst((string)($z['promo'] ?? ''), 100);
     $nip = bon_tekst((string)($z['nip'] ?? ''), 20);
     $wspolne = [
@@ -398,8 +478,8 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
         'status_uwagi' => $uwagi ? mb_substr(implode('; ', $uwagi), 0, 255) : null,
         'easytools_order_id' => $zamowienie,
         'easytools_transaction_id' => $transakcja,
-        'created_at' => $teraz->format('Y-m-d H:i:s'),
-        'expires_at' => bon_waznosc($teraz, (int)$k['waznosc_miesiecy']),
+        'created_at' => $zaplata->format('Y-m-d H:i:s'),
+        'expires_at' => bon_waznosc($zaplata, (int)$k['waznosc_miesiecy']),
     ];
 
     $sql = "INSERT INTO $tab (code, initial_pln, balance_pln, paid_pln, price_id, promo_code, buyer_email, buyer_name, buyer_nip, dla, od,

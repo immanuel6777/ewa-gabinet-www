@@ -33,7 +33,7 @@
   <link rel="stylesheet" href="/_astro/kokarda-czerwona-satyna.CzBMHDtY.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.DYnA_vyI.css">
+<link rel="stylesheet" href="/_astro/panel-bonow.GneBJnwD.css">
 <link rel="stylesheet" href="/_astro/Baza.CLpFJTMb.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
     <a class="przeskocz" href="#tresc">Przejdź do treści</a>
@@ -78,13 +78,20 @@
       </div>
 
       <form class="szukaj formularz" data-p-szukaj data-astro-cid-nl2nwxtk>
-        <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Numer bonu</span>
-          <input name="nr" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="EWA-XXXX-XXXX" maxlength="20" required data-astro-cid-nl2nwxtk>
+        <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Numer bonu, e-mail kupującego albo nr zamówienia</span>
+          <input name="nr" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="EWA-XXXX-XXXX" maxlength="190" required data-astro-cid-nl2nwxtk>
         </label>
-        <button class="przycisk" type="submit" data-astro-cid-nl2nwxtk>Otwórz bon</button>
+        <button class="przycisk" type="submit" data-astro-cid-nl2nwxtk>Szukaj</button>
       </form>
-      <p class="podpowiedz" data-astro-cid-nl2nwxtk>Możesz też zeskanować kod QR z bonu aparatem telefonu – bon otworzy się od razu tutaj.</p>
+      <p class="podpowiedz" data-astro-cid-nl2nwxtk>Możesz też zeskanować kod QR z bonu aparatem telefonu – bon otworzy się od razu tutaj. Klient bez bonu? Wpisz e-mail, którym płacił.</p>
       <p class="blad" data-p-blad hidden data-astro-cid-nl2nwxtk></p>
+
+      <!-- wyniki wyszukiwania po e-mailu albo zamówieniu (krok 4) -->
+      <section class="karta" data-p-wyniki hidden data-astro-cid-nl2nwxtk>
+        <h2 data-astro-cid-nl2nwxtk>Znalezione bony</h2>
+        <ul class="wyniki" data-p-wyniki-lista data-astro-cid-nl2nwxtk></ul>
+        <p class="podpowiedz" data-p-wyniki-info hidden data-astro-cid-nl2nwxtk></p>
+      </section>
 
       <section class="karta bon" data-p-bon hidden data-astro-cid-nl2nwxtk>
         <p class="status" data-p-status data-astro-cid-nl2nwxtk></p>
@@ -97,7 +104,14 @@
           <div data-astro-cid-nl2nwxtk><dt data-astro-cid-nl2nwxtk>Numer</dt><dd data-p-kod data-astro-cid-nl2nwxtk></dd></div>
           <div data-astro-cid-nl2nwxtk><dt data-astro-cid-nl2nwxtk>Ważny do</dt><dd data-p-wazny data-astro-cid-nl2nwxtk></dd></div>
           <div data-p-dla-wiersz data-astro-cid-nl2nwxtk><dt data-astro-cid-nl2nwxtk>Dla</dt><dd data-p-dla data-astro-cid-nl2nwxtk></dd></div>
+          <div data-p-przedluzony-wiersz hidden data-astro-cid-nl2nwxtk><dt data-astro-cid-nl2nwxtk>Przedłużony</dt><dd data-p-przedluzony data-astro-cid-nl2nwxtk></dd></div>
         </dl>
+        <p class="info" data-p-rezygnacja hidden data-astro-cid-nl2nwxtk></p>
+        <!-- jedno bezpłatne przedłużenie o 3 mies. (regulamin), każda rola; dowolną datę zmienia admin niżej -->
+        <div class="przedluz" data-p-przedluz hidden data-astro-cid-nl2nwxtk>
+          <p data-p-przedluz-tekst data-astro-cid-nl2nwxtk></p>
+          <button class="przycisk obrys" type="button" data-p-przedluz-przycisk data-astro-cid-nl2nwxtk>Przedłuż o 3 miesiące</button>
+        </div>
       </section>
 
       <!-- realizacja -->
@@ -494,8 +508,30 @@
 
       <section class="karta" data-p-historia-sekcja hidden data-astro-cid-nl2nwxtk>
         <h2 data-astro-cid-nl2nwxtk>Historia</h2>
+        <h3 data-astro-cid-nl2nwxtk>Realizacje</h3>
         <ul class="historia" data-p-historia data-astro-cid-nl2nwxtk></ul>
         <p class="podpowiedz" data-p-historia-pusta hidden data-astro-cid-nl2nwxtk>Bon nie był jeszcze realizowany.</p>
+        <h3 data-astro-cid-nl2nwxtk>Zdarzenia</h3>
+        <ul class="historia" data-p-zdarzenia data-astro-cid-nl2nwxtk></ul>
+      </section>
+
+      <!-- rezygnacja, która przyszła mailem albo na papierze (krok 4): admin i konto z 'rezygnacje' => true (Ewa);
+           ze strony /bon dojdzie w kroku 2 -->
+      <section class="karta" data-p-rez-sekcja hidden data-astro-cid-nl2nwxtk>
+        <h2 data-astro-cid-nl2nwxtk>Zarejestruj rezygnację</h2>
+        <form class="admin-forma formularz" data-p-rez-forma data-astro-cid-nl2nwxtk>
+          <fieldset class="kanal" data-astro-cid-nl2nwxtk>
+            <legend class="etykieta" data-astro-cid-nl2nwxtk>Jak przyszło oświadczenie</legend>
+            <label class="zaznacz" data-astro-cid-nl2nwxtk><input type="radio" name="kanal" value="mail" required data-astro-cid-nl2nwxtk><span data-astro-cid-nl2nwxtk>Mailem</span></label>
+            <label class="zaznacz" data-astro-cid-nl2nwxtk><input type="radio" name="kanal" value="gabinet" data-astro-cid-nl2nwxtk><span data-astro-cid-nl2nwxtk>Na papierze w gabinecie</span></label>
+          </fieldset>
+          <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Data wysłania maila lub listu (albo złożenia w gabinecie)</span><input type="date" name="data" required data-astro-cid-nl2nwxtk></label>
+          <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Data otrzymania przez gabinet</span><input type="date" name="otrzymano" required data-astro-cid-nl2nwxtk></label>
+          <p class="podpowiedz" data-p-rez-termin data-astro-cid-nl2nwxtk></p>
+          <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Powód (wymagany po terminie)</span><input type="text" name="powod" maxlength="150" data-astro-cid-nl2nwxtk></label>
+          <button class="przycisk obrys" type="submit" data-astro-cid-nl2nwxtk>Zarejestruj rezygnację</button>
+        </form>
+        <p class="blad" data-p-blad-rez hidden data-astro-cid-nl2nwxtk></p>
       </section>
 
       <!-- tylko admin -->
@@ -509,11 +545,10 @@
         </form>
         <div class="admin-akcje" data-astro-cid-nl2nwxtk>
           <button class="przycisk" type="button" data-p-zatwierdz-bon hidden data-astro-cid-nl2nwxtk>Zatwierdź wstrzymany bon i wyślij PDF</button>
+          <button class="przycisk obrys" type="button" data-p-cofnij-rez hidden data-astro-cid-nl2nwxtk>Cofnij rezygnację</button>
           <button class="przycisk obrys" type="button" data-p-zwrot data-astro-cid-nl2nwxtk>Oznacz zwrot (pieniądze zwraca się w Easytools)</button>
         </div>
         <p class="blad" data-p-blad-admin hidden data-astro-cid-nl2nwxtk></p>
-        <h3 data-astro-cid-nl2nwxtk>Dziennik zmian</h3>
-        <ul class="historia" data-p-dziennik data-astro-cid-nl2nwxtk></ul>
       </section>
     </div>
   </div>
@@ -535,4 +570,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.CzVw1Nag.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.BTrrWUmJ.js"></script>

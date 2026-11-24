@@ -1,7 +1,8 @@
 <?php
 // Panel realizacji bonów w gabinecie – logika (etap 3: 2026-11-21, plan/BONY-PLAN-TECHNICZNY.md sekcje 3–7).
 // Wygląd panelu: strona Astro /panel-bonow (src/pages/panel-bonow.astro + src/scripts/panel-bonow.ts) woła cienkie
-// pliki HTTP: sesja.php (logowanie), historia.php (bon + historia), redeem.php (realizacja), admin.php (tylko admin).
+// pliki HTTP: sesja.php (logowanie), historia.php (bon + historia), redeem.php (realizacja), admin.php (tylko admin),
+// szukaj.php (bon po numerze, e-mailu kupującego albo zamówieniu Easytools) i przedluz.php (przedłużenie o 3 mies.) – krok 4, 2026-11-23.
 // Tu same funkcje, bez wypisywania – testowalne na SQLite (tests/php/) i na OVH (test-ovh.php).
 //
 // Bezpieczeństwo:
@@ -90,7 +91,16 @@ function bon_panel_rola(?array $konto): string {
     return ($konto['rola'] ?? '') === 'admin' ? 'admin' : 'realizacja';
 }
 
-/** Sesja z ciasteczka → ['login','imie','rola','csrf'] albo null (brak, wygasła, konto usunięte z konfigu). */
+/**
+ * Rejestracja rezygnacji, która przyszła mailem albo na papierze: admin albo konto z 'rezygnacje' => true w konfigu
+ * (decyzja 1, 2026-11-23: Ewa tak, Karolina nie). Uprawnienie przy koncie, nie trzecia rola. Cofnięcie rezygnacji,
+ * „Oznacz zwrot” i pozostałe zmiany zostają tylko dla admina.
+ */
+function bon_panel_moze_rezygnacje(?array $konto): bool {
+    return bon_panel_rola($konto) === 'admin' || ($konto['rezygnacje'] ?? false) === true;
+}
+
+/** Sesja z ciasteczka → ['login','imie','rola','rezygnacje','csrf'] albo null (brak, wygasła, konto usunięte z konfigu). */
 function bon_panel_sesja(array $k, PDO $pdo, string $token, ?DateTimeImmutable $teraz = null): ?array {
     $k = bon_panel_konfig($k);
     if (!preg_match('/^[a-f0-9]{64}$/', $token)) return null;
@@ -100,7 +110,8 @@ function bon_panel_sesja(array $k, PDO $pdo, string $token, ?DateTimeImmutable $
     if (!$s || (string)$s['expires_at'] < ($teraz ?? bon_teraz())->format('Y-m-d H:i:s')) return null;
     $konto = $k['panel_konta'][$s['login']] ?? null;
     if (!is_array($konto) || empty($konto['haslo'])) return null; // konto skreślone z konfigu = wylogowane wszędzie
-    return ['login' => (string)$s['login'], 'imie' => (string)($konto['imie'] ?? $s['login']), 'rola' => bon_panel_rola($konto), 'csrf' => (string)$s['csrf']];
+    return ['login' => (string)$s['login'], 'imie' => (string)($konto['imie'] ?? $s['login']), 'rola' => bon_panel_rola($konto),
+        'rezygnacje' => bon_panel_moze_rezygnacje($konto), 'csrf' => (string)$s['csrf']];
 }
 
 function bon_panel_wyloguj(array $k, PDO $pdo, string $token): void {
@@ -161,6 +172,20 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
         'kto' => bon_panel_imie($k, (string)$r['redeemed_by']),
     ], $st->fetchAll());
 
+    $admin = $sesja['rola'] === 'admin';
+    // historia zdarzeń bonu (voucher_admin_log) dla każdej roli; szczegóły (wpisane powody, kwota zapłacona) tylko admin –
+    // kasa widzi samą nazwę zdarzenia, a przy przedłużeniu także daty (krok 4, 2026-11-23)
+    $st = $pdo->prepare('SELECT akcja, szczegoly, kto, kiedy FROM ' . bon_tabela($k, 'voucher_admin_log') . ' WHERE voucher_id = ? ORDER BY kiedy DESC, id DESC');
+    $st->execute([$bon['id']]);
+    $zdarzenia = array_map(static fn($r) => [
+        'kiedy' => (string)$r['kiedy'],
+        'akcja' => (string)$r['akcja'],
+        'nazwa' => BON_PANEL_ZDARZENIA[$r['akcja']] ?? (string)$r['akcja'],
+        'kto' => (string)$r['kto'],
+        'kto_imie' => bon_panel_imie($k, (string)$r['kto']),
+        'szczegoly' => $admin || $r['akcja'] === 'przedluzenie' ? $r['szczegoly'] : null,
+    ], $st->fetchAll());
+
     $odp = [
         'ok' => true,
         'kod' => $bon['code'],
@@ -169,19 +194,108 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
         'wartosc' => bon_zl((int)bon_grosze($bon['initial_pln'])),
         'wazny_do' => substr((string)$bon['expires_at'], 0, 10),
         'dla' => $bon['dla'],
+        'przedluzony' => !empty($bon['przedluzony_at']) ? substr((string)$bon['przedluzony_at'], 0, 10) : null,
+        'wazny_do_pierwotnie' => !empty($bon['expires_at_pierwotna']) ? substr((string)$bon['expires_at_pierwotna'], 0, 10) : null,
+        'przedluzenie' => bon_przedluzenie_okno($bon, $teraz), // null = przycisku „Przedłuż” nie ma
+        'rezygnacja' => bon_panel_rezygnacja($k, $pdo, (int)$bon['id']),
         'historia' => $historia,
+        'zdarzenia' => $zdarzenia,
     ];
-    if ($sesja['rola'] === 'admin') {
+    if ($admin || !empty($sesja['rezygnacje'])) {
+        // formularz „Zarejestruj rezygnację”: tylko bon ważny w bazie z saldem (bon_panel_zarejestruj_rezygnacje sprawdza to samo)
+        $saldo = (int)bon_grosze($bon['balance_pln']);
+        $odp['rezygnacja_mozliwa'] = $bon['status'] === 'valid' && $saldo > 0;
+        $odp['rezygnacja_do'] = bon_rezygnacja_termin($bon);
+        $odp['rezygnacja_kwota'] = bon_zl(min($saldo, (int)bon_grosze($bon['paid_pln'])));
+    }
+    if ($admin) {
         $odp['status_bazy'] = $bon['status'];
         $odp['uwagi'] = $bon['status_uwagi'];
-        $odp['zamowienie'] = $bon['easytools_order_id'];
-        $odp['zaplacono'] = bon_zl((int)bon_grosze($bon['paid_pln']));
+        $odp['zamowienie'] = $bon['easytools_order_id']; // id zamówienia Easytools (UUID) – do skopiowania
+        $odp['email'] = $bon['buyer_email']; // po e-mailu Bartek znajduje zamówienie w panelu Easytools (UUID tam nie wyszukuje)
         $odp['kupiono'] = (string)$bon['created_at'];
-        $st = $pdo->prepare('SELECT akcja, szczegoly, kto, kiedy FROM ' . bon_tabela($k, 'voucher_admin_log') . ' WHERE voucher_id = ? ORDER BY kiedy DESC, id DESC');
-        $st->execute([$bon['id']]);
-        $odp['dziennik'] = array_map(static fn($r) => $r + ['kto_imie' => bon_panel_imie($k, (string)$r['kto'])], $st->fetchAll());
+        $odp['zaplacono'] = bon_zl((int)bon_grosze($bon['paid_pln']));
     }
     return [200, $odp];
+}
+
+const BON_PANEL_ZDARZENIA = [
+    'utworzenie' => 'Bon utworzony', 'mail' => 'Bon wysłany mailem', 'dla-od' => 'Uzupełnione „Dla” i „Od”',
+    'waznosc' => 'Zmiana daty ważności', 'zatwierdz' => 'Bon zatwierdzony', 'zwrot' => 'Zwrot oznaczony',
+    'rezygnacja' => 'Rezygnacja z bonu', 'rezygnacja-cofnieta' => 'Rezygnacja cofnięta', 'przedluzenie' => 'Ważność przedłużona',
+    'przypomnienie' => 'Przypomnienie o końcu ważności', 'zwrot-zlecony' => 'Zwrot zlecony', 'zwrot-potwierdzony' => 'Zwrot potwierdzony',
+    'zwrot-nieudany' => 'Zwrot nieudany',
+];
+
+/** Złożona (nieanulowana) rezygnacja bonu albo null. Przed migracją kroku 1 na OVH (brak tabeli) – null, panel działa dalej. */
+function bon_panel_rezygnacja(array $k, PDO $pdo, int $voucherId): ?array {
+    try {
+        $st = $pdo->prepare('SELECT zlozono_at, potwierdzono_at, kanal, kwota_pln, zwrot_stan FROM ' . bon_tabela($k, 'voucher_withdrawals') . " WHERE voucher_id = ? AND zwrot_stan <> 'anulowana'");
+        $st->execute([$voucherId]);
+        $w = $st->fetch();
+    } catch (PDOException) {
+        return null;
+    }
+    if (!$w) return null;
+    $otrzymano = substr((string)$w['potwierdzono_at'], 0, 10);
+    // zlozono = wysłanie / złożenie oświadczenia (termin 14 dni), otrzymano = dzień, w którym gabinet je dostał (od niego bon
+    // zablokowany i od niego 14 dni na zwrot pieniędzy – decyzja 3, 2026-11-23)
+    return ['zlozono' => substr((string)$w['zlozono_at'], 0, 10), 'otrzymano' => $otrzymano,
+        'zwrot_do' => (new DateTimeImmutable($otrzymano, new DateTimeZone(BON_STREFA)))->modify('+14 days')->format('Y-m-d'),
+        'kanal' => (string)$w['kanal'], 'kwota' => bon_zl((int)bon_grosze($w['kwota_pln'])), 'stan' => (string)$w['zwrot_stan']];
+}
+
+// --- wyszukiwanie (krok 4): numer bonu, e-mail kupującego albo id zamówienia Easytools ---
+// POST (nie GET): e-mail nie trafia do logów serwera ani historii przeglądarki. Porównanie bez wielkości liter.
+const BON_PANEL_SZUKAJ_MAX = 20;
+
+/** [kod HTTP, odpowiedź]: {typ: kod, kod} albo {typ: email|zamowienie, bony: [...], wiecej}. */
+function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $teraz = null): array {
+    $q = trim($q);
+    $kod = bon_normalizuj_kod($q, (string)$k['kod_prefix']);
+    if ($kod !== null) return [200, ['ok' => true, 'typ' => 'kod', 'kod' => $kod]];
+    $tab = bon_tabela($k, 'vouchers');
+    if (str_contains($q, '@')) {
+        $wartosc = mb_strtolower($q, 'UTF-8');
+        if (!filter_var($wartosc, FILTER_VALIDATE_EMAIL)) return [400, ['ok' => false, 'blad' => 'Wpisz cały adres e-mail kupującego.']];
+        $typ = 'email';
+        $kolumna = 'buyer_email';
+    } elseif (preg_match('/^[A-Za-z0-9_-]{8,64}$/', $q)) {
+        $wartosc = strtolower($q);
+        $typ = 'zamowienie';
+        $kolumna = 'easytools_order_id';
+    } else {
+        return [400, ['ok' => false, 'blad' => 'Wpisz numer bonu (EWA-XXXX-XXXX), e-mail kupującego albo numer zamówienia Easytools.']];
+    }
+    $st = $pdo->prepare("SELECT * FROM $tab WHERE LOWER($kolumna) = ? ORDER BY created_at DESC, id DESC LIMIT " . (BON_PANEL_SZUKAJ_MAX + 1));
+    $st->execute([$wartosc]);
+    $wiersze = $st->fetchAll();
+    $bony = array_map(static fn($b) => [
+        'kod' => $b['code'],
+        'status' => bon_status_efektywny($b, $teraz),
+        'saldo' => bon_zl((int)bon_grosze($b['balance_pln'])),
+        'wartosc' => bon_zl((int)bon_grosze($b['initial_pln'])),
+        'wazny_do' => substr((string)$b['expires_at'], 0, 10),
+        'kupiono' => substr((string)$b['created_at'], 0, 10),
+    ], array_slice($wiersze, 0, BON_PANEL_SZUKAJ_MAX));
+    return [200, ['ok' => true, 'typ' => $typ, 'bony' => $bony, 'wiecej' => count($wiersze) > BON_PANEL_SZUKAJ_MAX]];
+}
+
+// --- przedłużenie o 3 miesiące (krok 4): każda rola panelu; reguły w bon_przedluz (lib/bon.php) ---
+
+function bon_panel_przedluz(array $k, PDO $pdo, array $sesja, string $wpisany, ?DateTimeImmutable $teraz = null): array {
+    if (bon_normalizuj_kod($wpisany, (string)$k['kod_prefix']) === null) return [400, ['ok' => false, 'blad' => 'Numer bonu ma postać EWA-XXXX-XXXX.']];
+    $pdo->beginTransaction();
+    try {
+        $bon = bon_panel_znajdz($k, $pdo, $wpisany, true);
+        if (!$bon) { $pdo->rollBack(); return [404, ['ok' => false, 'blad' => 'Nie ma bonu o tym numerze.']]; }
+        $wynik = bon_przedluz($k, $pdo, $bon, $sesja['login'], $teraz);
+        if ($wynik[0] === 200) $pdo->commit(); else $pdo->rollBack();
+        return $wynik;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
 }
 
 function bon_panel_imie(array $k, string $login): string {
@@ -329,16 +443,19 @@ function bon_panel_po_tokenie(array $k, PDO $pdo, string $token, string $wpisany
         'pozycje' => json_decode((string)$r['pozycje'], true) ?: []]];
 }
 
-// --- admin (tylko rola admin – Bartek) ---
+// --- admin (rola admin – Bartek; rejestracja rezygnacji także konto z 'rezygnacje' => true – Ewa) ---
 
 /**
- * $dane: kod, akcja (waznosc | zatwierdz | zwrot), data (YYYY-MM-DD, przy waznosc), powod (opcjonalnie).
+ * $dane: kod, akcja (waznosc | zatwierdz | zwrot | rezygnacja | cofnij-rezygnacje), data (YYYY-MM-DD: przy waznosc nowa data,
+ * przy rezygnacja dzień wysłania / złożenia oświadczenia), otrzymano (YYYY-MM-DD, przy rezygnacja; brak = dziś),
+ * kanal (mail | gabinet, przy rezygnacja), powod (opcjonalnie; wymagany przy cofnięciu i przy rezygnacji po terminie).
  * Zwraca [kod HTTP, odpowiedź, ?zamówienie do wysłania maila (po zatwierdzeniu wstrzymanego)].
  */
 function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTimeImmutable $teraz = null): array {
-    if ($sesja['rola'] !== 'admin') return [403, ['ok' => false, 'blad' => 'Ta zmiana jest tylko dla administratora.']];
-    $teraz ??= bon_teraz();
     $akcja = (string)($dane['akcja'] ?? '');
+    $wolno = $sesja['rola'] === 'admin' || ($akcja === 'rezygnacja' && !empty($sesja['rezygnacje']));
+    if (!$wolno) return [403, ['ok' => false, 'blad' => 'Ta zmiana jest tylko dla administratora.']];
+    $teraz ??= bon_teraz();
     $powod = bon_tekst((string)($dane['powod'] ?? ''), 150);
     $tabB = bon_tabela($k, 'vouchers');
     $doMaila = null;
@@ -366,6 +483,17 @@ function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
             if ($bon['status'] === 'refunded') { $pdo->rollBack(); return [409, ['ok' => false, 'blad' => 'Bon jest już oznaczony jako zwrócony.']]; }
             $pdo->prepare("UPDATE $tabB SET status = 'refunded' WHERE id = ?")->execute([$bon['id']]);
             $opis = $bon['status'] . ' → zwrócony, saldo w chwili zwrotu ' . bon_zl((int)bon_grosze($bon['balance_pln'])) . ' zł';
+            if ($bon['status'] === 'withdrawn') {
+                // pieniądze oddane ręcznie w Easytools: oczekująca rezygnacja → 'zlecony' z zwrot_ref = 'recznie', żeby lista
+                // oczekujących w kroku 3 nie zleciła drugiego zwrotu przez API (krok 3 nie odpytuje transakcji dla 'recznie')
+                $pdo->prepare('UPDATE ' . bon_tabela($k, 'voucher_withdrawals') . " SET zwrot_stan = 'zlecony', zwrot_zlecono_at = ?, zwrot_kwota_pln = kwota_pln, zwrot_ref = 'recznie'
+                               WHERE voucher_id = ? AND zwrot_stan = 'oczekuje'")->execute([$teraz->format('Y-m-d H:i:s'), $bon['id']]);
+                $opis .= '; rezygnacja zamknięta (zwrot ręczny w Easytools)';
+            }
+        } elseif ($akcja === 'rezygnacja') {
+            [$blad, $opis] = bon_panel_zarejestruj_rezygnacje($k, $pdo, $sesja, $bon, $dane, $powod, $teraz);
+            if ($blad) { $pdo->rollBack(); return $blad; }
+            $powod = ''; // już w opisie
         } elseif ($akcja === 'cofnij-rezygnacje') {
             // pomyłka (rezygnacja na nie tym bonie) albo klient się wycofał – tylko zanim zlecono zwrot (krok 1, 2026-11-23).
             // Wiersz rezygnacji zostaje ze stanem 'anulowana' (ponowna rezygnacja w terminie nadpisze ten sam wiersz).
@@ -392,4 +520,69 @@ function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
         throw $e;
     }
     return [200, ['ok' => true, 'akcja' => $akcja, 'opis' => $opis], $doMaila];
+}
+
+/**
+ * Rezygnacja, która przyszła mailem albo na papierze (krok 4, 2026-11-23). Wołana w transakcji bon_panel_admin, bon FOR UPDATE.
+ * Dwie daty (decyzja 3, 2026-11-23): „data” = wysłanie maila / listu albo złożenie w gabinecie – tylko do oceny, czy klient
+ * zmieścił się w 14 dniach (art. 30 ustawy o prawach konsumenta: wystarczy wysłać przed upływem terminu); „otrzymano” = dzień,
+ * w którym gabinet dostał oświadczenie (domyślnie dziś) – od niego bon jest zablokowany i liczy się 14 dni na zwrot pieniędzy
+ * (projekt § 14 ust. 18b i 19). Zapis: zlozono_at = wysłanie, potwierdzono_at = otrzymanie.
+ * Tylko z bonu ważnego w bazie (held / used / refunded / withdrawn odmawia: cofnięcie rezygnacji przywraca 'valid', więc
+ * rezygnacja z bonu wstrzymanego ominęłaby zatwierdzenie). Po terminie: tylko z wpisanym powodem (decyzja gabinetu), z adnotacją.
+ * Kwota zwrotu = min(saldo teraz, zapłacono). Wiersz 'anulowana' (wcześniej cofnięta) nadpisywany – jeden wiersz na bon.
+ * Zwraca [?[kod, odpowiedź] błędu, opis do historii].
+ */
+function bon_panel_zarejestruj_rezygnacje(array $k, PDO $pdo, array $sesja, array $bon, array $dane, string $powod, DateTimeImmutable $teraz): array {
+    $blad = static fn(int $kod, string $tekst) => [[$kod, ['ok' => false, 'blad' => $tekst]], ''];
+    $kanal = (string)($dane['kanal'] ?? '');
+    if (!in_array($kanal, ['mail', 'gabinet'], true)) return $blad(400, 'Wybierz, jak przyszła rezygnacja: mailem albo na papierze w gabinecie.');
+    $dzis = $teraz->format('Y-m-d');
+    $data = (string)($dane['data'] ?? '');
+    $otrzymano = (string)($dane['otrzymano'] ?? '');
+    if ($otrzymano === '') $otrzymano = $dzis;
+    foreach ([[$data, 'wysłania'], [$otrzymano, 'otrzymania']] as [$x, $nazwa]) {
+        $d = DateTimeImmutable::createFromFormat('!Y-m-d', $x, new DateTimeZone(BON_STREFA));
+        if (!$d || $d->format('Y-m-d') !== $x) return $blad(400, "Data $nazwa w formacie RRRR-MM-DD.");
+        if ($x > $dzis) return $blad(400, "Data $nazwa nie może być z przyszłości.");
+        if ($x < substr((string)$bon['created_at'], 0, 10)) return $blad(400, "Data $nazwa jest sprzed zakupu bonu.");
+    }
+    if ($otrzymano < $data) return $blad(400, 'Data otrzymania nie może być wcześniejsza niż data wysłania.');
+
+    if ($bon['status'] !== 'valid') {
+        return $blad(409, [
+            'withdrawn' => 'Rezygnacja z tego bonu jest już zarejestrowana.',
+            'held' => 'Bon jest wstrzymany (czeka na zatwierdzenie) – najpierw go zatwierdź albo oznacz zwrot.',
+        ][$bon['status']] ?? bon_panel_powod_odmowy((string)$bon['status']));
+    }
+    $saldo = (int)bon_grosze($bon['balance_pln']);
+    if ($saldo <= 0) return $blad(409, 'Saldo bonu jest wykorzystane – nie ma czego zwracać.');
+    $wTerminie = bon_rezygnacja_w_terminie($bon, $data);
+    $termin = bon_rezygnacja_termin($bon);
+    if (!$wTerminie && $powod === '') {
+        return $blad(400, 'Oświadczenie po terminie (14 dni minęło ' . $termin . '). Jeśli mimo to przyjmujesz rezygnację, wpisz powód.');
+    }
+    $kwota = min($saldo, (int)bon_grosze($bon['paid_pln']));
+
+    $tabW = bon_tabela($k, 'voucher_withdrawals');
+    $st = $pdo->prepare("SELECT zwrot_stan FROM $tabW WHERE voucher_id = ?");
+    $st->execute([$bon['id']]);
+    $stan = $st->fetchColumn();
+    if ($stan !== false && $stan !== 'anulowana') return $blad(409, 'Rezygnacja z tego bonu jest już zarejestrowana.');
+    // otrzymane dziś: dokładna chwila wpisu; wcześniej: sam dzień (godziny nie znamy)
+    $potwierdzono = $otrzymano === $dzis ? $teraz->format('Y-m-d H:i:s') : $otrzymano . ' 00:00:00';
+    $wartosci = [$data . ' 00:00:00', $potwierdzono, $kanal, $sesja['login'], bon_zl($saldo), bon_zl($kwota), $bon['id']];
+    if ($stan === false) {
+        $pdo->prepare("INSERT INTO $tabW (zlozono_at, potwierdzono_at, kanal, kto, saldo_pln, kwota_pln, voucher_id) VALUES (?, ?, ?, ?, ?, ?, ?)")->execute($wartosci);
+    } else {
+        $pdo->prepare("UPDATE $tabW SET zlozono_at = ?, potwierdzono_at = ?, kanal = ?, kto = ?, saldo_pln = ?, kwota_pln = ?, zwrot_stan = 'oczekuje',
+                       zwrot_zlecono_at = NULL, zwrot_kwota_pln = NULL, zwrot_potwierdzono_at = NULL, zwrot_ref = NULL, zwrot_blad = NULL
+                       WHERE voucher_id = ? AND zwrot_stan = 'anulowana'")->execute($wartosci);
+    }
+    $pdo->prepare('UPDATE ' . bon_tabela($k, 'vouchers') . " SET status = 'withdrawn' WHERE id = ? AND status = 'valid'")->execute([$bon['id']]);
+    $zwrotDo = (new DateTimeImmutable($otrzymano, new DateTimeZone(BON_STREFA)))->modify('+14 days')->format('Y-m-d');
+    $opis = ($kanal === 'mail' ? 'mailem' : 'na papierze w gabinecie') . ", wysłane $data, otrzymane $otrzymano, saldo " . bon_zl($saldo)
+        . ' zł, do zwrotu ' . bon_zl($kwota) . " zł (pieniądze do $zwrotDo)"
+        . ($wTerminie ? '' : " – PO TERMINIE (do $termin)") . ($powod !== '' ? '; ' . $powod : '');
+    return [null, $opis];
 }

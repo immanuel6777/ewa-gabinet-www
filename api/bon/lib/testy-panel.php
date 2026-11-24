@@ -142,7 +142,7 @@ function bon_testy_panel(array $k, PDO $pdo): array {
     [$kod] = bon_panel_admin($k, $pdo, $sB, ['kod' => $bWyg, 'akcja' => 'waznosc', 'data' => $nowa, 'powod' => 'zgoda Ewy']);
     [, $h] = bon_panel_historia($k, $pdo, $sB, $bWyg);
     $t('admin: przedłużenie wygasłego → znów ważny, wpis w dzienniku (kto, co)', $kod === 200 && $h['status'] === 'valid' && $h['wazny_do'] === $nowa
-        && ($h['dziennik'][0]['kto'] ?? '') === 'bartek' && str_contains((string)($h['dziennik'][0]['szczegoly'] ?? ''), 'zgoda Ewy'), json_encode($h['dziennik'] ?? []));
+        && ($h['zdarzenia'][0]['kto'] ?? '') === 'bartek' && str_contains((string)($h['zdarzenia'][0]['szczegoly'] ?? ''), 'zgoda Ewy'), json_encode($h['zdarzenia'] ?? []));
     [$kod] = bon_panel_admin($k, $pdo, $sB, ['kod' => $bWyg, 'akcja' => 'waznosc', 'data' => '2020-01-01']);
     $t('admin: data w przeszłości → 400', $kod === 400);
     [$kod] = bon_panel_admin($k, $pdo, $sB, ['kod' => $bWyg, 'akcja' => 'waznosc', 'data' => '2027-02-30']);

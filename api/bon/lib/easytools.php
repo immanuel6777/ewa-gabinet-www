@@ -61,8 +61,11 @@ function bon_et_nominal(array $k, string $nazwa): int|float|string|null {
     return bon_wariant_nominal($k, $nazwa);
 }
 
-/** Zamówienie z API (include=line_items,customer) → dane dla bon_utworz_bony. */
-function bon_et_dane_zamowienia(array $zam, ?string $transakcja): array {
+/**
+ * Zamówienie z API (include=line_items,customer) → dane dla bon_utworz_bony. $zaplacono = „date” transakcji (chwila zapłaty);
+ * bez niej created_at zamówienia (zawsze przed zapłatą, zwykle tego samego dnia) – nie chwila synchronizacji.
+ */
+function bon_et_dane_zamowienia(array $zam, ?string $transakcja, ?string $zaplacono = null): array {
     $linia = null;
     foreach ((array)($zam['line_items'] ?? []) as $l) if (is_array($l) && empty($l['is_order_bump'])) { $linia = $l; break; }
     $email = (string)($zam['customer']['email'] ?? $zam['customer_email'] ?? '');
@@ -80,14 +83,16 @@ function bon_et_dane_zamowienia(array $zam, ?string $transakcja): array {
         'promo' => '',
         'dla' => null,
         'od' => null,
+        'zaplacono_at' => $zaplacono ?: (is_string($zam['created_at'] ?? null) ? $zam['created_at'] : null),
     ];
 }
 
 /**
  * Id transakcji zamówienia: zamówienie go nie podaje, transakcja zna swoje zamówienie. Kandydaci z dnia zakupu
  * o tej samej kwocie i e-mailu, potwierdzenie przez GET /transactions/{id}?include=order. Null, gdy nie znaleziono.
+ * $data dostaje „date” transakcji (chwila zapłaty, ISO 8601), gdy transakcja się znalazła.
  */
-function bon_et_transakcja(array $k, array $zam): ?string {
+function bon_et_transakcja(array $k, array $zam, ?string &$data = null): ?string {
     try { $kupiono = new DateTimeImmutable((string)($zam['created_at'] ?? '')); } catch (Throwable) { return null; }
     // dzień wcześniej (strefa filtra API nieopisana, zob. bon_synchronizuj); płatność jest zawsze po utworzeniu zamówienia
     $lista = bon_et_get($k, '/transactions', ['paid_from' => $kupiono->modify('-1 day')->format('Y-m-d'), 'per_page' => 100, 'sort' => 'date']);
@@ -96,7 +101,10 @@ function bon_et_transakcja(array $k, array $zam): ?string {
         if (!is_array($t) || (int)($t['total'] ?? -1) !== (int)($zam['amount'] ?? -2)) continue;
         if ($email !== '' && mb_strtolower((string)($t['customer_email'] ?? ''), 'UTF-8') !== $email) continue;
         $pelna = bon_et_get($k, '/transactions/' . rawurlencode((string)$t['id']), ['include' => 'order']);
-        if ((string)($pelna['order']['id'] ?? '') === (string)$zam['id']) return (string)$t['id'];
+        if ((string)($pelna['order']['id'] ?? '') === (string)$zam['id']) {
+            $data = is_string($pelna['date'] ?? null) ? $pelna['date'] : (is_string($t['date'] ?? null) ? $t['date'] : null);
+            return (string)$t['id'];
+        }
     }
     return null;
 }
@@ -170,9 +178,9 @@ function bon_synchronizuj(array $k, PDO $pdo, string $zrodlo, ?DateTimeImmutable
             try {
                 $pelne = bon_et_get($k, '/orders/' . rawurlencode($id), ['include' => 'line_items,customer']);
                 if (($pelne['status'] ?? '') !== 'completed') continue;
-                $transakcja = null;
-                try { $transakcja = bon_et_transakcja($k, $pelne); } catch (Throwable) {} // brak id transakcji nie blokuje bonu
-                $dane = bon_et_dane_zamowienia($pelne, $transakcja);
+                $transakcja = $zaplacono = null;
+                try { $transakcja = bon_et_transakcja($k, $pelne, $zaplacono); } catch (Throwable) {} // brak id transakcji nie blokuje bonu
+                $dane = bon_et_dane_zamowienia($pelne, $transakcja, $zaplacono);
                 $dane['nominal'] = bon_et_nominal($k, $dane['wariant']);
                 $wpis = ['zamowienie' => $id, 'kwota' => bon_zl((int)$dane['zaplacono']), 'wariant' => $dane['wariant'],
                     'email' => bon_et_maska_email($dane['email']), 'transakcja' => $transakcja !== null];

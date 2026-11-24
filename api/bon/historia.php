@@ -1,7 +1,8 @@
 <?php
 // Panel realizacji bonów – bon z historią (etap 3: 2026-11-21). Tylko po zalogowaniu.
 //   GET /api/bon/historia.php?code=EWA-XXXX-XXXX → saldo, ważność, status, „Dla”, historia realizacji
-//   (admin dodatkowo: powód wstrzymania, zamówienie, zapłacono, dziennik zmian). Logika: lib/panel.php.
+//   + historia zdarzeń bonu, złożona rezygnacja, możliwość przedłużenia (krok 4, każda rola; szczegóły zdarzeń tylko admin)
+//   (admin dodatkowo: powód wstrzymania, zamówienie, zapłacono, termin rezygnacji). Logika: lib/panel.php.
 
 declare(strict_types=1);
 require __DIR__ . '/lib/panel-http.php';
