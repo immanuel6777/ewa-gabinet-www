@@ -283,5 +283,42 @@ function bon_testy_sync(array $k, PDO $pdo): array {
 
     $t('nominał po nazwie wariantu: wielkość liter i twarda spacja bez znaczenia', bon_et_nominal($k, "bon 300\u{00A0}ZŁ") === 300 && bon_et_nominal($k, 'Bon 999 zł') === null);
 
+    // --- szablon HTML maila z bonem (wpis 22:47, front #101): wypełnienie jak scripts/mail-bon-podglad.mjs → wypelnij() ---
+    $katS = sys_get_temp_dir() . '/bony-szablon-' . bin2hex(random_bytes(4));
+    @mkdir($katS, 0700, true);
+    $wzor = '<html><head><!-- OBRAZY_BONOW {"Bon Rubinowy":"https://x.test/rub.png","Bon Szafirowy":"https://x.test/szaf.png"} --><title>{{TYTUL}}</title></head><body>'
+        . '<span>{{PREHEADER}}</span><h1>{{TYTUL}}</h1><p>{{WSTEP}}</p>'
+        . '<!--BON--><div class="bon"><img src="{{OBRAZ}}" alt="{{NAZWA}} {{KWOTA}}"><b>{{NAZWA}}</b> {{KWOTA}} <i>{{KOD}}</i> do {{WAZNY_DO}}<!--DLA--> dla {{DLA}}<!--/DLA--></div><!--/BON-->'
+        . '<!--PUSTE_DLA_OD--><!--PUSTE_1-->Na bonie są puste linie<!--/PUSTE_1--><!--PUSTE_N-->Na bonach są puste linie<!--/PUSTE_N--><!--/PUSTE_DLA_OD-->'
+        . '<p>ważny {{WAZNOSC}}</p><!--REZYGNACJA--><p>Rezygnacja na /bon</p><!--/REZYGNACJA--></body></html>';
+    file_put_contents($katS . '/mail-bon.tpl', $wzor);
+    $kS = array_replace($k, ['mail_szablon_html' => true, 'mail_szablon_plik' => $katS . '/mail-bon.tpl', 'mail_zdanie_rezygnacja' => true]);
+    $bonS = array_replace($b[0], ['code' => 'EWA-AAAA-1111', 'initial_pln' => '300.00', 'price_id' => 'Bon Rubinowy', 'dla' => 'Ola <b>&', 'od' => 'Ania']);
+    $bonS2 = array_replace($b[0], ['code' => 'EWA-BBBB-2222', 'initial_pln' => '250.00', 'price_id' => 'bon-dowolna', 'dla' => null, 'od' => null]);
+    [, $tekstS, $htmlS] = bon_mail_tresc($kS, [$bonS]);
+    [, , $htmlS2] = bon_mail_tresc(array_replace($kS, ['mail_zdanie_rezygnacja' => false]), [$bonS, $bonS2]);
+    [, , $htmlWyl] = bon_mail_tresc(array_replace($kS, ['mail_szablon_html' => false]), [$bonS]);
+    [, , $htmlBrak] = bon_mail_tresc(array_replace($kS, ['mail_szablon_plik' => $katS . '/nie-ma.tpl']), [$bonS]);
+    $bezZnacznikow = static fn(string $h) => !preg_match('/\{\{[A-Z_]+\}\}|<!--\/?(BON|DLA|PUSTE|REZYGNACJA)|OBRAZY_BONOW/', $h);
+    $t('szablon maila: 1 bon – obraz wg nazwy, kwota, numer, „dla” zescape’owane, bez pustych linii, z rezygnacją, bez znaczników',
+        $bezZnacznikow($htmlS) && str_contains($htmlS, 'src="https://x.test/rub.png"') && str_contains($htmlS, 'EWA-AAAA-1111')
+        && str_contains($htmlS, 'dla Ola &lt;b&gt;&amp;') && !str_contains($htmlS, 'puste linie') && str_contains($htmlS, 'Rezygnacja na /bon')
+        && str_contains($htmlS, 'Twój bon podarunkowy') && str_contains($htmlS, 'ważny 6 miesięcy'), $htmlS);
+    $t('szablon maila: 2 bony – dwa bloki, drugi bez „dla”, wersja „Na bonach…”, bez rezygnacji (przełącznik), Szafirowy z obrazem',
+        $bezZnacznikow($htmlS2) && substr_count($htmlS2, 'class="bon"') === 2 && substr_count($htmlS2, ' dla ') === 1
+        && str_contains($htmlS2, 'Na bonach są puste linie') && !str_contains($htmlS2, 'Na bonie są') && !str_contains($htmlS2, 'Rezygnacja')
+        && str_contains($htmlS2, 'https://x.test/szaf.png') && str_contains($htmlS2, 'Twoje bony podarunkowe'), $htmlS2);
+    $t('szablon maila: przełącznik wyłączony albo brak pliku → dotychczasowy HTML; tekst maila bez zmian',
+        !str_contains($htmlWyl, 'x.test') && !str_contains($htmlBrak, 'x.test') && str_contains($htmlWyl, 'EWA-AAAA-1111') && str_contains($tekstS, 'EWA-AAAA-1111'));
+    // prawdziwy szablon z buildu (dist lokalnie, obok lib/ na OVH) – gdy jest
+    $prawdziwy = is_file(__DIR__ . '/mail-bon.tpl') ? __DIR__ . '/mail-bon.tpl' : dirname(__DIR__, 4) . '/dist/api/bon/lib/mail-bon.tpl';
+    if (is_file($prawdziwy)) {
+        [, , $hP] = bon_mail_tresc(array_replace($kS, ['mail_szablon_plik' => $prawdziwy]), [$bonS, $bonS2]);
+        $t('szablon maila (prawdziwy z buildu): 2 bony wypełnione, bez znaczników, obrazy z img/bon-mail', $bezZnacznikow($hP)
+            && substr_count($hP, '/img/bon-mail/') >= 2 && str_contains($hP, 'EWA-BBBB-2222') && str_contains($hP, 'Bon Szafirowy'), mb_substr($hP, 0, 300));
+    }
+    @unlink($katS . '/mail-bon.tpl');
+    @rmdir($katS);
+
     return $wyniki;
 }

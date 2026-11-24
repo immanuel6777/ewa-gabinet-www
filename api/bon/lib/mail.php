@@ -40,6 +40,7 @@ function bon_mail_tresc(array $k, array $bony): array {
             'kwota' => bon_kwota_tekst((int)bon_grosze($b['initial_pln'])),
             'do' => bon_data_tekst(substr((string)$b['expires_at'], 0, 10)),
             'dla' => (string)($b['dla'] ?? ''),
+            'kolor' => bon_pdf_kolor($k, $b), // obraz w szablonie HTML, gdy nazwy nie ma w mapie OBRAZY_BONOW
         ];
     }
     $wstep = $n === 1
@@ -82,7 +83,60 @@ function bon_mail_tresc(array $k, array $bony): array {
         . '<table style="border-collapse:collapse;margin:8px 0 16px">' . $wiersze . '</table>'
         . '<ul style="padding-left:20px;color:#3E6863">' . implode('', array_map(static fn($z) => '<li>' . $e($z) . '</li>', $zasady)) . '</ul>'
         . '<p style="color:#3E6863">Pełne zasady bonu: <a href="' . $e(BON_REGULAMIN) . '" style="color:#17504B">regulamin bonów</a></p>');
+    // wpis 22:47: szablon frontu (mail-bon.tpl, #101) za przełącznikiem mail_szablon_html; ten sam HTML dla Mailjet i SMTP OVH.
+    // Brak pliku albo niewypełniony znacznik → zostaje HTML wyżej (mail zawsze wychodzi).
+    if (!empty($k['mail_szablon_html'])) {
+        $zSzablonu = bon_mail_html_z_szablonu($k, $lista, $wstep, $miesiace, (bool)$puste);
+        if ($zSzablonu !== null) $html = $zSzablonu;
+    }
     return [$temat, $tekst, $html];
+}
+
+/**
+ * Wypełnia szablon maila z bonem (api/bon/lib/mail-bon.tpl z buildu frontu) 1:1 jak scripts/mail-bon-podglad.mjs → wypelnij():
+ * blok <!--BON--> powtórzony dla każdego bonu (obraz z mapy OBRAZY_BONOW po nazwie, awaryjnie po kolorze), <!--DLA--> tylko z „Dla”,
+ * <!--PUSTE_DLA_OD--> w wersji dla 1 albo kilku bonów (gdy są puste linie), <!--REZYGNACJA--> wg mail_zdanie_rezygnacja,
+ * wartości przez htmlspecialchars, na końcu bez znaczników-komentarzy. Null = nie da się (brak pliku, mapy, zostały znaczniki).
+ */
+function bon_mail_html_z_szablonu(array $k, array $lista, string $wstep, string $miesiace, bool $puste): ?string {
+    $plik = (string)($k['mail_szablon_plik'] ?? (__DIR__ . '/mail-bon.tpl'));
+    $tpl = is_file($plik) ? (string)file_get_contents($plik) : '';
+    if ($tpl === '' || !preg_match('/<!-- OBRAZY_BONOW (\{.*?\}) -->/', $tpl, $m) || !preg_match('/<!--BON-->(.*?)<!--\/BON-->/s', $tpl, $mb)) {
+        bon_zdarzenie($k, 'mail-szablon', ['blad' => $tpl === '' ? 'brak pliku szablonu' : 'brak mapy obrazów albo bloku BON']);
+        return null;
+    }
+    $obrazy = json_decode($m[1], true) ?: [];
+    $poKolorze = ['zielen' => 'Bon Szmaragdowy', 'czerwony' => 'Bon Rubinowy', 'zloty' => 'Bon Bursztynowy', 'granat' => 'Bon Szafirowy'];
+    $e = static fn(string $x) => htmlspecialchars($x, ENT_QUOTES, 'UTF-8');
+    $n = count($lista);
+    $bloki = [];
+    foreach ($lista as $l) {
+        $obraz = $obrazy[$l['nazwa']] ?? $obrazy[$poKolorze[$l['kolor']] ?? ''] ?? null;
+        if (!is_string($obraz)) { bon_zdarzenie($k, 'mail-szablon', ['blad' => 'brak obrazu dla ' . $l['nazwa']]); return null; }
+        $h = strtr($mb[1], ['{{OBRAZ}}' => $e($obraz), '{{NAZWA}}' => $e($l['nazwa']), '{{KWOTA}}' => $e($l['kwota']), '{{KOD}}' => $e($l['kod']), '{{WAZNY_DO}}' => $e($l['do'])]);
+        $h = $l['dla'] !== '' ? str_replace(['{{DLA}}', '<!--DLA-->', '<!--/DLA-->'], [$e($l['dla']), '', ''], $h) : (preg_replace('/<!--DLA-->.*?<!--\/DLA-->/s', '', $h) ?? $h);
+        $bloki[] = $h;
+    }
+    $html = str_replace($mb[0], implode("\n", $bloki), $tpl);
+    $html = !$puste ? preg_replace('/<!--PUSTE_DLA_OD-->.*?<!--\/PUSTE_DLA_OD-->/s', '', $html)
+        : preg_replace(['/' . ($n === 1 ? '<!--PUSTE_N-->.*?<!--\/PUSTE_N-->' : '<!--PUSTE_1-->.*?<!--\/PUSTE_1-->') . '/s', '/<!--\/?(PUSTE_DLA_OD|PUSTE_1|PUSTE_N)-->/'], '', $html);
+    $html = !empty($k['mail_zdanie_rezygnacja']) ? preg_replace('/<!--\/?REZYGNACJA-->/', '', (string)$html)
+        : preg_replace('/<!--REZYGNACJA-->.*?<!--\/REZYGNACJA-->/s', '', (string)$html);
+    $pierwszy = $lista[0];
+    $kilka = $n % 10 >= 2 && $n % 10 <= 4 && ($n % 100 < 12 || $n % 100 > 14); // 2–4 bony, 5+ bonów
+    $html = strtr((string)$html, [
+        '{{PREHEADER}}' => $e($n === 1 ? $pierwszy['nazwa'] . ' o wartości ' . $pierwszy['kwota'] . ' – PDF w załączniku'
+            : $n . ($kilka ? ' bony podarunkowe' : ' bonów podarunkowych') . ' – PDF-y w załączniku'),
+        '{{TYTUL}}' => $e($n === 1 ? 'Twój bon podarunkowy' : 'Twoje bony podarunkowe'),
+        '{{WSTEP}}' => $e($wstep),
+        '{{WAZNOSC}}' => $e($miesiace),
+    ]);
+    $html = preg_replace('/<!-- OBRAZY_BONOW .*? -->/', '', $html) ?? $html;
+    if (preg_match('/\{\{[A-Z_]+\}\}|<!--\/?(BON|DLA|PUSTE|REZYGNACJA)/', $html)) {
+        bon_zdarzenie($k, 'mail-szablon', ['blad' => 'zostały niewypełnione znaczniki']);
+        return null;
+    }
+    return $html;
 }
 
 /**

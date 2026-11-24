@@ -70,6 +70,7 @@ const BON_USTAWIENIA_JAWNE = [
     'mail_zapas_test_do', // przełącznik testu zapasu – z repo zamiast FTP (wpis 11:35)
     'mail_obsluga',       // P-12: adres obsługi klientów (bony@)
     'mail_zdanie_rezygnacja', // wpis 17:47: zdanie o rezygnacji na /bon w mailu z bonem
+    'mail_szablon_html',      // wpis 22:47: HTML maila z bonem z szablonu frontu (mail-bon.tpl)
 ];
 
 /**

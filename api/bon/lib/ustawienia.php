@@ -54,6 +54,9 @@ return [
     // wpis 17:47: zdanie „Rezygnacja w ciągu 14 dni od zapłaty: najszybciej na stronie ewa-gabinet.pl/bon…” w mailu z bonem.
     // włączone 2026-11-24 razem z nowym § 14 (funkcjeBonu.rezygnacja frontu, PR #84) – Ewa zaakceptowała, wpis doradcy 18:35.
     'mail_zdanie_rezygnacja' => true,
+    // wpis 22:47: HTML maila z bonem z szablonu frontu (api/bon/lib/mail-bon.tpl, #101; obrazy img/bon-mail/ na produkcji = 200).
+    // false = dotychczasowy prosty HTML. Włączenie (PR + wrzuta) dopiero po teście „Wyślij ponownie” za zgodą Bartka.
+    'mail_szablon_html' => false,
 
     // --- zapas SMTP OVH (hasło skrzynki tylko na serwerze: mail_smtp_haslo) ---
     'mail_zapas' => true,
