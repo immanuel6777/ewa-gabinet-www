@@ -56,7 +56,7 @@ return [
     'mail_zdanie_rezygnacja' => true,
     // wpis 22:47: HTML maila z bonem z szablonu frontu (api/bon/lib/mail-bon.tpl, #101; obrazy img/bon-mail/ na produkcji = 200).
     // false = dotychczasowy prosty HTML. Włączenie (PR + wrzuta) dopiero po teście „Wyślij ponownie” za zgodą Bartka.
-    'mail_szablon_html' => false,
+    'mail_szablon_html' => true, // włączone 2026-11-24 (Bartek: „włącz i wyślij”)
 
     // --- zapas SMTP OVH (hasło skrzynki tylko na serwerze: mail_smtp_haslo) ---
     'mail_zapas' => true,
