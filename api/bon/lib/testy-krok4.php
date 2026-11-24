@@ -130,14 +130,14 @@ function bon_testy_krok4(array $k, PDO $pdo): array {
     bon_panel_realizuj($k, $pdo, $sEwa, ['kod' => $b5['code'], 'kwota_reczna' => '50', 'client_token' => bin2hex(random_bytes(12))]);
     [$kod, $odp] = $rez($sAdmin, (string)$b5['code'], ['kanal' => 'mail', 'data' => $d('+0 days')]);
     $w5 = $rezygnacja((int)$b5['id']);
-    $t('rezygnacja w panelu: 14. dzień → 200, bon withdrawn, kanał mail, kwota = saldo 150 (nie 200, nie 180)', $kod === 200
+    $t('rezygnacja w panelu: 14. dzień → 200, bon withdrawn, kanał mail, kwota 135 = saldo 150 × 180/200 (wpis 18:00: proporcjonalnie do zapłaconej ceny)', $kod === 200
         && $wiersz((string)$b5['code'])['status'] === 'withdrawn' && count($w5) === 1 && $w5[0]['kanal'] === 'mail' && $w5[0]['kto'] === 'bartek'
-        && bon_zl((int)bon_grosze($w5[0]['kwota_pln'])) === '150.00' && $w5[0]['zwrot_stan'] === 'oczekuje' && !str_contains((string)$odp['opis'], 'PO TERMINIE'), json_encode([$odp, $w5], JSON_UNESCAPED_UNICODE));
+        && bon_zl((int)bon_grosze($w5[0]['kwota_pln'])) === '135.00' && $w5[0]['zwrot_stan'] === 'oczekuje' && !str_contains((string)$odp['opis'], 'PO TERMINIE'), json_encode([$odp, $w5], JSON_UNESCAPED_UNICODE));
     [$kod] = $rez($sAdmin, (string)$b5['code'], ['kanal' => 'mail', 'data' => $d('+0 days')]);
     $t('rezygnacja w panelu: druga na tym samym bonie → 409', $kod === 409);
     [, $h] = bon_panel_historia($k, $pdo, $sEwa, (string)$b5['code']);
     $t('rezygnacja w panelu: kasa widzi status, datę oświadczenia i kwotę zwrotu', ($h['status'] ?? '') === 'withdrawn'
-        && ($h['rezygnacja']['zlozono'] ?? '') === $d('+0 days') && ($h['rezygnacja']['kwota'] ?? '') === '150.00' && ($h['zdarzenia'][0]['akcja'] ?? '') === 'rezygnacja'
+        && ($h['rezygnacja']['zlozono'] ?? '') === $d('+0 days') && ($h['rezygnacja']['kwota'] ?? '') === '135.00' && ($h['zdarzenia'][0]['akcja'] ?? '') === 'rezygnacja'
         && ($h['rezygnacja']['otrzymano'] ?? '') === $d('+0 days') && ($h['rezygnacja']['zwrot_do'] ?? '') === $d('+14 days'));
 
     $b6 = $nowyBon(200);
@@ -179,7 +179,7 @@ function bon_testy_krok4(array $k, PDO $pdo): array {
     [$kod, $odp] = bon_panel_admin($k, $pdo, $sAdmin, ['kod' => $b5['code'], 'akcja' => 'zwrot', 'powod' => 'zwrot w Easytools']);
     $w5 = $rezygnacja((int)$b5['id']);
     $t('zwrot ręczny przy rezygnacji: bon refunded, rezygnacja „zlecony” z ref „recznie” i kwotą', $kod === 200 && $wiersz((string)$b5['code'])['status'] === 'refunded'
-        && $w5[0]['zwrot_stan'] === 'zlecony' && $w5[0]['zwrot_ref'] === 'recznie' && bon_zl((int)bon_grosze($w5[0]['zwrot_kwota_pln'])) === '150.00'
+        && $w5[0]['zwrot_stan'] === 'zlecony' && $w5[0]['zwrot_ref'] === 'recznie' && bon_zl((int)bon_grosze($w5[0]['zwrot_kwota_pln'])) === '135.00'
         && str_contains((string)$odp['opis'], 'rezygnacja zamknięta'), json_encode([$odp, $w5], JSON_UNESCAPED_UNICODE));
     [$kod] = bon_panel_przedluz($k, $pdo, $sEwa, (string)$b5['code']);
     $t('przedłużenie: bon zwrócony → 409', $kod === 409);

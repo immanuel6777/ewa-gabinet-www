@@ -153,7 +153,7 @@ function bon_pdf(array $bon, array $k): string {
     foreach ([
         'Przy każdej wizycie wartość zabiegu odejmujemy od salda. Niewykorzystana kwota zostaje na bonie na kolejną wizytę.',
         'Jeśli zabieg kosztuje więcej niż saldo, różnicę można dopłacić na miejscu.',
-        "Bon jest ważny $miesiace od dnia zakupu. Po tym terminie wygasa.",
+        "Bon jest ważny $miesiace od dnia zapłaty. Po tym terminie wygasa.", // wpis 18:00: zapłaty, nie zakupu
         'Saldo i ważność sprawdzisz, skanując kod QR.',
     ] as $z) {
         $pdf->SetX(15);

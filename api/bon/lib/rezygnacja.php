@@ -55,7 +55,7 @@ function bon_rezygnacja_ze_strony(array $k, PDO $pdo, string $wpisanyKod, string
         $stan = $st->fetchColumn();
         if ($stan !== false && $stan !== 'anulowana') { $pdo->rollBack(); return $odmowa(409, 'stan'); }
 
-        $kwota = min($saldo, (int)bon_grosze($bon['paid_pln']));
+        $kwota = bon_kwota_zwrotu($bon, $saldo); // wpis 18:00: proporcjonalnie do zapłaconej ceny
         if ($krok === 'sprawdz') { // krok 1: wszystko się zgadza – kwota do zwrotu, bez zapisu
             $pdo->rollBack();
             // „krok” w odpowiedzi (prośba frontu): stary serwer na krok=sprawdz robił pełne zgłoszenie i odpowiadał {ok, kwota} –
@@ -99,7 +99,7 @@ function bon_rezygnacja_maile(array $k, array $ctx, ?PDO $pdo = null): array {
     $obsluga = array_values(array_filter((array)($k['mail_obsluga'] ?? [])));
     if ($obsluga) {
         $kZ = array_replace($k, ['mail_odpowiedz' => (string)$bon['buyer_email']]); // odpowiedź z bony@ trafia prosto do kupującego
-        $tekstO = "Rezygnacja zgłoszona na stronie /bon $kiedy.\n\nBon: $kod\nKwota do zwrotu: $kwota (saldo z chwili zgłoszenia, nie więcej niż wpłata)\n"
+        $tekstO = "Rezygnacja zgłoszona na stronie /bon $kiedy.\n\nBon: $kod\nKwota do zwrotu: $kwota (saldo z chwili zgłoszenia przeliczone do zapłaconej ceny)\n"
             . 'Zamówienie Easytools: ' . $bon['easytools_order_id'] . "\nData zakupu: " . substr((string)$bon['created_at'], 0, 16) . "\n"
             . 'Panel: https://www.ewa-gabinet.pl/panel-bonow?nr=' . rawurlencode($kod) . "\n\n"
             . "Zwrot: w Easytools (transakcja zamówienia), potem w panelu „Oznacz zwrot”. Pieniądze w ciągu 14 dni od zgłoszenia.\n"
@@ -126,7 +126,9 @@ function bon_rezygnacja_potwierdzenie(array $k, ?PDO $pdo, array $bon, int $kwot
     $pomoc = trim((string)($k['telefon_pomoc_bony'] ?? ''));
     $godz = trim((string)($k['telefon_pomoc_bony_godziny'] ?? ''));
     $tel = $pomoc !== '' ? ' albo zadzwoń: ' . $pomoc . ($godz !== '' ? " ($godz)" : '') : '';
-    $tekst = "Dzień dobry,\n\nprzyjęliśmy rezygnację z bonu $kod zgłoszoną $kiedy. Kwota do zwrotu: $kwota. "
+    // wpis 18:00: bon kupiony z rabatem – kwota niższa niż saldo, bo przeliczona do zapłaconej ceny
+    $przel = $kwotaGr < (int)bon_grosze($bon['balance_pln']) ? ' (saldo bonu przeliczone do zapłaconej ceny)' : '';
+    $tekst = "Dzień dobry,\n\nprzyjęliśmy rezygnację z bonu $kod zgłoszoną $kiedy. Kwota do zwrotu: $kwota$przel. "
         . "Pieniądze wrócą tą samą metodą płatności w ciągu 14 dni. Bon od tej chwili nie działa.\n\n"
         . "Jeśli to nie Ty zgłaszałeś(-aś) rezygnację, odpisz na tę wiadomość$tel.\n\nPozdrawiamy serdecznie\nEWA Gabinet podologiczny\nhttps://www.ewa-gabinet.pl\n";
     $adres = (string)$bon['buyer_email'];

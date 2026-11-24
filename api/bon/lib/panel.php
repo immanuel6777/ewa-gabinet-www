@@ -210,12 +210,12 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
     if ($admin || !empty($sesja['rezygnacje'])) {
         // P-15 (wpis 16:51): rabat – „Zapłacono 8 zł · rabat 192 zł · kod XXX”, gdy zapłacono mniej niż nominał (Karolina nie widzi)
         $odp['rabat'] = bon_panel_rabat($bon);
-        // wpisy 17:33/17:35: czy i kiedy wyszło potwierdzenie rezygnacji; „(tyle zapłacono)”, gdy kwotę zwrotu ogranicza wpłata
+        // wpisy 17:33/17:35: czy i kiedy wyszło potwierdzenie rezygnacji; wpis 18:00: „przeliczone do zapłaconej ceny”
         if ($odp['rezygnacja']) {
             $odp['rezygnacja']['potwierdzenie'] = function_exists('bon_rezygnacja_stan_potwierdzenia')
                 ? bon_rezygnacja_stan_potwierdzenia($k, $pdo, (int)$bon['id'], $odp['rezygnacja']['zlozono'] . ' 00:00:00') : null;
-            $odp['rezygnacja']['ograniczona_wplata'] = (int)bon_grosze($bon['paid_pln']) < (int)bon_grosze($bon['initial_pln'])
-                && $odp['rezygnacja']['kwota'] === bon_zl((int)bon_grosze($bon['paid_pln']));
+            // wpis 18:00: „przeliczone do zapłaconej ceny”, gdy kwota zwrotu jest niższa niż saldo z chwili rezygnacji
+            $odp['rezygnacja']['przeliczona'] = (int)bon_grosze($odp['rezygnacja']['kwota']) < (int)bon_grosze($odp['rezygnacja']['saldo']);
         }
         // P-11: „Zwróć pieniądze” (bon z rezygnacją czekającą na zwrot) i linia „Płatność w Easytools” (API, tylko te konta)
         $r = $odp['rezygnacja'];
@@ -230,7 +230,8 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
         $saldo = (int)bon_grosze($bon['balance_pln']);
         $odp['rezygnacja_mozliwa'] = $bon['status'] === 'valid' && $saldo > 0;
         $odp['rezygnacja_do'] = bon_rezygnacja_termin($bon);
-        $odp['rezygnacja_kwota'] = bon_zl(min($saldo, (int)bon_grosze($bon['paid_pln'])));
+        $odp['rezygnacja_kwota'] = bon_zl(bon_kwota_zwrotu($bon, $saldo)); // wpis 18:00: proporcjonalnie do zapłaconej ceny
+        $odp['rezygnacja_kwota_przeliczona'] = bon_kwota_zwrotu($bon, $saldo) < $saldo;
     }
     if ($admin) {
         $odp['status_bazy'] = $bon['status'];
@@ -349,7 +350,7 @@ function bon_panel_pdf_bon(array $k, PDO $pdo, array $sesja, string $wpisany, ?D
 /** Złożona (nieanulowana) rezygnacja bonu albo null. Przed migracją kroku 1 na OVH (brak tabeli) – null, panel działa dalej. */
 function bon_panel_rezygnacja(array $k, PDO $pdo, int $voucherId): ?array {
     try {
-        $st = $pdo->prepare('SELECT zlozono_at, potwierdzono_at, kanal, kwota_pln, zwrot_stan FROM ' . bon_tabela($k, 'voucher_withdrawals') . " WHERE voucher_id = ? AND zwrot_stan <> 'anulowana'");
+        $st = $pdo->prepare('SELECT zlozono_at, potwierdzono_at, kanal, saldo_pln, kwota_pln, zwrot_stan FROM ' . bon_tabela($k, 'voucher_withdrawals') . " WHERE voucher_id = ? AND zwrot_stan <> 'anulowana'");
         $st->execute([$voucherId]);
         $w = $st->fetch();
     } catch (PDOException) {
@@ -362,7 +363,8 @@ function bon_panel_rezygnacja(array $k, PDO $pdo, int $voucherId): ?array {
     return ['zlozono' => substr((string)$w['zlozono_at'], 0, 10), 'otrzymano' => $otrzymano,
         'godzina' => $w['kanal'] === 'strona' ? substr((string)$w['zlozono_at'], 11, 5) : null, // P-12: zgłoszona na /bon – z godziną
         'zwrot_do' => (new DateTimeImmutable($otrzymano, new DateTimeZone(BON_STREFA)))->modify('+14 days')->format('Y-m-d'),
-        'kanal' => (string)$w['kanal'], 'kwota' => bon_zl((int)bon_grosze($w['kwota_pln'])), 'stan' => (string)$w['zwrot_stan']];
+        'kanal' => (string)$w['kanal'], 'saldo' => bon_zl((int)bon_grosze($w['saldo_pln'])), 'kwota' => bon_zl((int)bon_grosze($w['kwota_pln'])),
+        'stan' => (string)$w['zwrot_stan']];
 }
 
 // --- wyszukiwanie (krok 4): numer bonu, e-mail kupującego albo id zamówienia Easytools ---
@@ -435,6 +437,8 @@ function bon_panel_rabat(array $bon): ?array {
     $zaplacono = (int)bon_grosze($bon['paid_pln']);
     $nominal = (int)bon_grosze($bon['initial_pln']);
     if ($zaplacono >= $nominal) return null;
+    // wpis 17:55: bon wstrzymany = niedopłata do wyjaśnienia, nie rabat – „Zapłacono 100 zł z 300 zł”, bez słowa rabat i bez kodu
+    if (($bon['status'] ?? '') === 'held') return ['zaplacono' => bon_zl($zaplacono), 'wartosc' => bon_zl($nominal), 'niedoplata' => true];
     return ['zaplacono' => bon_zl($zaplacono), 'rabat' => bon_zl($nominal - $zaplacono), 'kod' => $bon['promo_code'] ?: null];
 }
 
@@ -714,10 +718,12 @@ function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
             if ($bon['status'] === 'refunded') { $pdo->rollBack(); return [409, ['ok' => false, 'blad' => 'Bon jest już oznaczony jako zwrócony.']]; }
             if ($sesja['rola'] !== 'admin' && $bon['status'] !== 'withdrawn') { $pdo->rollBack(); return [403, ['ok' => false, 'blad' => 'Oznaczyć zwrot bonu bez rezygnacji może tylko Bartek.']]; }
             $pdo->prepare("UPDATE $tabB SET status = 'refunded' WHERE id = ?")->execute([$bon['id']]);
-            // do zwrotu = mniejsza z dwóch: saldo albo wpłata (wpis 16:47: bon 200 zł kupiony za 8 zł → 8 zł, nie 200 zł)
+            // do zwrotu: kwota z rezygnacji, a bez rezygnacji bon_kwota_zwrotu (wpis 18:00: proporcjonalnie do zapłaconej ceny)
             $saldoZ = (int)bon_grosze($bon['balance_pln']);
-            $opis = $bon['status'] . ' → zwrócony, saldo w chwili zwrotu ' . bon_zl($saldoZ) . ' zł, do zwrotu '
-                . bon_zl(min($saldoZ, (int)bon_grosze($bon['paid_pln']))) . ' zł (mniejsza z: saldo, wpłata)';
+            $rezZ = $bon['status'] === 'withdrawn' ? bon_panel_rezygnacja($k, $pdo, (int)$bon['id']) : null;
+            $kwotaZ = $rezZ ? (int)bon_grosze($rezZ['kwota']) : bon_kwota_zwrotu($bon, $saldoZ);
+            $opis = $bon['status'] . ' → zwrócony, saldo w chwili zwrotu ' . bon_zl($saldoZ) . ' zł, do zwrotu ' . bon_zl($kwotaZ) . ' zł'
+                . ($kwotaZ < $saldoZ ? ' (przeliczone do zapłaconej ceny)' : '');
             if ($bon['status'] === 'withdrawn') {
                 // pieniądze oddane ręcznie w Easytools: oczekująca rezygnacja → 'zlecony' z zwrot_ref = 'recznie', żeby lista
                 // oczekujących w kroku 3 nie zleciła drugiego zwrotu przez API (krok 3 nie odpytuje transakcji dla 'recznie')
@@ -781,7 +787,7 @@ function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
  * (projekt § 14 ust. 18b i 19). Zapis: zlozono_at = wysłanie, potwierdzono_at = otrzymanie.
  * Tylko z bonu ważnego w bazie (held / used / refunded / withdrawn odmawia: cofnięcie rezygnacji przywraca 'valid', więc
  * rezygnacja z bonu wstrzymanego ominęłaby zatwierdzenie). Po terminie: tylko z wpisanym powodem (decyzja gabinetu), z adnotacją.
- * Kwota zwrotu = min(saldo teraz, zapłacono). Wiersz 'anulowana' (wcześniej cofnięta) nadpisywany – jeden wiersz na bon.
+ * Kwota zwrotu = bon_kwota_zwrotu (wpis 18:00: saldo teraz przeliczone do zapłaconej ceny). Wiersz 'anulowana' (wcześniej cofnięta) nadpisywany – jeden wiersz na bon.
  * Zwraca [?[kod, odpowiedź] błędu, opis do historii].
  */
 function bon_panel_zarejestruj_rezygnacje(array $k, PDO $pdo, array $sesja, array $bon, array $dane, string $powod, DateTimeImmutable $teraz): array {
@@ -813,7 +819,7 @@ function bon_panel_zarejestruj_rezygnacje(array $k, PDO $pdo, array $sesja, arra
     if (!$wTerminie && $powod === '') {
         return $blad(400, 'Oświadczenie po terminie (14 dni minęło ' . $termin . '). Jeśli mimo to przyjmujesz rezygnację, wpisz powód.');
     }
-    $kwota = min($saldo, (int)bon_grosze($bon['paid_pln']));
+    $kwota = bon_kwota_zwrotu($bon, $saldo); // wpis 18:00: proporcjonalnie do zapłaconej ceny
 
     $tabW = bon_tabela($k, 'voucher_withdrawals');
     $st = $pdo->prepare("SELECT zwrot_stan FROM $tabW WHERE voucher_id = ?");

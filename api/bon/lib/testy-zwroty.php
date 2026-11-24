@@ -120,12 +120,42 @@ function bon_testy_zwroty(array $k, PDO $pdo): array {
     $t('zwrot: Ewa nie oznaczy zwrotu bonu bez rezygnacji (403); A1 – pieniądze zwrócone w Easytools, bon ważny → ostrzeżenie w panelu',
         $h === 403 && str_contains((string)($hA['platnosc']['ostrzezenie'] ?? ''), 'bon nadal działa') && array_key_exists('zwrot', $hA) && $hA['zwrot'] === null, json_encode($hA['platnosc'] ?? null));
 
-    // „Oznacz zwrot” admina na bonie bez rezygnacji (wpis 16:47): w historii do zwrotu mniejsza z dwóch – saldo albo wpłata
+    // „Oznacz zwrot” admina na bonie bez rezygnacji (wpis 16:47; od 18:00 proporcjonalnie – nieużyty bon 200 za 8 zł nadal 8 zł)
     $p7 = bon_test_payload(['price_custom_id' => 'bon-200', 'amount_paid' => 200]);
     bon_test_webhook($kz, $pdo, $p7);
     $b7 = bon_test_bony($kz, $pdo, $p7['order_id'])[0];
     $pdo->prepare("UPDATE $tabB SET paid_pln = '8.00' WHERE id = ?")->execute([$b7['id']]);
     [$h, $o] = bon_panel_admin($kz, $pdo, $sAdmin, ['kod' => $b7['code'], 'akcja' => 'zwrot', 'powod' => 'awaryjnie']);
     $t('Oznacz zwrot bez rezygnacji (admin): w historii „do zwrotu 8.00 zł” (saldo 200, wpłata 8)', $h === 200 && str_contains((string)($o['opis'] ?? ''), 'do zwrotu 8.00 zł'), (string)($o['opis'] ?? ''));
+
+    // wpis 18:00: zwrot proporcjonalny do zapłaconej ceny – bon 200 zł kupiony za 180 zł, wykorzystane 100 zł → 90 zł, nie 100 zł
+    $bonRabat = static function () use ($kz, $pdo, $tabB, $sEwa, &$tr): array {
+        $p = bon_test_payload(['price_custom_id' => 'bon-200', 'amount_paid' => 180, 'promo_code' => 'RABAT10']);
+        bon_test_webhook(array_replace($kz, ['prog_wstrzymania' => 0]), $pdo, $p);
+        $b = bon_test_bony($kz, $pdo, $p['order_id'])[0];
+        $id = bon_test_uuid();
+        $tr[$id] = ['id' => $id, 'total' => 18000, 'refunded_amount' => 0, 'remaining_refundable' => 18000, 'refund_state' => 'none', 'refundable' => true, 'currency' => 'pln', 'refunds' => []];
+        $pdo->prepare("UPDATE $tabB SET easytools_transaction_id = ? WHERE id = ?")->execute([$id, $b['id']]);
+        bon_panel_realizuj($kz, $pdo, $sEwa, ['kod' => $b['code'], 'kwota_reczna' => '100', 'client_token' => bin2hex(random_bytes(12))]);
+        return ['code' => $b['code'], 'id' => (int)$b['id']];
+    };
+    $b8 = $bonRabat();
+    [, $h8] = bon_panel_historia($kz, $pdo, $sEwa, $b8['code']);
+    $dzis8 = bon_teraz()->format('Y-m-d');
+    bon_panel_admin($kz, $pdo, $sEwa, ['kod' => $b8['code'], 'akcja' => 'rezygnacja', 'kanal' => 'mail', 'data' => $dzis8, 'otrzymano' => $dzis8]);
+    [, $h8r] = bon_panel_historia($kz, $pdo, $sEwa, $b8['code']);
+    $posty = [];
+    $tryb = '202';
+    [$h, $o] = bon_panel_zwroc($kz, $pdo, $sEwa, ['kod' => $b8['code']]);
+    $t('proporcjonalnie (panel): podgląd 90.00 z „przeliczone”, rezygnacja 90.00 z saldem 100.00, „Zwróć pieniądze” → POST 9000 groszy',
+        ($h8['rezygnacja_kwota'] ?? '') === '90.00' && ($h8['rezygnacja_kwota_przeliczona'] ?? null) === true
+        && ($h8r['rezygnacja']['kwota'] ?? '') === '90.00' && ($h8r['rezygnacja']['saldo'] ?? '') === '100.00' && ($h8r['rezygnacja']['przeliczona'] ?? null) === true
+        && ($h8r['zwrot']['kwota'] ?? '') === '90.00' && $h === 200 && ($posty[0]['body']['amount'] ?? 0) === 9000,
+        json_encode([$h8['rezygnacja_kwota'] ?? null, $h8r['rezygnacja'] ?? null, $o, $posty]));
+    // „Oznacz zwrot” admina bez rezygnacji na takim samym bonie → w historii 90.00 z dopiskiem
+    $b9 = $bonRabat();
+    [$h, $o] = bon_panel_admin($kz, $pdo, $sAdmin, ['kod' => $b9['code'], 'akcja' => 'zwrot', 'powod' => 'awaryjnie']);
+    $t('proporcjonalnie: Oznacz zwrot bez rezygnacji → „do zwrotu 90.00 zł (przeliczone do zapłaconej ceny)”', $h === 200
+        && str_contains((string)($o['opis'] ?? ''), 'do zwrotu 90.00 zł (przeliczone do zapłaconej ceny)'), (string)($o['opis'] ?? ''));
     return $wyniki;
 }

@@ -127,6 +127,70 @@ function bon_testy_rezygnacja(array $k, PDO $pdo): array {
     $t('panel: rezygnację ze strony da się cofnąć („Cofnij rezygnację”) → bon znów ważny', $h === 200 && $stan($b['code'])[0] === 'valid');
 
     $wyniki = array_merge($wyniki, bon_testy_potwierdzenia($k, $pdo, $nowy, $maile));
+    $wyniki = array_merge($wyniki, bon_testy_zwrot_proporcjonalny($k, $pdo));
+    return $wyniki;
+}
+
+// Wpis 18:00 (decyzja Bartka 2026-11-24): kwota zwrotu proporcjonalnie do zapłaconej ceny – bon_kwota_zwrotu (lib/bon.php).
+// Tabela przypadków + /bon (oba kroki) + koszyk mieszany z rabatem. Panel, „Zwróć pieniądze” i „Oznacz zwrot”: testy-zwroty.php.
+function bon_testy_zwrot_proporcjonalny(array $k, PDO $pdo): array {
+    $wyniki = [];
+    $t = static function (string $nazwa, bool $ok, string $szczegol = '') use (&$wyniki) { $wyniki[] = [$nazwa, $ok, $szczegol]; };
+    // [wartość, zapłacono, saldo, oczekiwany zwrot] w zł
+    $przypadki = [
+        ['200.00', '180.00', '100.00', '90.00'],   // rabat 10%, wykorzystane 100
+        ['200.00', '8.00', '200.00', '8.00'],      // rabat 96%, nieużyty
+        ['200.00', '200.00', '150.00', '150.00'],  // bez rabatu, wykorzystane 50
+        ['300.00', '100.00', '150.00', '50.00'],   // zatwierdzony mimo niedopłaty, wykorzystane 150
+        ['200.00', '179.99', '33.33', '29.99'],    // grosze: 33,33 × 179,99 / 200 = 29,995… → w dół 29,99
+        ['250.00', '250.00', '75.50', '75.50'],    // bon dowolnej kwoty (wartość = zapłacono)
+        ['300.00', '310.00', '300.00', '300.00'],  // nadpłata: nigdy więcej niż saldo
+        ['200.00', '180.00', '0.00', '0.00'],      // saldo 0
+        ['500.00', '450.00', '0.01', '0.00'],      // 1 grosz × 0,9 → 0
+    ];
+    $zle = [];
+    foreach ($przypadki as [$w, $z, $s, $oczek]) {
+        $wynik = bon_zl(bon_kwota_zwrotu(['initial_pln' => $w, 'paid_pln' => $z, 'balance_pln' => $s]));
+        if ($wynik !== $oczek) $zle[] = "$w/$z saldo $s → $wynik (oczekiwano $oczek)";
+    }
+    $t('bon_kwota_zwrotu: ' . count($przypadki) . ' przypadków z wpisu 18:00 (rabat, niedopłata, grosze w dół, dowolna kwota, nadpłata)', !$zle, implode('; ', $zle));
+
+    // /bon: bon 200 kupiony za 180, wykorzystane 100 → oba kroki podają 90.00, zapis 90.00, mail kupującego z dopiskiem
+    $p = bon_test_payload(['price_custom_id' => 'bon-200', 'amount_paid' => 180, 'promo_code' => 'RABAT10', 'customer_email' => 'prop-' . random_int(1000, 9999) . '@example.com']);
+    bon_test_webhook(array_replace($k, ['prog_wstrzymania' => 0]), $pdo, $p);
+    $b = bon_test_bony($k, $pdo, $p['order_id'])[0];
+    bon_panel_realizuj($k, $pdo, ['login' => 'ewa', 'imie' => 'Ewa', 'rola' => 'realizacja', 'csrf' => 'x'], ['kod' => $b['code'], 'kwota_reczna' => '100', 'client_token' => bin2hex(random_bytes(12))]);
+    [$h1, $o1] = bon_rezygnacja_ze_strony($k, $pdo, $b['code'], (string)$b['buyer_email'], '192.0.2.201', null, 'sprawdz');
+    [$h2, $o2, $ctx] = bon_rezygnacja_ze_strony($k, $pdo, $b['code'], (string)$b['buyer_email'], '192.0.2.201');
+    $st = $pdo->prepare('SELECT saldo_pln, kwota_pln FROM ' . bon_tabela($k, 'voucher_withdrawals') . ' WHERE voucher_id = ?');
+    $st->execute([$b['id']]);
+    $w = $st->fetch();
+    $jsonl = $k['_katalog'] . '/bony-mailjet.jsonl';
+    $przed = is_file($jsonl) ? count(file($jsonl)) : 0;
+    bon_rezygnacja_maile($k, $ctx, $pdo);
+    $nowe = is_file($jsonl) ? array_map(static fn($l) => json_decode($l, true), array_slice(file($jsonl, FILE_IGNORE_NEW_LINES), $przed)) : [];
+    $doK = array_values(array_filter($nowe, static fn($m) => ($m['To'][0]['Email'] ?? '') === $b['buyer_email']))[0] ?? [];
+    $t('proporcjonalnie (/bon): sprawdz i zglos → 90.00, zapis saldo 100 / kwota 90, mail: „90 zł (saldo bonu przeliczone do zapłaconej ceny)”',
+        $h1 === 200 && ($o1['kwota'] ?? '') === '90.00' && $h2 === 200 && ($o2['kwota'] ?? '') === '90.00'
+        && (float)$w['saldo_pln'] === 100.0 && (float)$w['kwota_pln'] === 90.0
+        && str_contains((string)($doK['TextPart'] ?? ''), "90\u{00A0}zł (saldo bonu przeliczone do zapłaconej ceny)"),
+        json_encode([$o1, $o2, $w, $doK['TextPart'] ?? null], JSON_UNESCAPED_UNICODE));
+
+    // koszyk mieszany z rabatem 10%: 200 + 2×500, zapłacono 180 + 900 → bony 180/450/450; wykorzystane 100 z 500 → zwrot 360
+    $zam = bon_test_uuid();
+    bon_utworz_bony(array_replace($k, ['prog_wstrzymania' => 0.8]), $pdo, ['zamowienie' => $zam, 'email' => 'koszyk-' . random_int(1000, 9999) . '@example.com',
+        'waluta' => 'pln', 'promo' => 'RABAT10', 'pozycje' => [
+            ['wariant' => 'Bon Szmaragdowy', 'nominal' => 200, 'ilosc' => 1, 'zaplacono' => 18000],
+            ['wariant' => 'Bon Bursztynowy', 'nominal' => 500, 'ilosc' => 2, 'zaplacono' => 90000],
+        ]]);
+    $bm = bon_test_bony($k, $pdo, $zam);
+    usort($bm, static fn($a, $c) => $a['nr_w_zamowieniu'] <=> $c['nr_w_zamowieniu']);
+    $b500 = $bm[1] ?? [];
+    if ($b500) bon_panel_realizuj($k, $pdo, ['login' => 'ewa', 'imie' => 'Ewa', 'rola' => 'realizacja', 'csrf' => 'x'], ['kod' => $b500['code'], 'kwota_reczna' => '100', 'client_token' => bin2hex(random_bytes(12))]);
+    $b500 = $b500 ? bon_panel_znajdz($k, $pdo, $b500['code']) : [];
+    $t('koszyk mieszany z rabatem: bony zapłacone 180/450/450, ważne; bon 500 po wykorzystaniu 100 → zwrot 360.00 (nie 400)',
+        count($bm) === 3 && array_map(static fn($x) => (float)$x['paid_pln'], $bm) === [180.0, 450.0, 450.0] && array_unique(array_column($bm, 'status')) === ['valid']
+        && $b500 && bon_zl(bon_kwota_zwrotu($b500)) === '360.00', json_encode(array_map(static fn($x) => [$x['initial_pln'], $x['paid_pln'], $x['status']], $bm)));
     return $wyniki;
 }
 
@@ -228,11 +292,17 @@ function bon_testy_potwierdzenia(array $k, PDO $pdo, callable $nowy, callable $m
     $t('P-15: rabat „zapłacono 8 · rabat 192 · kod” u admina, brak u Karoliny, null przy pełnej wpłacie',
         ($hA['rabat'] ?? null) === ['zaplacono' => '8.00', 'rabat' => '192.00', 'kod' => 'TEST96'] && !array_key_exists('rabat', $hKa)
         && array_key_exists('rabat', $hPelny) && $hPelny['rabat'] === null, json_encode([$hA['rabat'] ?? null, $hPelny['rabat'] ?? 'brak']));
-    // rezygnacja bonu z rabatem: kwota = wpłata, znacznik „(tyle zapłacono)”
+    // rezygnacja bonu z rabatem: kwota przeliczona do zapłaconej ceny (wpis 18:00), znacznik „przeliczona”
     $zarejestruj($k, $sAdmin, $bR['code']);
     [, $hA] = bon_panel_historia($k, $pdo, $sEwa, $bR['code']);
-    $t('rezygnacja bonu za 8 zł z nominałem 200 → kwota 8.00 i ograniczona_wplata', ($hA['rezygnacja']['kwota'] ?? '') === '8.00'
-        && ($hA['rezygnacja']['ograniczona_wplata'] ?? null) === true, json_encode($hA['rezygnacja'] ?? null));
+    $t('rezygnacja bonu za 8 zł z nominałem 200 → kwota 8.00 i przeliczona', ($hA['rezygnacja']['kwota'] ?? '') === '8.00'
+        && ($hA['rezygnacja']['przeliczona'] ?? null) === true, json_encode($hA['rezygnacja'] ?? null));
+    // wpis 17:55: bon wstrzymany za niedopłatę – „Zapłacono 100 zł z 300 zł”, bez rabatu i kodu
+    $bH = $nowy(300, 'held-' . random_int(1000, 9999) . '@example.com');
+    $pdo->prepare('UPDATE ' . bon_tabela($k, 'vouchers') . " SET paid_pln = '100.00', promo_code = 'X', status = 'held' WHERE code = ?")->execute([$bH['code']]);
+    [, $hH] = bon_panel_historia($k, $pdo, $sAdmin, $bH['code']);
+    $t('rabat przy bonie held: niedopłata „zapłacono 100 z 300”, bez rabatu i kodu', ($hH['rabat'] ?? null) === ['zaplacono' => '100.00', 'wartosc' => '300.00', 'niedoplata' => true],
+        json_encode($hH['rabat'] ?? null));
 
     // 6. verify.php: wartość przy każdym statusie (wpis 17:26 pkt 3), saldo tylko przy valid/used
     $bE = $nowy(150, 'ver-' . random_int(1000, 9999) . '@example.com');

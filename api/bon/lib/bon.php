@@ -205,6 +205,21 @@ function bon_data_zaplaty(mixed $zrodlo, DateTimeImmutable $teraz): DateTimeImmu
     return $d;
 }
 
+/**
+ * Kwota zwrotu w groszach – JEDNO miejsce liczenia (wpis 18:00, decyzja Bartka 2026-11-24): proporcjonalnie do zapłaconej ceny,
+ * żeby rabat nie wracał w gotówce. zwrot = floor(saldo × zapłacono / wartość), w dół do grosza; gdy zapłacono ≥ wartość – saldo.
+ * Nigdy więcej niż zapłacono (limit Easytools remaining_refundable nakłada lib/zwroty.php). Dotyczy też bonu zatwierdzonego
+ * mimo niedopłaty. Przykład: bon 200 zł kupiony za 180 zł, wykorzystane 100 zł → 90 zł (dawniej min(saldo, wpłata) = 100 zł).
+ */
+function bon_kwota_zwrotu(array $bon, ?int $saldoGr = null): int {
+    $saldo = $saldoGr ?? (int)bon_grosze($bon['balance_pln']);
+    $zaplacono = (int)bon_grosze($bon['paid_pln']);
+    $wartosc = (int)bon_grosze($bon['initial_pln']);
+    if ($saldo <= 0 || $zaplacono <= 0) return 0;
+    if ($wartosc <= 0 || $zaplacono >= $wartosc) return min($saldo, $zaplacono);
+    return min($zaplacono, intdiv($saldo * $zaplacono, $wartosc));
+}
+
 /** Ostatni dzień na rezygnację: dzień zapłaty + 14 (dzień zapłaty się nie liczy; 14. dzień jeszcze w terminie, 15. już nie). */
 function bon_rezygnacja_termin(array $bon): string {
     $zaplata = new DateTimeImmutable(substr((string)$bon['created_at'], 0, 10), new DateTimeZone(BON_STREFA));
