@@ -44,6 +44,7 @@ function bon_test_payload(array $nadpisz = []): array {
 function bon_test_konfig(array $k): array {
     return array_replace($k, [
         'webhook_tryb' => 'bon',
+        'konta_z_bazy' => false, // testy niezależne od przełącznika w repo; testy kont włączają go same (testy-konta.php)
         'easytools_webhook_sekret' => 'sekret-testowy-1234567890',
         'kwota_jednostka' => 'pln',
         'ceny' => ['bon-200' => 200, 'bon-300' => 300, 'bon-500' => 500, 'bon-dowolna' => 'dowolna'],

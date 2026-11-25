@@ -24,7 +24,7 @@ return [
 
     // --- konta panelu (wpis 13:20): false = konta z panel_konta w konfigu; true = z tabeli voucher_accounts (po migracji konta.sql
     //     i przeniesieniu kont – plan/BONY-KONTA-WDROZENIE.md). Włączenie po starcie, na słowo Bartka; wycofanie = false + wrzuta ---
-    'konta_z_bazy' => false,
+    'konta_z_bazy' => true, // WŁĄCZONE 25.11 na słowo Bartka – po migracji konta.sql i przeniesieniu kont (log.php: voucher_accounts > 0)
     'kwota_jednostka' => 'pln',
 
     // --- warianty i ceny → nominał; nieznany = bon wstrzymany ---
