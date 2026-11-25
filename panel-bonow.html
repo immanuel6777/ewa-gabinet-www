@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="/_astro/sciezka-bonow.Aej5KZTB.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.nY5Xr9WF.css">
+<link rel="stylesheet" href="/_astro/panel-bonow.AIMD6hHj.css">
 <link rel="stylesheet" href="/_astro/Baza.DyE6WHxw.css">
 <link rel="stylesheet" href="/_astro/KartaBonu.DVx0KRYz.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
@@ -145,7 +145,7 @@
           <p class="n-menu-poz n-menu-pomoc" data-p-menu-poz="pomoc" data-n-pomoc="bez-instrukcji" hidden data-astro-cid-lkdlr2dg></p>
           <button class="n-menu-poz n-menu-wyloguj" type="button" data-p-menu-poz="wyloguj" data-astro-cid-lkdlr2dg>Wyloguj</button>
         </nav>
-        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu 7f65feb · 25.11.2026</p>
+        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu 8141284 · 25.11.2026</p>
       </div>
     </dialog>
   </header>
@@ -181,7 +181,8 @@
     </symbol>
   </defs>
 </svg>
-    <h1>Panel bonów</h1>
+    <!-- wpis 16:35 pkt 2: tytuł tylko dla czytnika – tryb pokazuje nagłówek ramki pod „EWA” (Front 1) -->
+    <h1 class="sr-only">Panel bonów</h1>
 
     <p class="komunikat" data-p-start>Ładuję panel…</p>
     <p class="komunikat" data-p-brak hidden>Panel działa tylko na stronie www.ewa-gabinet.pl (tutaj serwer bonów jest niedostępny).</p>
@@ -220,18 +221,15 @@
 
     <!-- po zalogowaniu -->
     <div data-p-zalogowany hidden>
-      <!-- wpisy 01:24/01:27: przełącznik „Kasa | Biuro” – Ewa i admin (Karolina tylko Kasa, bez przełącznika); zapamiętany na urządzeniu -->
+      <!-- wpisy 01:24/01:27 + 16:35: przełącznik „Bon | Gabinet” – Ewa i admin (Karolina tylko Bon, bez przełącznika); zapamiętany na
+           urządzeniu. Wewnętrznie dalej kasa/biuro (localStorage, .tylko-kasa/.tylko-biuro); na <html data-tryb> idzie bon/gabinet. -->
       <div class="tryby" role="group" aria-label="Widok panelu" data-p-tryby hidden>
-        <button type="button" data-p-tryb="kasa" aria-pressed="false">Kasa</button>
-        <button type="button" data-p-tryb="biuro" aria-pressed="false">Biuro</button>
+        <button type="button" data-p-tryb="kasa" aria-pressed="false">Bon</button>
+        <button type="button" data-p-tryb="biuro" aria-pressed="false">Gabinet</button>
       </div>
-      <!-- wpis czatu 10:30: „Instrukcja” obok „Wyloguj” (Kasa i Biuro, każda rola) – PDF w nowej karcie; aktualizacja = podmiana
-           public/panel-bonow/instrukcja.pdf + wrzuta; noindex w .htaccess (produkcja.mjs) i _headers -->
-      <p class="kto">Zalogowano: <strong data-p-imie></strong> · <a class="link-przycisk" href="/panel-bonow/instrukcja.pdf" target="_blank" rel="noopener" data-p-instrukcja>Instrukcja</a> <span data-p-zmien-haslo-wiersz hidden> · <button type="button" class="link-przycisk" data-p-zmien-haslo>Zmień hasło</button></span> · <button type="button" class="link-przycisk" data-p-wyloguj>Wyloguj</button></p>
-      <div class="sync tylko-biuro" aria-live="polite">
-        <button type="button" class="link-przycisk" data-p-sync>Pobierz nowe zamówienia</button>
-        <p class="podpowiedz" data-p-sync-wynik hidden></p>
-      </div>
+      <!-- projekt pkt 2 (wpis 18:14): „Zalogowano…”, Instrukcja, Zmień hasło, Wyloguj i „Pobierz nowe zamówienia” są w menu ☰ ramki
+           (NarzedzieRamka.astro, [data-p-menu-poz]); tu zostaje tylko wynik automatycznego pobrania zamówień przy wejściu (Gabinet) -->
+      <p class="podpowiedz sync-wynik tylko-biuro" aria-live="polite" data-p-sync-wynik hidden></p>
 
       <!-- KASA, ekran startowy: skan aparatem telefonu (kod QR otwiera panel z ?nr=), numer z maską, e-mail jako link -->
       <section class="kasa-start tylko-kasa" data-k-start>
@@ -266,7 +264,7 @@
         </label>
         <button class="przycisk" type="submit" data-p-szukaj-przycisk disabled>Szukaj</button>
       </form>
-      <p class="tylko-kasa k-email-link" data-k-email-wiersz><button type="button" class="link-przycisk" data-k-email>Pacjent bez bonu? Szukaj po e-mailu</button></p>
+      <p class="tylko-kasa k-email-link" data-k-email-wiersz><button type="button" class="przycisk obrys" data-k-email>Szukaj po e-mailu</button></p>
       <form class="szukaj formularz" data-p-szukaj-email>
         <label class="pole"><span class="etykieta">E-mail kupującego lub nr zamówienia</span>
           <input name="q" type="text" inputmode="email" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="adres z zakupu" maxlength="190" required>
@@ -549,8 +547,11 @@
         </label>
         <p class="podpowiedz">Przyciski wpisują kwotę same. Inna cena (np. klamra droższa niż „od”)? Wpisz kwotę ręcznie – wybór zabiegów się wtedy wyczyści.</p>
         <p class="komunikat" data-k-blad hidden></p>
-        <div class="k-pasek" aria-live="polite">
-          <p class="k-podsumowanie">Z bonu <strong data-k-zbonu>0 zł</strong> · Dopłata <strong data-k-doplata>0 zł</strong> · Na kasę <strong data-k-nakase>0 zł</strong></p>
+        <!-- projekt 3C: podsumowanie ukryte przy 0 zł (hidden – panel-bonow.ts), po wyborze ciemna karta przyklejona na dole (wygląd: Front 1) -->
+        <div class="k-pasek" aria-live="polite" data-k-pasek hidden>
+          <p class="k-nakase-etykieta">Na kasę fiskalną</p>
+          <p class="k-nakase-kwota" data-k-nakase>0 zł</p>
+          <p class="k-podsumowanie">z bonu <strong data-k-zbonu>0 zł</strong> · dopłata <strong data-k-doplata>0 zł</strong></p>
           <button class="przycisk" type="submit" data-k-zatwierdz disabled>Zatwierdź</button>
         </div>
       </form>
@@ -558,8 +559,8 @@
       <!-- KASA: wynik – zdanie do przeczytania pacjentowi + „Następny bon” (cofnięcie w Biurze, toastów jeszcze nie ma) -->
       <section class="karta kasa-wynik tylko-kasa" data-k-wynik hidden aria-live="polite">
         <p class="k-gotowe">Gotowe.</p>
+        <p class="k-nabij" data-k-dokasy></p>
         <p class="k-zdanie" data-k-zdanie></p>
-        <p class="komunikat" data-k-dokasy hidden></p>
         <button class="przycisk" type="button" data-k-nastepny>Następny bon</button>
       </section>
 
@@ -1054,38 +1055,6 @@
         <p class="blad" data-p-blad-rez hidden></p>
       </section>
 
-      <!-- wpis 13:20: Biuro → Konta (tylko admin). Przed przełączeniem konta_z_bazy: „Przenieś konta z konfigu” (po migracji konta.sql) -->
-      <section class="karta konta tylko-biuro" data-p-konta hidden>
-        <h2>Konta</h2>
-        <div data-p-konta-konfig hidden>
-          <p class="podpowiedz">Konta są jeszcze w konfiguracji serwera. Po migracji bazy (plan/BONY-KONTA-WDROZENIE.md) przenieś je tutaj, potem Bartek włącza przełącznik.</p>
-          <button class="przycisk obrys" type="button" data-p-konta-przenies>Przenieś konta z konfigu do bazy</button>
-        </div>
-        <div data-p-konta-baza hidden>
-          <ul class="konta-lista" data-p-konta-lista></ul>
-          <div class="konta-haslo" data-p-konta-haslo hidden aria-live="polite"></div>
-          <form class="admin-forma formularz" data-p-konta-dodaj>
-            <h3>Dodaj konto</h3>
-            <label class="pole"><span class="etykieta">Login (małe litery, bez spacji)</span><input name="login" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" required maxlength="40" pattern="[a-z0-9._\-]{2,40}"></label>
-            <label class="pole"><span class="etykieta">Imię (widać je w historii bonów)</span><input name="imie" type="text" required maxlength="60"></label>
-            <label class="pole"><span class="etykieta">Uprawnienia</span>
-              <select name="uprawnienia">
-                <!-- Bartek 25.11: Kasa = realizacja; Biuro = realizacja + uprawnienie rezygnacje; Administrator = admin -->
-                <option value="realizacja">Kasa – realizacja bonów</option>
-                <option value="rezygnacje">Biuro – Kasa + rezygnacje, zwroty, przedłużenia</option>
-                <option value="admin">Administrator</option>
-              </select>
-            </label>
-            <button class="przycisk obrys" type="submit">Dodaj i pokaż hasło tymczasowe</button>
-          </form>
-          <details class="zwijane">
-            <summary>Historia zmian kont</summary>
-            <ol class="konta-historia" data-p-konta-historia></ol>
-          </details>
-        </div>
-        <p class="blad" data-p-blad-konta hidden></p>
-      </section>
-
       <!-- tylko admin -->
       <section class="karta admin tylko-biuro" data-p-admin hidden>
         <h2>Administracja</h2>
@@ -1106,6 +1075,41 @@
           <p class="podpowiedz" data-p-zwrot-podpowiedz hidden>Zwykła droga: najpierw zarejestruj rezygnację, potem „Zwróć pieniądze”. „Oznacz zwrot” bez rezygnacji tylko awaryjnie, gdy pieniądze oddano już w Easytools.</p>
         </div>
         <p class="blad" data-p-blad-admin hidden></p>
+      </section>
+    </div>
+
+    <!-- wpis 18:14 pkt 2 / 4D: ekran Konta (tylko admin) otwierany z menu ☰ – osobny ekran z „← Wróć” zamiast sekcji w Gabinecie -->
+    <div class="ekran-konta" data-p-ekran-konta hidden>
+      <button class="przycisk obrys wroc" type="button" data-p-konta-wroc>← Wróć</button>
+      <section class="karta konta" data-p-konta>
+        <h2>Konta</h2>
+        <div data-p-konta-konfig hidden>
+          <p class="podpowiedz">Konta są jeszcze w konfiguracji serwera. Po migracji bazy (plan/BONY-KONTA-WDROZENIE.md) przenieś je tutaj, potem Bartek włącza przełącznik.</p>
+          <button class="przycisk obrys" type="button" data-p-konta-przenies>Przenieś konta z konfigu do bazy</button>
+        </div>
+        <div data-p-konta-baza hidden>
+          <ul class="konta-lista" data-p-konta-lista></ul>
+          <div class="konta-haslo" data-p-konta-haslo hidden aria-live="polite"></div>
+          <form class="admin-forma formularz" data-p-konta-dodaj>
+            <h3>Dodaj konto</h3>
+            <label class="pole"><span class="etykieta">Login (małe litery, bez spacji)</span><input name="login" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" required maxlength="40" pattern="[a-z0-9._\-]{2,40}"></label>
+            <label class="pole"><span class="etykieta">Imię (widać je w historii bonów)</span><input name="imie" type="text" required maxlength="60"></label>
+            <label class="pole"><span class="etykieta">Uprawnienia</span>
+              <select name="uprawnienia">
+                <!-- poziomy (projekt, 25.11 19:25): Bon = realizacja; Gabinet = realizacja + uprawnienie rezygnacje; Administrator = admin -->
+                <option value="realizacja">Bon – realizacja bonów</option>
+                <option value="rezygnacje">Gabinet – Bon + rezygnacje, zwroty, przedłużenia</option>
+                <option value="admin">Administrator</option>
+              </select>
+            </label>
+            <button class="przycisk obrys" type="submit">Dodaj i pokaż hasło tymczasowe</button>
+          </form>
+          <details class="zwijane">
+            <summary>Historia zmian kont</summary>
+            <ol class="konta-historia" data-p-konta-historia></ol>
+          </details>
+        </div>
+        <p class="blad" data-p-blad-konta hidden></p>
       </section>
     </div>
   </div>
@@ -1130,7 +1134,7 @@
 
     <footer class="n-dol" data-astro-cid-lkdlr2dg>
     <span class="n-pomoc" data-n-pomoc hidden data-astro-cid-lkdlr2dg></span>
-    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu 7f65feb · 25.11.2026</span>
+    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu 8141284 · 25.11.2026</span>
   </footer>
 
 
@@ -1145,4 +1149,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.Bab4AWuL.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.DVY2useR.js"></script>
