@@ -171,7 +171,7 @@ function bon_pdf(array $bon, array $k): string {
     $pdf->Cell(180, 6, 'Na następnych stronach: bon do wydrukowania – do wyboru z miejscem na wstążkę albo z nadrukowaną kokardą.', 0, 1, 'C');
 
     // === strony 2 i 3 (Bartek 2026-11-24, decyzja 15:35, wpis 22:22): dwie wycinanki składane – przód i tył obok siebie na jednym
-    // tle z liniami cięcia i zgięcia (tła i uklad-*.json z frontu, PR #57). Strona 2: P3 „do przewiązania” (pas ton w ton),
+    // tle z liniami cięcia i zgięcia (tła i uklad-*.json z frontu, PR #57). Strona 2: „do przewiązania” z osadzonym kamieniem (Front 1, #150, wpis 23:18),
     // strona 3: z nadrukowaną wstążką i kokardą. Dawna strona z osobnym przodem i tyłem (tlo-przod/tyl-*) wypadła z PDF. ===
     foreach ([
         ['uklad-wycinanka.json', "tlo-wycinanka-$prog.jpg", 'Bon do przewiązania wstążką', 'Wytnij, zegnij, sklej, a jeśli masz wstążkę, przewiąż bon.'],
