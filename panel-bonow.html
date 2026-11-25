@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="/_astro/sciezka-bonow.B4U7Ywh7.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.KkmSm0PH.css">
+<link rel="stylesheet" href="/_astro/panel-bonow.DVFVPQQn.css">
 <link rel="stylesheet" href="/_astro/Baza.CUaZgc7R.css">
 <link rel="stylesheet" href="/_astro/KartaBonu.DVx0KRYz.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
@@ -61,6 +61,30 @@
     <main id="tresc">
       
   <div class="kontener panel" data-panel data-tryb="biuro" data-astro-cid-nl2nwxtk>
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <linearGradient id="gem-oprawa" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FBF0CF"></stop>
+      <stop offset=".45" stop-color="#D8B46A"></stop>
+      <stop offset=".72" stop-color="#9C7632"></stop>
+      <stop offset="1" stop-color="#EBD497"></stop>
+    </linearGradient>
+    <radialGradient id="gem-blask" cx=".34" cy=".28" r=".62">
+      <stop offset="0" stop-color="#fff" stop-opacity=".9"></stop>
+      <stop offset=".4" stop-color="#fff" stop-opacity="0"></stop>
+    </radialGradient>
+    <symbol id="gem" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="11.3" fill="url(#gem-oprawa)" stroke="#7A5A22" stroke-width=".6"></circle>
+      <circle cx="12" cy="12" r="8.9" fill="#2A1D08" opacity=".5"></circle>
+      <polygon points="19.48,15.10 15.10,19.48 8.90,19.48 4.52,15.10 4.52,8.90 8.90,4.52 15.10,4.52 19.48,8.90" style="fill: var(--gem-b)"></polygon>
+      <polygon points="19.48,15.10 15.10,19.48 13.65,15.97 15.97,13.65" style="fill: var(--gem-a); opacity: .85"></polygon><polygon points="15.10,19.48 8.90,19.48 10.35,15.97 13.65,15.97" style="fill: var(--gem-c); opacity: .85"></polygon><polygon points="8.90,19.48 4.52,15.10 8.03,13.65 10.35,15.97" style="fill: var(--gem-a); opacity: .85"></polygon><polygon points="4.52,15.10 4.52,8.90 8.03,10.35 8.03,13.65" style="fill: var(--gem-c); opacity: .85"></polygon><polygon points="4.52,8.90 8.90,4.52 10.35,8.03 8.03,10.35" style="fill: var(--gem-a); opacity: .85"></polygon><polygon points="8.90,4.52 15.10,4.52 13.65,8.03 10.35,8.03" style="fill: var(--gem-c); opacity: .85"></polygon><polygon points="15.10,4.52 19.48,8.90 15.97,10.35 13.65,8.03" style="fill: var(--gem-a); opacity: .85"></polygon><polygon points="19.48,8.90 19.48,15.10 15.97,13.65 15.97,10.35" style="fill: var(--gem-c); opacity: .85"></polygon>
+      <polygon points="15.97,13.65 13.65,15.97 10.35,15.97 8.03,13.65 8.03,10.35 10.35,8.03 13.65,8.03 15.97,10.35" style="fill: var(--gem-b)"></polygon>
+      <polygon points="15.97,13.65 13.65,15.97 10.35,15.97 8.03,13.65 8.03,10.35 10.35,8.03 13.65,8.03 15.97,10.35" fill="url(#gem-blask)"></polygon>
+      <circle cx="12" cy="12" r="8.1" fill="url(#gem-blask)" opacity=".55"></circle>
+      <circle cx="18.15" cy="18.15" r="1.35" fill="url(#gem-oprawa)" stroke="#7A5A22" stroke-width=".4"></circle><circle cx="5.85" cy="18.15" r="1.35" fill="url(#gem-oprawa)" stroke="#7A5A22" stroke-width=".4"></circle><circle cx="5.85" cy="5.85" r="1.35" fill="url(#gem-oprawa)" stroke="#7A5A22" stroke-width=".4"></circle><circle cx="18.15" cy="5.85" r="1.35" fill="url(#gem-oprawa)" stroke="#7A5A22" stroke-width=".4"></circle>
+    </symbol>
+  </defs>
+</svg>
     <h1 data-astro-cid-nl2nwxtk>Panel bonów</h1>
 
     <p class="komunikat" data-p-start data-astro-cid-nl2nwxtk>Ładuję panel…</p>
@@ -231,8 +255,10 @@
         </div>
         <!-- komunikaty Kasy we wspólnym wyglądzie frontu (pokazKomunikat, global.css .komunikat) -->
         <p class="komunikat" data-k-stan hidden data-astro-cid-nl2nwxtk></p>
-        <p class="k-ostatnia" data-k-ostatnia data-astro-cid-nl2nwxtk></p>
-        <button type="button" class="link-przycisk k-szczegoly" data-k-szczegoly hidden data-astro-cid-nl2nwxtk>Szczegóły bonu</button>
+        <div class="k-stopka" data-astro-cid-nl2nwxtk>
+          <p class="k-ostatnia" data-k-ostatnia data-astro-cid-nl2nwxtk></p>
+          <button type="button" class="link-przycisk k-szczegoly" data-k-szczegoly hidden data-astro-cid-nl2nwxtk>Szczegóły bonu</button>
+        </div>
       </section>
 
       <!-- P-10: poza kartą Biura – maska działa w obu widokach (Kasa też szuka po e-mailu) -->
@@ -961,4 +987,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.Cvu-1EUI.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.BvkTvp27.js"></script>
