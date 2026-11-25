@@ -163,6 +163,10 @@ RewriteRule ^(.+)$ $1.html [END]
   <If "%{REQUEST_URI} =~ m#^/img/#">
     Header set Cache-Control "public, max-age=2592000"
   </If>
+  # instrukcja panelu bonów (PDF dla gabinetu) – nie indeksować (wpis czatu 2026-11-25 10:30)
+  <If "%{REQUEST_URI} =~ m#^/panel-bonow/#">
+    Header set X-Robots-Tag "noindex, nofollow"
+  </If>
   Header set X-Content-Type-Options "nosniff"
   Header set Referrer-Policy "strict-origin-when-cross-origin"
 </IfModule>

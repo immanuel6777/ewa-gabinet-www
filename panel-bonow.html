@@ -43,8 +43,9 @@
   <link rel="stylesheet" href="/_astro/sciezka-bonow.B4U7Ywh7.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.BXKMay4U.css">
-<link rel="stylesheet" href="/_astro/Baza.CUaZgc7R.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
+<link rel="stylesheet" href="/_astro/panel-bonow.KkmSm0PH.css">
+<link rel="stylesheet" href="/_astro/Baza.CUaZgc7R.css">
+<link rel="stylesheet" href="/_astro/KartaBonu.DVx0KRYz.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
     <a class="przeskocz" href="#tresc">Przejdź do treści</a>
     <header class="n-gora" data-astro-cid-lkdlr2dg>
@@ -86,7 +87,9 @@
         <button type="button" data-p-tryb="kasa" aria-pressed="false" data-astro-cid-nl2nwxtk>Kasa</button>
         <button type="button" data-p-tryb="biuro" aria-pressed="false" data-astro-cid-nl2nwxtk>Biuro</button>
       </div>
-      <p class="kto" data-astro-cid-nl2nwxtk>Zalogowano: <strong data-p-imie data-astro-cid-nl2nwxtk></strong> · <button type="button" class="link-przycisk" data-p-wyloguj data-astro-cid-nl2nwxtk>Wyloguj</button></p>
+      <!-- wpis czatu 10:30: „Instrukcja” obok „Wyloguj” (Kasa i Biuro, każda rola) – PDF w nowej karcie; aktualizacja = podmiana
+           public/panel-bonow/instrukcja.pdf + wrzuta; noindex w .htaccess (produkcja.mjs) i _headers -->
+      <p class="kto" data-astro-cid-nl2nwxtk>Zalogowano: <strong data-p-imie data-astro-cid-nl2nwxtk></strong> · <a class="link-przycisk" href="/panel-bonow/instrukcja.pdf" target="_blank" rel="noopener" data-p-instrukcja data-astro-cid-nl2nwxtk>Instrukcja</a> · <button type="button" class="link-przycisk" data-p-wyloguj data-astro-cid-nl2nwxtk>Wyloguj</button></p>
       <div class="sync tylko-biuro" aria-live="polite" data-astro-cid-nl2nwxtk>
         <button type="button" class="link-przycisk" data-p-sync data-astro-cid-nl2nwxtk>Pobierz nowe zamówienia</button>
         <p class="podpowiedz" data-p-sync-wynik hidden data-astro-cid-nl2nwxtk></p>
@@ -104,7 +107,7 @@
           <p class="k-skaner-info" aria-live="polite" data-k-skaner-info data-astro-cid-nl2nwxtk>Nakieruj aparat na kod QR z bonu.</p>
           <button class="przycisk obrys" type="button" data-k-skaner-zamknij data-astro-cid-nl2nwxtk>Zamknij aparat</button>
         </div>
-        <p class="k-skan-info" data-k-skan-info hidden data-astro-cid-nl2nwxtk></p>
+        <p class="komunikat k-skan-info" data-k-skan-info hidden data-astro-cid-nl2nwxtk></p>
       </section>
 
       <!-- wpis 01:34: osobne pola – numer z pełną maską jak na /bon (EWA- od razu, myślniki same, przycisk aktywny przy pełnym
@@ -132,13 +135,102 @@
         <p class="podpowiedz" data-p-wyniki-info hidden data-astro-cid-nl2nwxtk></p>
       </section>
 
+      <!-- wpis czatu 10:40: przy otwartej karcie w Kasie start i pole numeru zwijają się w jeden wiersz: numer · „Skanuj inny” ·
+           „Wpisz numer” (rozwija pole numeru); bon z e-maila (maska) – „Bon z e-maila” zamiast numeru. Biuro bez zmian. -->
+      <div class="k-wiersz tylko-kasa" data-k-wiersz data-astro-cid-nl2nwxtk>
+        <span class="k-numer" data-k-numer data-astro-cid-nl2nwxtk></span>
+        <button class="przycisk obrys k-skanuj-inny" type="button" data-k-skanuj-inny data-astro-cid-nl2nwxtk>Skanuj inny</button>
+        <button class="link-przycisk" type="button" data-k-wpisz data-astro-cid-nl2nwxtk>Wpisz numer</button>
+      </div>
+
       <!-- KASA: karta bonu – kamień, duże saldo, ważność; nieaktywny = jedno zdanie, bez przycisków; jedna linijka historii -->
       <section class="karta kasa-bon tylko-kasa" data-k-bon hidden data-astro-cid-nl2nwxtk>
         <!-- Bartek 2026-11-25: kolor = stan bonu (pasek z lewej + pigułka); kamień tylko jako delikatny podpis -->
         <p class="k-glowa" data-astro-cid-nl2nwxtk><span class="k-status" data-k-status data-astro-cid-nl2nwxtk></span><span class="k-nazwa" data-k-nazwa data-astro-cid-nl2nwxtk></span></p>
-        <p class="k-saldo" data-k-saldo data-astro-cid-nl2nwxtk></p>
-        <p class="k-wazny" data-k-wazny data-astro-cid-nl2nwxtk></p>
-        <p class="k-stan" data-k-stan hidden data-astro-cid-nl2nwxtk></p>
+        <!-- wpis czatu 08:55 pkt 3: mała karta bonu jak na /bon (KartaBonu, kolor kamienia z API) obok salda; nieaktywny = szara -->
+        <div class="k-gora" data-astro-cid-nl2nwxtk>
+          <div class="k-mini" aria-hidden="true" data-k-karty data-astro-cid-nl2nwxtk>
+            <div class="wariant" data-prog="czerwony" data-astro-cid-nl2nwxtk><div class="karta przod uklad-b" aria-hidden="true" data-astro-cid-ags4qno2>
+    
+<img src="/_astro/bon-stopa.FUV80o9S_Z2sR1go.webp" srcset="/_astro/bon-stopa.FUV80o9S_N9g1W.webp 300w, /_astro/bon-stopa.FUV80o9S_Z2k7Mxo.webp 440w, /_astro/bon-stopa.FUV80o9S_Z2sR1go.webp 645w" alt sizes="(max-width: 899px) 290px, 440px" loading="lazy" data-astro-cid-ags4qno2="true" decoding="async" width="645" height="799" class="foto">
+    
+    
+    <div class="tekst-b" data-astro-cid-ags4qno2>
+        <div class="marka" data-astro-cid-ags4qno2>
+<img src="/_astro/logo.B_oLqPM9_ZRhUQ1.webp" alt loading="lazy" data-astro-cid-ags4qno2="true" decoding="async" width="72" height="72" class="logo"><span class="marka-tekst" data-astro-cid-ags4qno2><strong data-astro-cid-ags4qno2>EWA</strong><span data-astro-cid-ags4qno2>Gabinet podologiczny</span></span></div>
+        
+        <span class="tytul-b" data-astro-cid-ags4qno2>Bon podarunkowy</span>
+        <span class="kwota-b kwota-tekst" data-astro-cid-ags4qno2>dowolna kwota</span>
+        <span class="dopisek-b" data-astro-cid-ags4qno2>na zabiegi podologiczne</span>
+      </div>
+    
+    <span class="wstazka" style="--wstazka-foto:url(/_astro/wstazka-czerwona-satyna.CmuE0RdF_2ajKI7.webp);--wstazka-koniec:rgba(40, 0, 4, .4)" data-astro-cid-ags4qno2></span>
+    
+<img src="/_astro/kokarda-czerwona-satyna.pewVU7GB_ZDagXI.webp" srcset="/_astro/kokarda-czerwona-satyna.pewVU7GB_14OpJt.webp 200w, /_astro/kokarda-czerwona-satyna.pewVU7GB_QFJzS.webp 300w, /_astro/kokarda-czerwona-satyna.pewVU7GB_Dx4qi.webp 400w" alt sizes="(max-width: 899px) 100px, 140px" loading="lazy" data-astro-cid-ags4qno2="true" decoding="async" width="1188" height="1175" class="kokarda">
+    
+  </div></div><div class="wariant" data-prog="zloty" hidden data-astro-cid-nl2nwxtk><div class="karta przod uklad-b" aria-hidden="true" data-astro-cid-ags4qno2>
+    
+<img src="/_astro/bon-stopa.FUV80o9S_Z2sR1go.webp" srcset="/_astro/bon-stopa.FUV80o9S_N9g1W.webp 300w, /_astro/bon-stopa.FUV80o9S_Z2k7Mxo.webp 440w, /_astro/bon-stopa.FUV80o9S_Z2sR1go.webp 645w" alt sizes="(max-width: 899px) 290px, 440px" loading="lazy" data-astro-cid-ags4qno2="true" decoding="async" width="645" height="799" class="foto">
+    
+    
+    <div class="tekst-b" data-astro-cid-ags4qno2>
+        <div class="marka" data-astro-cid-ags4qno2>
+<img src="/_astro/logo.B_oLqPM9_ZRhUQ1.webp" alt loading="lazy" data-astro-cid-ags4qno2="true" decoding="async" width="72" height="72" class="logo"><span class="marka-tekst" data-astro-cid-ags4qno2><strong data-astro-cid-ags4qno2>EWA</strong><span data-astro-cid-ags4qno2>Gabinet podologiczny</span></span></div>
+        
+        <span class="tytul-b" data-astro-cid-ags4qno2>Bon podarunkowy</span>
+        <span class="kwota-b kwota-tekst" data-astro-cid-ags4qno2>dowolna kwota</span>
+        <span class="dopisek-b" data-astro-cid-ags4qno2>na zabiegi podologiczne</span>
+      </div>
+    
+    <span class="wstazka" style="--wstazka-foto:url(/_astro/wstazka-zlota-satyna.aOxOo__P_Z2toCYS.webp);--wstazka-koniec:rgba(60, 38, 0, .4)" data-astro-cid-ags4qno2></span>
+    
+<img src="/_astro/kokarda-zlota-satyna.gz3W_aAR_Z1FuB6N.webp" srcset="/_astro/kokarda-zlota-satyna.gz3W_aAR_2mnV6E.webp 200w, /_astro/kokarda-zlota-satyna.gz3W_aAR_13sRbP.webp 300w, /_astro/kokarda-zlota-satyna.gz3W_aAR_ZfrbHY.webp 400w" alt sizes="(max-width: 899px) 100px, 140px" loading="lazy" data-astro-cid-ags4qno2="true" decoding="async" width="1188" height="1175" class="kokarda">
+    
+  </div></div><div class="wariant" data-prog="zielen" hidden data-astro-cid-nl2nwxtk><div class="karta przod uklad-b" aria-hidden="true" data-astro-cid-ags4qno2>
+    
+<img src="/_astro/bon-stopa.FUV80o9S_Z2sR1go.webp" srcset="/_astro/bon-stopa.FUV80o9S_N9g1W.webp 300w, /_astro/bon-stopa.FUV80o9S_Z2k7Mxo.webp 440w, /_astro/bon-stopa.FUV80o9S_Z2sR1go.webp 645w" alt sizes="(max-width: 899px) 290px, 440px" loading="lazy" data-astro-cid-ags4qno2="true" decoding="async" width="645" height="799" class="foto">
+    
+    
+    <div class="tekst-b" data-astro-cid-ags4qno2>
+        <div class="marka" data-astro-cid-ags4qno2>
+<img src="/_astro/logo.B_oLqPM9_ZRhUQ1.webp" alt loading="lazy" data-astro-cid-ags4qno2="true" decoding="async" width="72" height="72" class="logo"><span class="marka-tekst" data-astro-cid-ags4qno2><strong data-astro-cid-ags4qno2>EWA</strong><span data-astro-cid-ags4qno2>Gabinet podologiczny</span></span></div>
+        
+        <span class="tytul-b" data-astro-cid-ags4qno2>Bon podarunkowy</span>
+        <span class="kwota-b kwota-tekst" data-astro-cid-ags4qno2>dowolna kwota</span>
+        <span class="dopisek-b" data-astro-cid-ags4qno2>na zabiegi podologiczne</span>
+      </div>
+    
+    <span class="wstazka" style="--wstazka-foto:url(/_astro/wstazka-zielona-satyna.CiJA1QM2_Z1VjFYD.webp);--wstazka-koniec:rgba(0, 18, 12, .45)" data-astro-cid-ags4qno2></span>
+    
+<img src="/_astro/kokarda-zlota-satyna.gz3W_aAR_Z1FuB6N.webp" srcset="/_astro/kokarda-zlota-satyna.gz3W_aAR_2mnV6E.webp 200w, /_astro/kokarda-zlota-satyna.gz3W_aAR_13sRbP.webp 300w, /_astro/kokarda-zlota-satyna.gz3W_aAR_ZfrbHY.webp 400w" alt sizes="(max-width: 899px) 100px, 140px" loading="lazy" data-astro-cid-ags4qno2="true" decoding="async" width="1188" height="1175" class="kokarda">
+    
+  </div></div><div class="wariant" data-prog="granat" hidden data-astro-cid-nl2nwxtk><div class="karta przod uklad-b" aria-hidden="true" data-astro-cid-ags4qno2>
+    
+<img src="/_astro/bon-stopa.FUV80o9S_Z2sR1go.webp" srcset="/_astro/bon-stopa.FUV80o9S_N9g1W.webp 300w, /_astro/bon-stopa.FUV80o9S_Z2k7Mxo.webp 440w, /_astro/bon-stopa.FUV80o9S_Z2sR1go.webp 645w" alt sizes="(max-width: 899px) 290px, 440px" loading="lazy" data-astro-cid-ags4qno2="true" decoding="async" width="645" height="799" class="foto">
+    
+    
+    <div class="tekst-b" data-astro-cid-ags4qno2>
+        <div class="marka" data-astro-cid-ags4qno2>
+<img src="/_astro/logo.B_oLqPM9_ZRhUQ1.webp" alt loading="lazy" data-astro-cid-ags4qno2="true" decoding="async" width="72" height="72" class="logo"><span class="marka-tekst" data-astro-cid-ags4qno2><strong data-astro-cid-ags4qno2>EWA</strong><span data-astro-cid-ags4qno2>Gabinet podologiczny</span></span></div>
+        
+        <span class="tytul-b" data-astro-cid-ags4qno2>Bon podarunkowy</span>
+        <span class="kwota-b kwota-tekst" data-astro-cid-ags4qno2>dowolna kwota</span>
+        <span class="dopisek-b" data-astro-cid-ags4qno2>na zabiegi podologiczne</span>
+      </div>
+    
+    <span class="wstazka" style="--wstazka-foto:url(/_astro/wstazka-granat-satyna.Cj4CDjj8_ZyLTSq.webp);--wstazka-koniec:rgba(0, 4, 24, .45)" data-astro-cid-ags4qno2></span>
+    
+<img src="/_astro/kokarda-granat-satyna.CbOaUajr_ZwV5Qm.webp" srcset="/_astro/kokarda-granat-satyna.CbOaUajr_2tXzej.webp 200w, /_astro/kokarda-granat-satyna.CbOaUajr_1xiy3O.webp 300w, /_astro/kokarda-granat-satyna.CbOaUajr_ACwSk.webp 400w" alt sizes="(max-width: 899px) 100px, 140px" loading="lazy" data-astro-cid-ags4qno2="true" decoding="async" width="1188" height="1175" class="kokarda">
+    
+  </div></div>
+          </div>
+          <div class="k-saldo-blok" data-astro-cid-nl2nwxtk>
+            <p class="k-saldo" data-k-saldo data-astro-cid-nl2nwxtk></p>
+            <p class="k-wazny" data-k-wazny data-astro-cid-nl2nwxtk></p>
+          </div>
+        </div>
+        <!-- komunikaty Kasy we wspólnym wyglądzie frontu (pokazKomunikat, global.css .komunikat) -->
+        <p class="komunikat" data-k-stan hidden data-astro-cid-nl2nwxtk></p>
         <p class="k-ostatnia" data-k-ostatnia data-astro-cid-nl2nwxtk></p>
         <button type="button" class="link-przycisk k-szczegoly" data-k-szczegoly hidden data-astro-cid-nl2nwxtk>Szczegóły bonu</button>
       </section>
@@ -306,7 +398,7 @@
           <input type="text" inputmode="decimal" autocomplete="off" data-k-kwota placeholder="np. 180" data-astro-cid-nl2nwxtk>
         </label>
         <p class="podpowiedz" data-astro-cid-nl2nwxtk>Przyciski wpisują kwotę same. Inna cena (np. klamra droższa niż „od”)? Wpisz kwotę ręcznie – wybór zabiegów się wtedy wyczyści.</p>
-        <p class="blad" data-k-blad hidden data-astro-cid-nl2nwxtk></p>
+        <p class="komunikat" data-k-blad hidden data-astro-cid-nl2nwxtk></p>
         <div class="k-pasek" aria-live="polite" data-astro-cid-nl2nwxtk>
           <p class="k-podsumowanie" data-astro-cid-nl2nwxtk>Z bonu <strong data-k-zbonu data-astro-cid-nl2nwxtk>0 zł</strong> · Dopłata <strong data-k-doplata data-astro-cid-nl2nwxtk>0 zł</strong> · Na kasę <strong data-k-nakase data-astro-cid-nl2nwxtk>0 zł</strong></p>
           <button class="przycisk" type="submit" data-k-zatwierdz disabled data-astro-cid-nl2nwxtk>Zatwierdź</button>
@@ -317,7 +409,7 @@
       <section class="karta kasa-wynik tylko-kasa" data-k-wynik hidden aria-live="polite" data-astro-cid-nl2nwxtk>
         <p class="k-gotowe" data-astro-cid-nl2nwxtk>Gotowe.</p>
         <p class="k-zdanie" data-k-zdanie data-astro-cid-nl2nwxtk></p>
-        <p class="kasa" data-k-dokasy data-astro-cid-nl2nwxtk></p>
+        <p class="komunikat" data-k-dokasy hidden data-astro-cid-nl2nwxtk></p>
         <button class="przycisk" type="button" data-k-nastepny data-astro-cid-nl2nwxtk>Następny bon</button>
       </section>
 
@@ -869,4 +961,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.0-rofs6d.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.Cvu-1EUI.js"></script>
