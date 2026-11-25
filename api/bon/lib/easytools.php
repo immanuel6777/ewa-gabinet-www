@@ -58,9 +58,33 @@ function bon_et_klucz_ok(array $k): bool {
     return $klucz !== '' && !str_starts_with($klucz, 'WKLEJ');
 }
 
-/** nazwa wariantu z API → nominał z mapy „warianty” (liczba zł | 'dowolna') albo null. Bez wielkości liter i twardych spacji. */
-function bon_et_nominal(array $k, string $nazwa): int|float|string|null {
-    return bon_wariant_nominal($k, $nazwa);
+/**
+ * Mapa nazw wariantów dla zamówienia utworzonego $utworzono (wpis czatu 22:39): przed „stare_przed” → „warianty_stare”, od „nowe_od” →
+ * „warianty”, pomiędzy → null (okno publikacji nowych nazw – bon wstrzymany). Bez daty albo bez „warianty_zmiana” → „warianty”.
+ */
+function bon_et_mapa_wariantow(array $k, ?string $utworzono): ?array {
+    $zm = (array)($k['warianty_zmiana'] ?? []);
+    if ($utworzono === null || $utworzono === '' || !isset($zm['stare_przed'], $zm['nowe_od'])) return (array)($k['warianty'] ?? []);
+    try {
+        $strefa = new DateTimeZone(BON_STREFA);
+        $kiedy = new DateTimeImmutable($utworzono, $strefa);
+        if ($kiedy < new DateTimeImmutable((string)$zm['stare_przed'], $strefa)) return (array)($k['warianty_stare'] ?? $k['warianty'] ?? []);
+        if ($kiedy >= new DateTimeImmutable((string)$zm['nowe_od'], $strefa)) return (array)($k['warianty'] ?? []);
+        return null;
+    } catch (Throwable) {
+        return (array)($k['warianty'] ?? []);
+    }
+}
+
+/** Nazwa wariantu z API → nominał (liczba zł | 'dowolna') albo null – wg mapy z chwili utworzenia zamówienia. Bez wielkości liter i twardych spacji. */
+function bon_et_nominal(array $k, string $nazwa, ?string $utworzono = null): int|float|string|null {
+    $mapa = bon_et_mapa_wariantow($k, $utworzono);
+    return $mapa === null ? null : bon_wariant_nominal(['warianty' => $mapa], $nazwa);
+}
+
+/** Czy zamówienie jest z okna publikacji nowych nazw wariantów (wtedy bon wstrzymany z osobną uwagą). */
+function bon_et_okno_zmiany(array $k, ?string $utworzono): bool {
+    return bon_et_mapa_wariantow($k, $utworzono) === null;
 }
 
 /**
@@ -198,9 +222,16 @@ function bon_synchronizuj(array $k, PDO $pdo, string $zrodlo, ?DateTimeImmutable
                 $transakcja = $zaplacono = null;
                 try { $transakcja = bon_et_transakcja($k, $pelne, $zaplacono); } catch (Throwable) {} // brak id transakcji nie blokuje bonu
                 $dane = bon_et_dane_zamowienia($pelne, $transakcja, $zaplacono);
-                $dane['nominal'] = bon_et_nominal($k, $dane['wariant']);
+                // wpis czatu 22:39: nazwy wariantów wg chwili utworzenia zamówienia (stare / nowe / okno zmiany = wstrzymany)
+                $utw = is_string($pelne['created_at'] ?? null) ? $pelne['created_at'] : null;
+                $okno = bon_et_okno_zmiany($k, $utw);
+                $dane['nominal'] = bon_et_nominal($k, $dane['wariant'], $utw);
+                $dane['nominal_okno_zmiany'] = $okno;
                 if ($dane['pozycje']) {
-                    foreach ($dane['pozycje'] as &$p) $p['nominal'] = bon_et_nominal($k, $p['wariant']);
+                    foreach ($dane['pozycje'] as &$p) {
+                        $p['nominal'] = bon_et_nominal($k, $p['wariant'], $utw);
+                        $p['nominal_okno_zmiany'] = $okno;
+                    }
                     unset($p);
                 }
                 $wpis = ['zamowienie' => $id,

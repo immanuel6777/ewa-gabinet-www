@@ -229,10 +229,10 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $nb = "\u{00A0}";
     $t('kwota na bonie: 250 zł / 237,50 zł / 1 200 zł', bon_kwota_tekst(25000) === "250{$nb}zł" && bon_kwota_tekst(23750) === "237,50{$nb}zł" && bon_kwota_tekst(120000) === "1{$nb}200{$nb}zł");
     $kol = static fn(string $id, string $zl) => bon_pdf_kolor($k, ['price_id' => $id, 'initial_pln' => $zl]);
-    $t('tło PDF wg rodzaju: 200 zielone, 300 czerwone, 500 złote, dowolna granatowa (też przy 300 i 500 zł)',
-        $kol('bon-200', '200.00') === 'zielen' && $kol('Bon Rubinowy', '300.00') === 'czerwony' && $kol('Bon 500 zł', '500.00') === 'zloty'
-        && $kol('Bon Szafirowy', '500.00') === 'granat' && $kol('bon-dowolna', '300.00') === 'granat' && $kol('', '237.50') === 'granat'
-        && $kol('', '300.00') === 'czerwony');
+    $t('tło PDF wg kamienia z wartości (wpis 21:47): do 200 zł złote, do 300 granatowe, do 500 zielone, wyżej czerwone – wariant bez znaczenia',
+        $kol('bon-200', '200.00') === 'zloty' && $kol('bon-300', '300.00') === 'granat' && $kol('Bon 500 zł', '500.00') === 'zielen'
+        && $kol('bon-dowolna', '180.00') === 'zloty' && $kol('bon-dowolna', '250.00') === 'granat' && $kol('Bon Rubinowy', '300.00') === 'granat'
+        && $kol('bon-dowolna', '400.00') === 'zielen' && $kol('bon-dowolna', '500.01') === 'czerwony' && $kol('', '750.00') === 'czerwony');
     // wpis 22:22: wycinanki – obraz 190 mm szerokości; QR co najmniej 25 mm w obu wersjach
     $qrMm = [];
     foreach (['uklad-wycinanka.json', 'uklad-wycinanka-wstazka.json'] as $plikU) {
@@ -575,10 +575,10 @@ function bon_testy(array $kBaza, PDO $pdo): array {
         putenv("BONY_USTAWIENIA=$katU/repo.php");
         $kU = bon_konfig();
         $zr = bon_ustawienia_zrodla($kU);
-        $t('ustawienia: tylko w repo → z repo (sync_dni 3), w obu → serwer wygrywa (próg 0.8, telefon), brak w obu → kod (waznosc 6)',
-            $kU['sync_dni'] === 3 && $kU['prog_wstrzymania'] === 0.8 && $kU['telefon_pomoc_bony'] === '111 222 333' && $kU['waznosc_miesiecy'] === 6, json_encode($zr));
+        $t('ustawienia: tylko w repo → z repo (sync_dni 3), w obu → serwer wygrywa (próg 0.8, telefon), brak w obu → kod (kod_prefix EWA)',
+            $kU['sync_dni'] === 3 && $kU['prog_wstrzymania'] === 0.8 && $kU['telefon_pomoc_bony'] === '111 222 333' && $kU['kod_prefix'] === 'EWA', json_encode($zr));
         $t('ustawienia: log.php podaje źródło i listę „do usunięcia z serwera” z ostrzeżeniem o innej wartości',
-            $zr['ustawienia']['sync_dni'] === 'repo' && $zr['ustawienia']['prog_wstrzymania'] === 'serwer' && $zr['ustawienia']['waznosc_miesiecy'] === 'kod'
+            $zr['ustawienia']['sync_dni'] === 'repo' && $zr['ustawienia']['prog_wstrzymania'] === 'serwer' && $zr['ustawienia']['kod_prefix'] === 'kod'
             && $zr['do_usuniecia'] === ['prog_wstrzymania', 'telefon_pomoc_bony'] && $zr['serwer_nadpisuje_inaczej'] === ['prog_wstrzymania', 'telefon_pomoc_bony']
             && !array_key_exists('db_dsn', $zr['ustawienia']), json_encode($zr));
         putenv('BONY_USTAWIENIA=brak');

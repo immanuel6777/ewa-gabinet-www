@@ -28,22 +28,35 @@ function bon_konfig(): array {
         'kwota_jednostka' => 'pln',
         'prog_wstrzymania' => 0.8,
         'min_dowolna_pln' => 180,
-        'waznosc_miesiecy' => 6,
         'kod_prefix' => 'EWA',
         'pole_dla' => ['bon-dla', 'bon_dla', 'dla kogo (imię na bonie)'], // Easytools zamienia „_” na „-” w nazwie pola (2026-11-21)
         'pole_od' => ['bon-od', 'bon_od', 'od kogo'],
         'ceny' => ['bon-200' => 200, 'bon-300' => 300, 'bon-500' => 500, 'bon-dowolna' => 'dowolna'],
         'verify_limit_na_minute' => 20,
         'mail_tryb' => 'mail',
-        // synchronizacja z API Easytools (lib/easytools.php, 2026-11-23): nazwa wariantu z API → nominał
-        // 2026-11-24: nowe nazwy w Easytools (Bartek 01:50); stare zostają dla wcześniejszych zamówień.
-        // Wpis „warianty” w konfigu ZASTĘPUJE tę mapę w całości (bez scalania), więc musi mieć oba komplety.
+        // synchronizacja z API Easytools (lib/easytools.php, 2026-11-23): nazwa wariantu z API → nominał. API przy pozycji zamówienia
+        // NIE podaje price_id (sprawdzone 23.11 i 25.11 na zamówieniu), więc rozstrzyga nazwa; nazwa, kolor i ważność bonu i tak liczą się
+        // z WARTOŚCI (mapa „kamienie”, wpis 21:47). Wpis „warianty” w konfigu ZASTĘPUJE tę mapę w całości (bez scalania).
+        // Wpis czatu 22:39: nowe nazwy LIVE w Easytools od 25.11 22:39 – zamówienie utworzone przed „stare_przed” → „warianty_stare”,
+        // od „nowe_od” → „warianty”, pomiędzy → bon wstrzymany. Kwota zapłacona NIE rozstrzyga (rabat: Szafirowy 300 zł za 270 zł = 300 zł).
         'warianty' => [
-            'Bon 200 zł' => 200, 'Bon 300 zł' => 300, 'Bon 500 zł' => 500, 'Dowolna kwota (od 180 zł)' => 'dowolna',
-            'Bon Szmaragdowy' => 200, 'Bon Rubinowy' => 300, 'Bon Bursztynowy' => 500, 'Bon Szafirowy' => 'dowolna',
+            'Bon 200 zł' => 200, 'Bon 300 zł' => 300, 'Bon 500 zł' => 500, 'Dowolna kwota (od 180 zł)' => 'dowolna', 'Dowolna kwota' => 'dowolna',
+            'Bon Topazowy' => 200, 'Bon Szafirowy' => 300, 'Bon Szmaragdowy' => 500,
         ],
-        // nazwa bonu w mailu wg rodzaju (nie wg nazwy z Easytools): nominał 200/300/500 albo 'dowolna'
-        'nazwy_bonow' => [200 => 'Bon Szmaragdowy', 300 => 'Bon Rubinowy', 500 => 'Bon Bursztynowy', 'dowolna' => 'Bon Szafirowy'],
+        // stare nazwy (live do 25.11 22:39) – tylko zapas: wszystkie zamówienia sprzed publikacji to testy do wyczyszczenia przed startem
+        'warianty_stare' => [
+            'Bon 200 zł' => 200, 'Bon 300 zł' => 300, 'Bon 500 zł' => 500, 'Dowolna kwota (od 180 zł)' => 'dowolna',
+            'Bon Szmaragdowy' => 200, 'Bon Rubinowy' => 300, 'Bon Szafirowy' => 'dowolna', // stara nazwa 500 zł usunięta (Bartek 25.11) – taki bon czeka na sprawdzenie
+        ],
+        'warianty_zmiana' => ['stare_przed' => '2026-11-25 22:38:00', 'nowe_od' => '2026-11-25 22:40:00'], // czas polski
+        // kamień bonu (wpis 21:47): nazwa, kolor i ważność z WARTOŚCI POCZĄTKOWEJ (nie z wariantu, nie z kwoty po rabacie).
+        // Progi = górne granice włącznie, rosnąco; ostatni bez granicy. Kolejne „staty” bonu = nowe pola tutaj, bez zmiany kodu.
+        'kamienie' => [
+            ['do_pln' => 200, 'nazwa' => 'Bon Topazowy', 'kolor' => 'zloty', 'waznosc_miesiecy' => 6],
+            ['do_pln' => 300, 'nazwa' => 'Bon Szafirowy', 'kolor' => 'granat', 'waznosc_miesiecy' => 6],
+            ['do_pln' => 500, 'nazwa' => 'Bon Szmaragdowy', 'kolor' => 'zielen', 'waznosc_miesiecy' => 12],
+            ['do_pln' => null, 'nazwa' => 'Bon Rubinowy', 'kolor' => 'czerwony', 'waznosc_miesiecy' => 12],
+        ],
         'sync_tryb' => 'raport',
         'sync_dni' => 7,
         'sync_odstep_s' => 20,
@@ -60,11 +73,11 @@ function bon_ustawienia_repo(): array {
 }
 
 /** Ustawienia jawne (wpis 11:30) – w log.php ze źródłem wartości: kod / repo / serwer. */
-const BON_SZAFIROWY_RABAT = 'Szafirowy z rabatem'; // wpis 18:20: początek uwagi i tematu alertu
+const BON_DOWOLNA_RABAT = 'Dowolna kwota z rabatem'; // wpis 18:20: początek uwagi i tematu alertu (do 25.11 „Szafirowy z rabatem”)
 
 const BON_USTAWIENIA_JAWNE = [
-    'sync_tryb', 'sync_od', 'sync_dni', 'sync_odstep_s', 'warianty', 'nazwy_bonow', 'ceny', 'prog_wstrzymania', 'min_dowolna_pln',
-    'waznosc_miesiecy', 'kod_prefix', 'verify_limit_na_minute', 'mail_nadawca', 'mail_odpowiedz', 'mail_powiadomienie',
+    'sync_tryb', 'sync_od', 'sync_dni', 'sync_odstep_s', 'warianty', 'warianty_stare', 'warianty_zmiana', 'kamienie', 'ceny', 'prog_wstrzymania', 'min_dowolna_pln',
+    'kod_prefix', 'verify_limit_na_minute', 'mail_nadawca', 'mail_odpowiedz', 'mail_powiadomienie',
     'telefon_pomoc_bony', 'telefon_pomoc_bony_godziny', 'mail_zapas', 'mail_smtp_host', 'mail_smtp_port', 'mail_smtp_user',
     'webhook_tryb', 'kwota_jednostka', 'easytools_tryb', 'easytools_produkt_uuid', 'bon_adres_pelny_min',
     'mail_zapas_test_do', // przełącznik testu zapasu – z repo zamiast FTP (wpis 11:35)
@@ -137,25 +150,37 @@ function bon_wariant_nominal(array $k, string $nazwa): int|float|string|null {
     return null;
 }
 
-/**
- * Nazwa bonu do maila wg rodzaju: z price_id (identyfikator z „ceny” albo nazwa z „warianty”) ustala, czy to dowolna kwota;
- * inaczej po wartości (200/300/500). Nieznany rodzaj → „Bon podarunkowy”. Nazwa to tylko etykieta, kwota zawsze z initial_pln.
- */
-function bon_nazwa(array $k, array $bon): string {
-    $rodzaj = bon_rodzaj($k, $bon);
-    return $rodzaj === null ? 'Bon podarunkowy' : (string)(((array)($k['nazwy_bonow'] ?? []))[$rodzaj] ?? 'Bon podarunkowy');
-}
+// awaryjny kamień, gdy w konfigu nie ma progów (nie powinno się zdarzyć – domyślne są w bon_konfig i ustawienia.php)
+const BON_KAMIEN_ZAPAS = ['nazwa' => 'Bon podarunkowy', 'kolor' => 'czerwony', 'waznosc_miesiecy' => 6];
 
 /**
- * Rodzaj bonu: 'dowolna' (po price_id: identyfikator z „ceny” albo nazwa z „warianty”), inaczej 200 / 300 / 500 po wartości;
- * inna wartość = null. Wspólne dla nazwy w mailu i koloru tła PDF (2026-11-24).
+ * Kamień bonu z wartości początkowej w groszach (wpis 21:47): pierwszy próg z „kamienie”, którego górna granica `do_pln` (włącznie)
+ * nie jest mniejsza od wartości; próg bez granicy łapie resztę. Zwraca próg (nazwa, kolor, waznosc_miesiecy + przyszłe „staty”).
+ * Nazwa wariantu z Easytools i price_id nie mają tu znaczenia – stara nazwa „Bon Rubinowy” (300 zł) krzyżuje się z nową.
+ * Wartość poniżej najniższego progu (np. 0 albo brak) = najniższy kamień.
  */
-function bon_rodzaj(array $k, array $bon): int|string|null {
-    $id = (string)($bon['price_id'] ?? '');
-    $zMapy = $id !== '' ? ((array)($k['ceny'] ?? []))[$id] ?? bon_wariant_nominal($k, $id) : null;
-    if ($zMapy === 'dowolna') return 'dowolna';
-    $grosze = (int)bon_grosze($bon['initial_pln'] ?? null);
-    return in_array($grosze, [20000, 30000, 50000], true) ? intdiv($grosze, 100) : null;
+function bon_kamien(array $k, int $grosze): array {
+    $progi = array_values(array_filter((array)($k['kamienie'] ?? []), 'is_array'));
+    usort($progi, static fn($a, $b) => ($a['do_pln'] ?? INF) <=> ($b['do_pln'] ?? INF));
+    foreach ($progi as $p) {
+        if (!isset($p['do_pln']) || $grosze <= (int)round((float)$p['do_pln'] * 100)) return $p + BON_KAMIEN_ZAPAS;
+    }
+    return $progi ? end($progi) + BON_KAMIEN_ZAPAS : BON_KAMIEN_ZAPAS;
+}
+
+/** Kamień bonu z wiersza (initial_pln – wartość początkowa, nie saldo i nie kwota po rabacie). */
+function bon_kamien_bonu(array $k, array $bon): array {
+    return bon_kamien($k, (int)bon_grosze($bon['initial_pln'] ?? null));
+}
+
+/** Nazwa bonu (mail, PDF, panel) – z kamienia wg wartości. Kwota zawsze z initial_pln. */
+function bon_nazwa(array $k, array $bon): string {
+    return (string)bon_kamien_bonu($k, $bon)['nazwa'];
+}
+
+/** Kolor bonu (wstążka, tło PDF, gem w panelu): zloty | granat | zielen | czerwony – z kamienia wg wartości. */
+function bon_kolor(array $k, array $bon): string {
+    return (string)bon_kamien_bonu($k, $bon)['kolor'];
 }
 
 // --- daty ---
@@ -668,7 +693,8 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
     // w zamówieniu kolejno przez wszystkie pozycje. Bez $z['pozycje'] (webhook, stare wywołania) – jedna pozycja z pól zamówienia.
     $pozycje = is_array($z['pozycje'] ?? null) && $z['pozycje']
         ? array_values($z['pozycje'])
-        : [['wariant' => $z['wariant'] ?? '', 'nominal' => $z['nominal'] ?? null, 'ilosc' => $z['ilosc'] ?? 1, 'zaplacono' => $z['zaplacono'] ?? null]];
+        : [['wariant' => $z['wariant'] ?? '', 'nominal' => $z['nominal'] ?? null, 'ilosc' => $z['ilosc'] ?? 1, 'zaplacono' => $z['zaplacono'] ?? null,
+            'nominal_okno_zmiany' => $z['nominal_okno_zmiany'] ?? false]];
     $wyliczone = array_map(static fn($p) => bon_pozycja_wylicz($k, $z, $p), $pozycje);
     if (count($wyliczone) > 1) {
         // pozycja z uwagą wstrzymuje tylko swoje bony; do uwag dopisz, że zamówienie miało kilka pozycji (łatwiej w Easytools)
@@ -706,7 +732,7 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
         'easytools_order_id' => $zamowienie,
         'easytools_transaction_id' => $transakcja,
         'created_at' => $zaplata->format('Y-m-d H:i:s'),
-        'expires_at' => bon_waznosc($zaplata, (int)$k['waznosc_miesiecy']),
+        // expires_at – w każdym wierszu osobno: ważność zależy od wartości bonu (wpis 21:47), a w koszyku bywają różne
     ];
 
     $sql = "INSERT INTO $tab (code, initial_pln, balance_pln, paid_pln, price_id, promo_code, buyer_email, buyer_name, buyer_nip, dla, od,
@@ -729,6 +755,7 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
                     $zaplacono = $i === $p['ilosc'] ? $p['zaplaconoRazem'] - $p['zaplaconoJedn'] * ($p['ilosc'] - 1) : $p['zaplaconoJedn'];
                     $wiersz = $wspolne + [
                         'initial_pln' => bon_zl($p['wartosc']), 'balance_pln' => bon_zl($p['wartosc']), 'price_id' => $p['wariantId'],
+                        'expires_at' => bon_waznosc($zaplata, (int)bon_kamien($k, (int)$p['wartosc'])['waznosc_miesiecy']),
                         'status' => $p['status'], 'status_uwagi' => $p['uwagi'] ? mb_substr(implode('; ', $p['uwagi']), 0, 255) : null,
                     ];
                     foreach ($wiersz as $pole => $w) $st->bindValue(':' . $pole, $w, $w === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
@@ -775,8 +802,8 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
     }
 
     if ($status !== 'valid') {
-        $szafirowy = (bool)array_filter($uwagi, static fn($u) => str_starts_with((string)$u, BON_SZAFIROWY_RABAT));
-        bon_powiadom($k, 'Bon WSTRZYMANY' . ($szafirowy ? ' – ' . BON_SZAFIROWY_RABAT . ', sprawdź' : '') . ' – zamówienie ' . $zamowienie, implode("\n", [
+        $dowolnaRabat = (bool)array_filter($uwagi, static fn($u) => str_starts_with((string)$u, BON_DOWOLNA_RABAT));
+        bon_powiadom($k, 'Bon WSTRZYMANY' . ($dowolnaRabat ? ' – ' . BON_DOWOLNA_RABAT . ', sprawdź' : '') . ' – zamówienie ' . $zamowienie, implode("\n", [
             $status === 'czesciowo' ? 'Część bonów z tego zamówienia czeka na ręczne zatwierdzenie (status held); pozostałe poszły mailem.'
                 : 'Bon(y) czekają na ręczne zatwierdzenie (status held).',
             'Powód: ' . implode('; ', array_unique($uwagi)),
@@ -818,12 +845,12 @@ function bon_pozycja_wylicz(array $k, array $z, array $p): array {
     $wariant = $p['nominal'] ?? null;
     if ($wariant === 'dowolna') {
         $wartosc = $zaplaconoJedn;
-        // wpis 18:20 (decyzja Bartka): kody rabatowe nie obejmują Szafirowego (dowolna kwota = wartość bonu, rabat by „znikał”).
+        // wpis 18:20 (decyzja Bartka): kody rabatowe nie obejmują dowolnej kwoty (dowolna kwota = wartość bonu, rabat by „znikał”).
         // Kod w zamówieniu (webhook; API kodu nie podaje) albo kwota poniżej minimum wariantu → bon wstrzymany + alert
         $promoZ = trim((string)($z['promo'] ?? ''));
-        if ($promoZ !== '') $uwagi[] = BON_SZAFIROWY_RABAT . " (kod $promoZ) – kody nie obejmują dowolnej kwoty, sprawdź";
+        if ($promoZ !== '') $uwagi[] = BON_DOWOLNA_RABAT . " (kod $promoZ) – kody nie obejmują dowolnej kwoty, sprawdź";
         if ($wartosc < (int)$k['min_dowolna_pln'] * 100) {
-            $uwagi[] = BON_SZAFIROWY_RABAT . '? Zapłacono ' . bon_zl($wartosc) . ' zł, poniżej minimum dowolnej kwoty ' . $k['min_dowolna_pln'] . ' zł – sprawdź';
+            $uwagi[] = BON_DOWOLNA_RABAT . '? Zapłacono ' . bon_zl($wartosc) . ' zł, poniżej minimum dowolnej kwoty ' . $k['min_dowolna_pln'] . ' zł – sprawdź';
         }
     } elseif (is_int($wariant) || is_float($wariant) || (is_string($wariant) && is_numeric($wariant))) {
         $wartosc = (int)round((float)$wariant * 100);
@@ -833,6 +860,11 @@ function bon_pozycja_wylicz(array $k, array $z, array $p): array {
             // np. ilość nie doszła albo kwota to coś innego niż suma pozycji – mogło przepaść kilka bonów
             $uwagi[] = 'zapłacono ' . bon_zl($zaplaconoJedn) . ' zł za bon przy nominale ' . bon_zl($wartosc) . ' zł – więcej niż nominał, sprawdź ilość';
         }
+    } elseif (!empty($p['nominal_okno_zmiany'])) {
+        // wpis czatu 22:39: zamówienie z okna publikacji nowych nazw wariantów – nie wiadomo, którą nazwę widział kupujący
+        $wartosc = $zaplaconoJedn;
+        $uwagi[] = 'zamówienie z okna zmiany nazw wariantów w Easytools (25.11 22:38–22:40), wariant „' . $wariantId
+            . '” – sprawdź w Easytools, który to bon, i popraw wartość';
     } else {
         $wartosc = $zaplaconoJedn;
         $uwagi[] = ($z['zrodlo'] ?? '') === 'api'
@@ -947,6 +979,9 @@ function bon_obsluz_verify(array $k, string $wpisany, string $ip, ?callable $pdo
     // saldo tylko dla bonu, którym można płacić albo który się zużył; wartość (nominał) zawsze – karta na /bon pokazuje właściwą
     // kwotę także przy bonie wygasłym, z rezygnacją i zwróconym (wpis 17:26 pkt 3)
     $odp['wartosc'] = bon_zl((int)bon_grosze($bon['initial_pln']));
+    // wpis 21:47: kamień z wartości – /bon pokazuje tę samą nazwę i kolor co mail, PDF i panel (jedno źródło prawdy)
+    $odp['nazwa'] = bon_nazwa($k, $bon);
+    $odp['kolor'] = bon_kolor($k, $bon);
     if ($status === 'valid' || $status === 'used') $odp['saldo'] = bon_zl((int)bon_grosze($bon['balance_pln']));
     return [200, $odp];
 }

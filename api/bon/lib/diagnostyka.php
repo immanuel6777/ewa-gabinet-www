@@ -179,7 +179,8 @@ function bon_diagnostyka(array $k, int $ile = 10, int $dni = 2, int $bony = 20, 
         'konfig' => [
             'webhook_tryb' => $k['webhook_tryb'],
             'prog_wstrzymania' => $k['prog_wstrzymania'],
-            'waznosc_miesiecy' => $k['waznosc_miesiecy'],
+            // wpis 21:47: progi kamieni – do ilu zł, nazwa, ważność (miesiące)
+            'kamienie' => array_map(static fn($p) => [($p['do_pln'] ?? null), $p['nazwa'] ?? '', $p['waznosc_miesiecy'] ?? null], (array)($k['kamienie'] ?? [])),
             'kwota_jednostka' => $k['kwota_jednostka'],
             'mail_tryb' => $k['mail_tryb'],
             'wariantow_w_cenach' => count((array)$k['ceny']),

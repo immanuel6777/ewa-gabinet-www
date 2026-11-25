@@ -26,16 +26,10 @@ function bon_pdf_tcpdf(): void {
     require_once __DIR__ . '/pdf-klasa.php';
 }
 
-// kolor tła wg rodzaju bonu (Bartek 2026-11-24, jak karty na /bony): 200 szmaragd (zielen), 300 rubin (czerwony),
-// 500 bursztyn (zloty), dowolna kwota szafir (granat) – także gdy dowolna kwota wynosi 300 albo 500 zł.
-// Inna wartość (np. bon z webhooka na 250 zł bez znanego wariantu) = granat jak dowolna kwota.
+// kolor tła = kolor kamienia bonu z wartości (wpis 21:47, progi „kamienie”): do 200 zł zloty, do 300 granat, do 500 zielen,
+// powyżej czerwony – także przy dowolnej kwocie. Tła tlo-*-<kolor>.jpg robi front (bon-pdf/[wariant].astro).
 function bon_pdf_kolor(array $k, array $bon): string {
-    return match (bon_rodzaj($k, $bon)) {
-        200 => 'zielen',
-        300 => 'czerwony',
-        500 => 'zloty',
-        default => 'granat',
-    };
+    return bon_kolor($k, $bon);
 }
 
 // 25000 → „250 zł”, 23750 → „237,50 zł”, 120000 → „1 200 zł” (twarda spacja, żeby kwota się nie łamała)
@@ -49,12 +43,21 @@ function bon_data_tekst(string $data): string {
     return substr($data, 8, 2) . '.' . substr($data, 5, 2) . '.' . substr($data, 0, 4);
 }
 
-// 1 miesiąc, 2–4 miesiące, 5+ miesięcy (12–14 → miesięcy) – tekst z konfigu 'waznosc_miesiecy', żeby zdanie zgadzało się z datą na bonie
+// 1 miesiąc, 2–4 miesiące, 5+ miesięcy (12–14 → miesięcy) – ważność kamienia bonu, żeby zdanie zgadzało się z datą na bonie
 function bon_miesiace_tekst(int $n): string {
     if ($n === 1) return '1 miesiąc';
     $r10 = $n % 10;
     $r100 = $n % 100;
     return $n . ($r10 >= 2 && $r10 <= 4 && ($r100 < 12 || $r100 > 14) ? ' miesiące' : ' miesięcy');
+}
+
+// kilka bonów o różnej ważności (wpis 21:47, mail z koszykiem): „6 albo 12 miesięcy”; jedna ważność = bon_miesiace_tekst
+function bon_miesiace_lista(array $miesiace): string {
+    $n = array_values(array_unique(array_map('intval', $miesiace)));
+    sort($n);
+    if (!$n) return bon_miesiace_tekst(6);
+    $ostatnia = array_pop($n);
+    return $n ? implode(', ', $n) . ' albo ' . bon_miesiace_tekst($ostatnia) : bon_miesiace_tekst($ostatnia);
 }
 
 /**
@@ -75,7 +78,7 @@ function bon_kontakt(array $k): array {
 /** Bajty PDF-a jednego bonu. $bon = wiersz z vouchers (code, initial_pln, expires_at, dla, od); $k = konfig (ważność, kontakt). */
 function bon_pdf(array $bon, array $k): string {
     $kontakt = bon_kontakt($k);
-    $miesiace = bon_miesiace_tekst((int)($k['waznosc_miesiecy'] ?? 6));
+    $miesiace = bon_miesiace_tekst((int)bon_kamien_bonu($k, $bon)['waznosc_miesiecy']); // wpis 21:47: ważność z kamienia
     bon_pdf_tcpdf();
     $wartosc = (int)bon_grosze($bon['initial_pln']);
     $prog = bon_pdf_kolor($k, $bon);

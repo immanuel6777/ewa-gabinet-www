@@ -28,11 +28,29 @@ return [
     'kwota_jednostka' => 'pln',
 
     // --- warianty i ceny → nominał; nieznany = bon wstrzymany ---
+    // synchronizacja z API Easytools (lib/easytools.php, 2026-11-23): nazwa wariantu z API → nominał. API przy pozycji zamówienia
+    // NIE podaje price_id (sprawdzone 23.11 i 25.11 na zamówieniu), więc rozstrzyga nazwa; nazwa, kolor i ważność bonu i tak liczą się
+    // z WARTOŚCI (mapa „kamienie”, wpis 21:47). Wpis „warianty” w konfigu ZASTĘPUJE tę mapę w całości (bez scalania).
+    // Wpis czatu 22:39: nowe nazwy LIVE w Easytools od 25.11 22:39 – zamówienie utworzone przed „stare_przed” → „warianty_stare”,
+    // od „nowe_od” → „warianty”, pomiędzy → bon wstrzymany. Kwota zapłacona NIE rozstrzyga (rabat: Szafirowy 300 zł za 270 zł = 300 zł).
     'warianty' => [
-        'Bon 200 zł' => 200, 'Bon 300 zł' => 300, 'Bon 500 zł' => 500, 'Dowolna kwota (od 180 zł)' => 'dowolna',
-        'Bon Szmaragdowy' => 200, 'Bon Rubinowy' => 300, 'Bon Bursztynowy' => 500, 'Bon Szafirowy' => 'dowolna',
+        'Bon 200 zł' => 200, 'Bon 300 zł' => 300, 'Bon 500 zł' => 500, 'Dowolna kwota (od 180 zł)' => 'dowolna', 'Dowolna kwota' => 'dowolna',
+        'Bon Topazowy' => 200, 'Bon Szafirowy' => 300, 'Bon Szmaragdowy' => 500,
     ],
-    'nazwy_bonow' => [200 => 'Bon Szmaragdowy', 300 => 'Bon Rubinowy', 500 => 'Bon Bursztynowy', 'dowolna' => 'Bon Szafirowy'],
+    // stare nazwy (live do 25.11 22:39) – tylko zapas: wszystkie zamówienia sprzed publikacji to testy do wyczyszczenia przed startem
+    'warianty_stare' => [
+        'Bon 200 zł' => 200, 'Bon 300 zł' => 300, 'Bon 500 zł' => 500, 'Dowolna kwota (od 180 zł)' => 'dowolna',
+        'Bon Szmaragdowy' => 200, 'Bon Rubinowy' => 300, 'Bon Szafirowy' => 'dowolna', // stara nazwa 500 zł usunięta (Bartek 25.11) – taki bon czeka na sprawdzenie
+    ],
+    'warianty_zmiana' => ['stare_przed' => '2026-11-25 22:38:00', 'nowe_od' => '2026-11-25 22:40:00'], // czas polski
+    // kamień bonu (wpis 21:47): nazwa, kolor i ważność z WARTOŚCI POCZĄTKOWEJ (nie z wariantu, nie z kwoty po rabacie).
+    // Progi = górne granice włącznie, rosnąco; ostatni bez granicy. Kolejne „staty” bonu = nowe pola tutaj, bez zmiany kodu.
+    'kamienie' => [
+        ['do_pln' => 200, 'nazwa' => 'Bon Topazowy', 'kolor' => 'zloty', 'waznosc_miesiecy' => 6],
+        ['do_pln' => 300, 'nazwa' => 'Bon Szafirowy', 'kolor' => 'granat', 'waznosc_miesiecy' => 6],
+        ['do_pln' => 500, 'nazwa' => 'Bon Szmaragdowy', 'kolor' => 'zielen', 'waznosc_miesiecy' => 12],
+        ['do_pln' => null, 'nazwa' => 'Bon Rubinowy', 'kolor' => 'czerwony', 'waznosc_miesiecy' => 12],
+    ],
     'ceny' => [
         'bon-200' => 200, 'bon-300' => 300, 'bon-500' => 500, 'bon-dowolna' => 'dowolna',
         'price_1UeMn8DJkxNsH4K3wXFIBCh4' => 200, 'price_1UeHCtDJkxNsH4K38JGuXhbj' => 300,
@@ -41,8 +59,7 @@ return [
     'prog_wstrzymania' => 0,             // DO CZWARTKU 0 (testy z kodem rabatowym); na start 0.8 – osobnym PR
     'min_dowolna_pln' => 180,
 
-    // --- bon ---
-    'waznosc_miesiecy' => 6,
+    // --- bon (ważność: „kamienie” wyżej) ---
     'kod_prefix' => 'EWA',
     'verify_limit_na_minute' => 20,
     'bon_adres_pelny_min' => 60,         // /bony/dziekujemy: pełny adres do tylu minut od zapłaty, potem zamaskowany

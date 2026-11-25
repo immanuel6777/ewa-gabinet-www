@@ -235,7 +235,7 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
         'kod' => $bon['code'],
         // tryb kasy (wpis 01:24): nazwa kamienia i kolor bonu na karcie kasy – te same co w wynikach wyszukiwania
         'nazwa' => bon_nazwa($k, $bon),
-        'kolor' => match (bon_rodzaj($k, $bon)) { 200 => 'zielen', 300 => 'czerwony', 500 => 'zloty', default => 'granat' },
+        'kolor' => bon_kolor($k, $bon), // wpis 21:47: kamień z wartości
         'status' => bon_status_efektywny($bon, $teraz),
         'saldo' => bon_zl((int)bon_grosze($bon['balance_pln'])),
         'wartosc' => bon_zl((int)bon_grosze($bon['initial_pln'])),
@@ -511,7 +511,7 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
             'kupiono' => substr((string)$b['created_at'], 0, 10),
             // karty wyników (Bartek 2026-11-24): nazwa i kolor bonu, „Dla”, ostatnia realizacja, kończąca się ważność, ostrzeżenia
             'nazwa' => bon_nazwa($k, $b),
-            'kolor' => match (bon_rodzaj($k, $b)) { 200 => 'zielen', 300 => 'czerwony', 500 => 'zloty', default => 'granat' },
+            'kolor' => bon_kolor($k, $b), // wpis 21:47: kamień z wartości
             'dla' => $b['dla'] ?: null,
             'ostatnia_realizacja' => $d['realizacja'] ?? null,
             'konczy_sie' => $status === 'valid' && $doKonca >= 0 && $doKonca <= BON_PRZEDLUZENIE_OKNO_DNI,

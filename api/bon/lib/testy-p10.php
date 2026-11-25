@@ -74,8 +74,8 @@ function bon_testy_p10(array $k, PDO $pdo): array {
         count($bG) === 3 && $bG[0]['status'] === 'valid' && $bG[1]['status'] === 'valid' && $bG[2]['status'] === 'used'
         && $bG[0]['grupa'] === $bG[1]['grupa'] && $bG[0]['grupa'] !== $bG[2]['grupa'], json_encode($sG, JSON_UNESCAPED_UNICODE));
     $t('karty: nazwa i kolor bonu, „Dla”, ostatnia realizacja tylko przy wykorzystanym',
-        ($bG[0]['nazwa'] ?? '') === 'Bon Bursztynowy' && ($bG[0]['kolor'] ?? '') === 'zloty' && ($bG[0]['dla'] ?? '') === 'Mama' && $bG[0]['ostatnia_realizacja'] === null
-        && ($bG[2]['nazwa'] ?? '') === 'Bon Szmaragdowy' && ($bG[2]['kolor'] ?? '') === 'zielen' && !empty($bG[2]['ostatnia_realizacja']));
+        ($bG[0]['nazwa'] ?? '') === 'Bon Szmaragdowy' && ($bG[0]['kolor'] ?? '') === 'zielen' && ($bG[0]['dla'] ?? '') === 'Mama' && $bG[0]['ostatnia_realizacja'] === null
+        && ($bG[2]['nazwa'] ?? '') === 'Bon Topazowy' && ($bG[2]['kolor'] ?? '') === 'zloty' && !empty($bG[2]['ostatnia_realizacja']));
     [, $sInnaDomena] = bon_panel_szukaj($k, $pdo, 'kartytest@example.com', null, $sKasa);
     $t('karty: kropki ignorowane tylko w Gmailu', ($sInnaDomena['bony'] ?? null) === []);
 

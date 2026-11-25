@@ -55,7 +55,9 @@ function bon_testy_sync(array $k, PDO $pdo): array {
             'product_name' => $z['product_name'], 'date' => $z['created_at'], 'remaining_refundable' => $z['amount'], 'order' => ['id' => $id]];
         return ['id' => $id, 'transakcja' => $tid];
     };
-    $ks = array_replace($k, [
+    // zamówienia testowe mają datę „teraz − 5 min”: bez tego wynik zależałby od zegara (okno publikacji nazw 25.11 22:38–22:40);
+    // daty z ustawień sprawdzają osobne testy „22:39” niżej ($ksD)
+    $ks = array_replace($k, ['warianty_zmiana' => ['stare_przed' => '2000-01-01 00:00:00', 'nowe_od' => '2000-01-01 00:00:00'],
         'easytools_api_key' => 'klucz-testowy', 'easytools_produkt_uuid' => $produkt, 'sync_tryb' => 'bon',
         'sync_od' => $teraz->modify('-1 day')->format('Y-m-d H:i:s'), 'sync_odstep_s' => 20,
         'easytools_http' => bon_test_api($zamowienia, $transakcje, $wywolania),
@@ -238,7 +240,7 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     $jsonlM = $k['_katalog'] . '/bony-mailjet.jsonl';
     $ileMaili = static fn() => is_file($jsonlM) ? count(file($jsonlM)) : 0;
     $mieszany = $dodaj(['amount' => 125000, 'quantity' => 3, 'line_items' => [
-        $linia('Bon Szmaragdowy', 1, 20000), $linia('Bon Bursztynowy', 2, 100000), $linia('Dodatek', 1, 5000, true)]]);
+        $linia('Bon Topazowy', 1, 20000), $linia('Bon Szmaragdowy', 2, 100000), $linia('Dodatek', 1, 5000, true)]]);
     $przedM = $ileMaili();
     [$rM, $zad] = bon_synchronizuj($ks, $pdo, 'cron');
     foreach ($zad as $z) $z();
@@ -247,7 +249,7 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     $t('koszyk mieszany 200 + 2×500 (+ order bump): 3 bony 200/500/500, numery 1–3, wszystkie ważne, zapłacono po pozycjach',
         count($bm) === 3 && array_map(static fn($b) => (float)$b['initial_pln'], $bm) === [200.0, 500.0, 500.0]
         && array_column($bm, 'nr_w_zamowieniu') == [1, 2, 3] && array_unique(array_column($bm, 'status')) === ['valid']
-        && (float)$bm[1]['paid_pln'] === 500.0 && $bm[0]['price_id'] === 'Bon Szmaragdowy' && $bm[2]['price_id'] === 'Bon Bursztynowy',
+        && (float)$bm[1]['paid_pln'] === 500.0 && $bm[0]['price_id'] === 'Bon Topazowy' && $bm[2]['price_id'] === 'Bon Szmaragdowy',
         json_encode([$bm, $rM], JSON_UNESCAPED_UNICODE));
     // tylko maile z bonami tego zamówienia (w tym samym przebiegu mogą wyjść zaległe maile innych testów)
     $zBonami = static function (array $kody) use ($jsonlM, &$przedM): array {
@@ -260,7 +262,7 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     bon_synchronizuj($ks, $pdo, 'cron');
     $t('koszyk mieszany: drugi przebieg synchronizacji – nadal 3 bony', count(bon_test_bony($k, $pdo, $mieszany['id'])) === 3);
 
-    $czesc = $dodaj(['amount' => 55000, 'quantity' => 2, 'line_items' => [$linia('Bon Rubinowy', 1, 30000), $linia('Bon Diamentowy', 1, 25000)]]);
+    $czesc = $dodaj(['amount' => 55000, 'quantity' => 2, 'line_items' => [$linia('Bon Szafirowy', 1, 30000), $linia('Bon Diamentowy', 1, 25000)]]);
     $plikPowM = $k['_katalog'] . '/bony-powiadomienia.txt';
     $powPrzed = (string)@file_get_contents($plikPowM);
     $przedM = $ileMaili();
@@ -276,7 +278,7 @@ function bon_testy_sync(array $k, PDO $pdo): array {
         && str_contains($powNowe, 'Część bonów') && str_contains($powNowe, '• Bon Diamentowy: 1 szt.'), $powNowe);
 
     // REVIEW nr 10 (R9): suma pozycji ≠ kwota zamówienia (rabat na koszyk, którego pozycje nie pokazują) → wszystkie bony held + alert
-    $rozjazd = $dodaj(['amount' => 45000, 'quantity' => 2, 'line_items' => [$linia('Bon Szmaragdowy', 1, 20000), $linia('Bon Rubinowy', 1, 30000)]]);
+    $rozjazd = $dodaj(['amount' => 45000, 'quantity' => 2, 'line_items' => [$linia('Bon Topazowy', 1, 20000), $linia('Bon Szafirowy', 1, 30000)]]);
     $powPrzed = (string)@file_get_contents($plikPowM);
     $przedM = $ileMaili();
     [, $zad] = bon_synchronizuj($ks, $pdo, 'cron');
@@ -289,27 +291,143 @@ function bon_testy_sync(array $k, PDO $pdo): array {
         json_encode([$br, $powNowe], JSON_UNESCAPED_UNICODE));
     // kontrola: zgodna suma z order bumpem (125000 = 20000 + 100000 + 5000 bump) nie wstrzymuje – test „koszyk mieszany” wyżej
 
-    // nowe nazwy wariantów (Bartek 2026-11-24): ten sam bon co pod starą nazwą; nazwa w mailu wg rodzaju bonu
-    $rub = $dodaj(['amount' => 30000, 'line_items' => [['variant_name' => 'Bon Rubinowy', 'amount' => 30000, 'amount_total' => 30000]]]);
-    $szaf = $dodaj(['amount' => 50000, 'line_items' => [['variant_name' => 'bon szafirowy', 'amount' => 50000, 'amount_total' => 50000]]]);
+    // nazwy wariantów po zmianie z 25.11 (wpis 21:47): Szafirowy = 300 zł, dowolna kwota pod nazwą bez kamienia; stara nazwa
+    // „Bon Rubinowy” (do 25.11 = 300 zł) koliduje z nowym kamieniem, więc jej nie ma w mapie – taki bon czeka (held) na sprawdzenie
+    $rub = $dodaj(['amount' => 30000, 'line_items' => [['variant_name' => 'Bon Szafirowy', 'amount' => 30000, 'amount_total' => 30000]]]);
+    $szaf = $dodaj(['amount' => 50000, 'line_items' => [['variant_name' => 'dowolna kwota', 'amount' => 50000, 'amount_total' => 50000]]]);
+    $staraRub = $dodaj(['amount' => 30000, 'line_items' => [['variant_name' => 'Bon Rubinowy', 'amount' => 30000, 'amount_total' => 30000]]]);
     $nowaNieznana = $dodaj(['line_items' => [['variant_name' => 'Bon Diamentowy']]]);
     [, $zad] = bon_synchronizuj($ks, $pdo, 'cron');
     $brub = bon_test_bony($k, $pdo, $rub['id']);
     $bsz = bon_test_bony($k, $pdo, $szaf['id']);
     $bnn = bon_test_bony($k, $pdo, $nowaNieznana['id']);
-    $t('nowa nazwa „Bon Rubinowy” → bon 300 zł valid', $brub && $brub[0]['initial_pln'] == 300 && $brub[0]['status'] === 'valid');
-    $t('nowa nazwa „bon szafirowy” (małe litery) → dowolna kwota 500 zł valid', $bsz && $bsz[0]['initial_pln'] == 500 && $bsz[0]['status'] === 'valid');
+    $bsr = bon_test_bony($k, $pdo, $staraRub['id']);
+    $t('wariant „Bon Szafirowy” → bon 300 zł valid', $brub && $brub[0]['initial_pln'] == 300 && $brub[0]['status'] === 'valid');
+    $t('wariant „dowolna kwota” (małe litery) → dowolna kwota 500 zł valid', $bsz && $bsz[0]['initial_pln'] == 500 && $bsz[0]['status'] === 'valid');
+    $t('stara nazwa „Bon Rubinowy” w zamówieniu po publikacji nowych nazw → nieznany wariant, wstrzymany', $bsr && $bsr[0]['status'] === 'held');
+    // --- wpis czatu 22:39: nowe nazwy LIVE od 25.11 22:39; rozstrzyga chwila utworzenia zamówienia (nie kwota – rabat) ---
+    $en = static fn(string $nazwa, ?string $kiedy) => bon_et_nominal($k, $nazwa, $kiedy);
+    $po = '2026-11-25T23:00:00+01:00'; $przed = '2026-11-24T12:00:00+01:00'; $okno = '2026-11-25T22:39:00+01:00';
+    $t('22:39: po publikacji „Bon Szafirowy” = 300, „Bon Szmaragdowy” = 500, „Bon Topazowy” = 200; przed – stare (Szafirowy = dowolna, Szmaragdowy = 200, Rubinowy = 300)',
+        $en('Bon Szafirowy', $po) === 300 && $en('Bon Szmaragdowy', $po) === 500 && $en('Bon Topazowy', $po) === 200 && $en('Bon Rubinowy', $po) === null
+        && $en('Bon Szafirowy', $przed) === 'dowolna' && $en('Bon Szmaragdowy', $przed) === 200 && $en('Bon Rubinowy', $przed) === 300
+        && $en('Bon 500 zł', $przed) === 500 && $en('Dowolna kwota (od 180 zł)', $po) === 'dowolna' && $en('Dowolna kwota (od 180 zł)', $przed) === 'dowolna');
+    $t('22:39: zamówienie z okna 22:38–22:40 → brak nominału (wstrzymany); bez daty → nowe nazwy',
+        $en('Bon Szafirowy', $okno) === null && bon_et_okno_zmiany($k, $okno) && !bon_et_okno_zmiany($k, $po) && $en('Bon Szafirowy', null) === 300);
+    $ksD = array_replace($ks, ['sync_od' => '2026-11-24 00:00:00', 'warianty_zmiana' => $k['warianty_zmiana']]); // prawdziwe daty publikacji
+    $s270 = $dodaj(['created_at' => $po, 'amount' => 27000, 'line_items' => [['variant_name' => 'Bon Szafirowy', 'amount' => 27000, 'amount_total' => 27000]]]);
+    $s250 = $dodaj(['created_at' => '2026-11-24T18:00:00+01:00', 'amount' => 25000, 'line_items' => [['variant_name' => 'Bon Szafirowy', 'amount' => 25000, 'amount_total' => 25000]]]);
+    $d600n = $dodaj(['created_at' => $po, 'amount' => 60000, 'line_items' => [['variant_name' => 'Dowolna kwota (od 180 zł)', 'amount' => 60000, 'amount_total' => 60000]]]);
+    $sOkno = $dodaj(['created_at' => $okno, 'amount' => 30000, 'line_items' => [['variant_name' => 'Bon Szafirowy', 'amount' => 30000, 'amount_total' => 30000]]]);
+    bon_synchronizuj($ksD, $pdo, 'cron');
+    $b270 = bon_test_bony($k, $pdo, $s270['id'])[0] ?? [];
+    $b250s = bon_test_bony($k, $pdo, $s250['id'])[0] ?? [];
+    $b600n = bon_test_bony($k, $pdo, $d600n['id'])[0] ?? [];
+    $bOkno = bon_test_bony($k, $pdo, $sOkno['id'])[0] ?? [];
+    $t('22:39: zamówienie z 23:00 „Bon Szafirowy” 300 zł zapłacone 270 zł → bon 300 zł, Szafirowy, ważny',
+        $b270 && $b270['initial_pln'] == 300 && $b270['paid_pln'] == 270 && $b270['status'] === 'valid' && bon_nazwa($k, $b270) === 'Bon Szafirowy', json_encode($b270, JSON_UNESCAPED_UNICODE));
+    $t('22:39: zamówienie z 24.11 „Bon Szafirowy” 250 zł → dowolna 250 zł (kamień wg progów: Szafirowy)',
+        $b250s && $b250s['initial_pln'] == 250 && $b250s['status'] === 'valid' && bon_nazwa($k, $b250s) === 'Bon Szafirowy', json_encode($b250s, JSON_UNESCAPED_UNICODE));
+    $t('22:39: zamówienie z 23:00 „Dowolna kwota (od 180 zł)” 600 zł → Rubinowy, 12 mies.',
+        $b600n && $b600n['initial_pln'] == 600 && bon_nazwa($k, $b600n) === 'Bon Rubinowy' && (int)bon_kamien_bonu($k, $b600n)['waznosc_miesiecy'] === 12);
+    $t('22:39: zamówienie z okna 22:39 → wstrzymany z uwagą o oknie zmiany nazw',
+        $bOkno && $bOkno['status'] === 'held' && str_contains((string)$bOkno['status_uwagi'], 'okna zmiany nazw'), json_encode($bOkno, JSON_UNESCAPED_UNICODE));
+
+    // --- wpis czatu 22:34: kamień i ważność ustalone RAZ z wartości początkowej – saldo, realizacje, cofnięcia, przedłużenie ich nie zmieniają ---
+    $d600 = $dodaj(['amount' => 60000, 'line_items' => [['variant_name' => 'Dowolna kwota (od 180 zł)', 'amount' => 60000, 'amount_total' => 60000]]]);
+    $d400 = $dodaj(['amount' => 40000, 'line_items' => [['variant_name' => 'Dowolna kwota (od 180 zł)', 'amount' => 40000, 'amount_total' => 40000]]]);
+    bon_synchronizuj($ks, $pdo, 'cron');
+    $tabV = bon_tabela($k, 'vouchers');
+    $wiersz = static function (string $kod) use ($pdo, $tabV) { $s = $pdo->prepare("SELECT * FROM $tabV WHERE code = ?"); $s->execute([$kod]); return $s->fetch(); };
+    $b6 = bon_test_bony($k, $pdo, $d600['id'])[0] ?? [];
+    $b4 = bon_test_bony($k, $pdo, $d400['id'])[0] ?? [];
+    $ver = static fn(string $kod) => bon_obsluz_verify($k, $kod, '203.0.113.' . random_int(1, 250), static fn() => $pdo)[1];
+    $przed6 = [bon_nazwa($k, $b6), bon_kolor($k, $b6), $b6['expires_at'] ?? null];
+    $przed4 = [bon_nazwa($k, $b4), bon_kolor($k, $b4), $b4['expires_at'] ?? null];
+    // realizacje do salda 150 zł i 50 zł (zapis jak po redeem: zmienia się tylko balance_pln)
+    $pdo->prepare("UPDATE $tabV SET balance_pln = '150.00' WHERE code = ?")->execute([$b6['code']]);
+    $pdo->prepare("UPDATE $tabV SET balance_pln = '50.00' WHERE code = ?")->execute([$b4['code']]);
+    $p6 = $wiersz($b6['code']);
+    $p4 = $wiersz($b4['code']);
+    $v6 = $ver($b6['code']);
+    $t('22:34: bon 600 zł → Rubinowy; po realizacji 450 zł (saldo 150) dalej Rubinowy, czerwony, ta sama ważność (12 mies.) – także w verify',
+        $przed6[0] === 'Bon Rubinowy' && [bon_nazwa($k, $p6), bon_kolor($k, $p6), $p6['expires_at']] === $przed6
+        && ($v6['nazwa'] ?? '') === 'Bon Rubinowy' && ($v6['kolor'] ?? '') === 'czerwony' && ($v6['saldo'] ?? '') === '150.00'
+        && substr((string)$p6['expires_at'], 0, 10) === bon_waznosc(new DateTimeImmutable(substr((string)$p6['created_at'], 0, 10), new DateTimeZone(BON_STREFA)), 12),
+        json_encode([$przed6, $v6], JSON_UNESCAPED_UNICODE));
+    $t('22:34: bon 400 zł (Szmaragdowy, 12 mies.) → saldo 50 zł → dalej Szmaragdowy, data bez zmian; mail i PDF z tym samym kamieniem',
+        $przed4[0] === 'Bon Szmaragdowy' && [bon_nazwa($k, $p4), bon_kolor($k, $p4), $p4['expires_at']] === $przed4
+        && str_contains(bon_mail_tresc($k, [$p4])[1], 'Bon Szmaragdowy o wartości 400') && bon_pdf_kolor($k, $p4) === 'zielen');
+    // cofnięcie realizacji (saldo wraca) i przedłużenie (+3 mies. do daty bonu) – kamień bez zmian; 12-mies. bon → 15 mies. od zakupu
+    $pdo->prepare("UPDATE $tabV SET balance_pln = '600.00' WHERE code = ?")->execute([$b6['code']]);
+    $nowaData = bon_waznosc(new DateTimeImmutable(substr((string)$p6['expires_at'], 0, 10), new DateTimeZone(BON_STREFA)), 3);
+    $pdo->prepare("UPDATE $tabV SET expires_at = ? WHERE code = ?")->execute([$nowaData . ' 00:00:00', $b6['code']]);
+    $p6b = $wiersz($b6['code']);
+    $t('22:34: cofnięcie realizacji i przedłużenie nie zmieniają kamienia; przedłużenie 12-mies. bonu = 15 mies. od zakupu',
+        bon_nazwa($k, $p6b) === 'Bon Rubinowy' && bon_kolor($k, $p6b) === 'czerwony'
+        && substr((string)$p6b['expires_at'], 0, 10) === bon_waznosc(new DateTimeImmutable(substr((string)$p6b['created_at'], 0, 10), new DateTimeZone(BON_STREFA)), 15));
+    $pR = bon_test_payload(['price_custom_id' => 'bon-200', 'amount_paid' => 180, 'order_amount' => 180]);
+    bon_test_webhook($k, $pdo, $pR);
+    $bR = bon_test_bony($k, $pdo, $pR['order_id'])[0] ?? [];
+    $t('22:34: bon 200 zł kupiony za 180 zł (rabat) → Topazowy z wartości bonu, 6 mies.', $bR && $bR['initial_pln'] == 200 && $bR['paid_pln'] == 180
+        && bon_nazwa($k, $bR) === 'Bon Topazowy' && (int)bon_kamien_bonu($k, $bR)['waznosc_miesiecy'] === 6, json_encode($bR, JSON_UNESCAPED_UNICODE));
+    $zrodlo = static function (string $f): string { $r = new ReflectionFunction($f); return implode('', array_slice(file($r->getFileName()), $r->getStartLine() - 1, $r->getEndLine() - $r->getStartLine() + 1)); };
+    $t('22:34: w kodzie progów (bon_kamien, bon_kamien_bonu, bon_nazwa, bon_kolor) nie ma odwołania do balance_pln',
+        !str_contains($zrodlo('bon_kamien') . $zrodlo('bon_kamien_bonu') . $zrodlo('bon_nazwa') . $zrodlo('bon_kolor'), 'balance'));
+
+    // webhook (gdyby wrócił tryb tworzenia bonów z webhooka): price_id rozstrzyga, nazwa wariantu nie ma znaczenia
+    $pW300 = bon_test_payload(['price_id' => 'price_1UeHCtDJkxNsH4K38JGuXhbj', 'price_custom_id' => null, 'amount_paid' => 300, 'order_amount' => 300]);
+    bon_test_webhook($k, $pdo, $pW300);
+    $pWdow = bon_test_payload(['price_id' => 'price_1UeMn8DJkxNsH4K3Y4D7uIaE', 'price_custom_id' => null, 'amount_paid' => 250, 'order_amount' => 250]);
+    bon_test_webhook($k, $pdo, $pWdow);
+    $bW300 = bon_test_bony($k, $pdo, $pW300['order_id']);
+    $bWdow = bon_test_bony($k, $pdo, $pWdow['order_id']);
+    $t('webhook: price_id 300 zł → bon 300 zł (Szafirowy); price_id dowolnej + 250 zł → dowolna 250 zł (Szafirowy z kwoty)',
+        $bW300 && $bW300[0]['initial_pln'] == 300 && bon_nazwa($k, $bW300[0]) === 'Bon Szafirowy'
+        && $bWdow && $bWdow[0]['initial_pln'] == 250 && bon_nazwa($k, $bWdow[0]) === 'Bon Szafirowy', json_encode([$bW300, $bWdow], JSON_UNESCAPED_UNICODE));
     $t('nieznana nowa nazwa → held', $bnn && $bnn[0]['status'] === 'held' && !isset($zad[$nowaNieznana['id']]));
-    $t('nazwa bonu: stara i nowa nazwa wariantu dają tę samą', bon_nazwa($k, $b2[0]) === 'Bon Szmaragdowy' && bon_nazwa($k, $brub[0]) === 'Bon Rubinowy'
-        && bon_nazwa($k, ['price_id' => 'Bon 300 zł', 'initial_pln' => '300.00']) === 'Bon Rubinowy');
-    $t('nazwa bonu: dowolna kwota → Szafirowy także przy 500 zł i 300 zł (stara nazwa)', bon_nazwa($k, $bsz[0]) === 'Bon Szafirowy' && bon_nazwa($k, $bd[0]) === 'Bon Szafirowy'
-        && bon_nazwa($k, ['price_id' => 'Dowolna kwota (od 180 zł)', 'initial_pln' => '300.00']) === 'Bon Szafirowy');
-    $t('nazwa bonu: webhook (bon-500, bon-dowolna) i nieznany rodzaj', bon_nazwa($k, ['price_id' => 'bon-500', 'initial_pln' => '500.00']) === 'Bon Bursztynowy'
-        && bon_nazwa($k, ['price_id' => 'bon-dowolna', 'initial_pln' => '200.00']) === 'Bon Szafirowy'
-        && bon_nazwa($k, ['price_id' => '', 'initial_pln' => '250.00']) === 'Bon podarunkowy');
+    // --- kamień z wartości (wpis 21:47): progi = górne granice włącznie; nazwa, kolor i ważność z initial_pln, nie z wariantu ---
+    $nz = static fn(string $zl, ?string $id = '') => bon_nazwa($k, ['price_id' => $id, 'initial_pln' => $zl]);
+    $mc = static fn(string $zl) => (int)bon_kamien($k, (int)bon_grosze($zl))['waznosc_miesiecy'];
+    $t('kamień: 180 i 200 → Topazowy; 200,01 i 300 → Szafirowy; 300,01 i 500 → Szmaragdowy; 500,01 i 750 → Rubinowy',
+        $nz('180.00', 'bon-dowolna') === 'Bon Topazowy' && $nz('200.00', 'bon-200') === 'Bon Topazowy' && $nz('200.01', 'bon-dowolna') === 'Bon Szafirowy'
+        && $nz('300.00', 'bon-300') === 'Bon Szafirowy' && $nz('300.01', 'bon-dowolna') === 'Bon Szmaragdowy' && $nz('500.00', 'bon-500') === 'Bon Szmaragdowy'
+        && $nz('500.01', 'bon-dowolna') === 'Bon Rubinowy' && $nz('750.00', 'Dowolna kwota (od 180 zł)') === 'Bon Rubinowy');
+    $t('kamień: stałe 200/300/500 jak dowolna kwota tej samej wartości; stara nazwa wariantu nie zmienia kamienia (Bon Rubinowy 300 → Szafirowy)',
+        $nz('200.00', 'Bon 200 zł') === $nz('200.00', 'bon-dowolna') && $nz('500.00', 'Bon Szmaragdowy') === $nz('500.00', 'bon-dowolna')
+        && $nz('300.00', 'Bon Rubinowy') === 'Bon Szafirowy' && bon_nazwa($k, $b2[0]) === 'Bon Topazowy' && bon_nazwa($k, $brub[0]) === 'Bon Szafirowy');
+    $t('kamień: poniżej najniższego progu (8 zł, brak wartości) → najniższy kamień, bez błędu',
+        $nz('8.00') === 'Bon Topazowy' && bon_nazwa($k, ['price_id' => null, 'initial_pln' => null]) === 'Bon Topazowy');
+    $t('ważność z kamienia: 200 i 300 zł → 6 mies.; 300,01 / 500 / 750 zł → 12 mies.',
+        $mc('200.00') === 6 && $mc('300.00') === 6 && $mc('300.01') === 12 && $mc('500.00') === 12 && $mc('750.00') === 12);
+    $kProgi = array_replace($k, ['kamienie' => [['do_pln' => 1000, 'nazwa' => 'Bon Próbny', 'kolor' => 'granat', 'waznosc_miesiecy' => 9, 'nowy_stat' => 'x'],
+        ['do_pln' => null, 'nazwa' => 'Bon Duży', 'kolor' => 'zloty', 'waznosc_miesiecy' => 24]]]);
+    $t('progi z konfiguracji: inne progi i nowe pole bez zmiany kodu', bon_nazwa($kProgi, ['initial_pln' => '999.00']) === 'Bon Próbny'
+        && bon_kamien($kProgi, 100001)['waznosc_miesiecy'] === 24 && bon_kamien($kProgi, 500)['nowy_stat'] === 'x');
+    // data ważności przy tworzeniu bonu – osobno dla każdego bonu (koszyk mieszany wyżej: 200 + 2×500)
+    $plus = static fn(array $b, int $m) => substr((string)$b['expires_at'], 0, 10) === bon_waznosc(new DateTimeImmutable(substr((string)$b['created_at'], 0, 10), new DateTimeZone(BON_STREFA)), $m);
+    $t('ważność przy tworzeniu: koszyk 200 + 2×500 → +6 i +12 mies. (osobno dla każdego bonu); dowolna 250 → +6; dowolna 500 → +12',
+        $plus($bm[0], 6) && $plus($bm[1], 12) && $plus($bm[2], 12) && $plus($bd[0], 6) && $plus($bsz[0], 12),
+        json_encode([$bm[0]['expires_at'], $bm[1]['expires_at'], $bd[0]['expires_at'], $bsz[0]['expires_at']]));
+    $koniec = static fn(array $b) => new DateTimeImmutable(substr((string)$b['expires_at'], 0, 10), new DateTimeZone(BON_STREFA));
+    $nowa = static fn(array $b) => bon_przedluzenie_okno($b + ['przedluzony_at' => null], $koniec($b))['nowa'] ?? null; // „dziś” = koniec ważności
+    $t('przedłużenie +3 mies. tak samo dla bonu 6- i 12-miesięcznego',
+        $nowa($bm[0]) === bon_waznosc($koniec($bm[0]), 3) && $nowa($bm[1]) === bon_waznosc($koniec($bm[1]), 3), json_encode([$nowa($bm[0]), $nowa($bm[1])]));
     [, $tekstMaila, $htmlMaila] = bon_mail_tresc($k, $brub);
-    $t('mail: „Bon Rubinowy o wartości 300 zł” w tekście i HTML', str_contains($tekstMaila, "Bon Rubinowy o wartości 300\u{00A0}zł, numer " . $brub[0]['code'])
-        && str_contains($htmlMaila, "Bon Rubinowy o wartości 300\u{00A0}zł"), $tekstMaila);
+    $t('mail: „Bon Szafirowy o wartości 300 zł”, ważny 6 miesięcy – w tekście i HTML', str_contains($tekstMaila, "Bon Szafirowy o wartości 300\u{00A0}zł, numer " . $brub[0]['code'])
+        && str_contains($htmlMaila, "Bon Szafirowy o wartości 300\u{00A0}zł") && str_contains($tekstMaila, 'ważny 6 miesięcy'), $tekstMaila);
+    $b250 = array_replace($bd[0], ['initial_pln' => '250.00', 'price_id' => 'Dowolna kwota (od 180 zł)']);
+    $b400 = array_replace($bd[0], ['initial_pln' => '400.00', 'price_id' => 'Dowolna kwota (od 180 zł)', 'code' => 'EWA-CCCC-4444']);
+    [, $t250] = bon_mail_tresc($k, [$b250]);
+    [, $t400] = bon_mail_tresc($k, [$b400]);
+    [, $tMix] = bon_mail_tresc($k, [$b250, $b400]);
+    $t('mail: dowolna 250 zł → Bon Szafirowy 6 mies.; 400 zł → Bon Szmaragdowy 12 mies.; koszyk obu → „6 albo 12 miesięcy”',
+        str_contains($t250, 'Bon Szafirowy o wartości 250') && str_contains($t250, 'ważny 6 miesięcy')
+        && str_contains($t400, 'Bon Szmaragdowy o wartości 400') && str_contains($t400, 'ważny 12 miesięcy')
+        && str_contains($tMix, 'ważny 6 albo 12 miesięcy'), $tMix);
+    $t('PDF: dowolna 400 zł → zielone tło (Szmaragdowy), zdanie „12 miesięcy”; PDF powstaje',
+        bon_pdf_kolor($k, $b400) === 'zielen' && bon_miesiace_tekst((int)bon_kamien_bonu($k, $b400)['waznosc_miesiecy']) === '12 miesięcy'
+        && str_starts_with(bon_pdf(array_replace($b400, ['expires_at' => '2027-11-25 00:00:00']), $k), '%PDF'));
     foreach ($zad as $z) $z();
 
     // nieudana wcześniej wysyłka: kolejny przebieg ją dokańcza
@@ -365,7 +483,7 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     // --- szablon HTML maila z bonem (wpis 22:47, front #101): wypełnienie jak scripts/mail-bon-podglad.mjs → wypelnij() ---
     $katS = sys_get_temp_dir() . '/bony-szablon-' . bin2hex(random_bytes(4));
     @mkdir($katS, 0700, true);
-    $wzor = '<html><head><!-- OBRAZY_BONOW {"Bon Rubinowy":"https://x.test/rub.png","Bon Szafirowy":"https://x.test/szaf.png"} --><title>{{TYTUL}}</title></head><body>'
+    $wzor = '<html><head><!-- OBRAZY_BONOW {"kamien:granat":"https://x.test/szaf.png","kamien:zielen":"https://x.test/szm.png","Bon Szmaragdowy":"https://x.test/stary-200.png"} --><title>{{TYTUL}}</title></head><body>'
         . '<span>{{PREHEADER}}</span><h1>{{TYTUL}}</h1><p>{{WSTEP}}</p>'
         . '<!--BON--><div class="bon"><img src="{{OBRAZ}}" alt="{{NAZWA}} {{KWOTA}}"><b>{{NAZWA}}</b> {{KWOTA}} <i>{{KOD}}</i> do {{WAZNY_DO}}<!--DLA--> dla {{DLA}}<!--/DLA--></div><!--/BON-->'
         . '<!--PUSTE_DLA_OD--><!--PUSTE_1-->Na bonie są puste linie<!--/PUSTE_1--><!--PUSTE_N-->Na bonach są puste linie<!--/PUSTE_N--><!--/PUSTE_DLA_OD-->'
@@ -373,28 +491,41 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     file_put_contents($katS . '/mail-bon.tpl', $wzor);
     $kS = array_replace($k, ['mail_szablon_html' => true, 'mail_szablon_plik' => $katS . '/mail-bon.tpl', 'mail_zdanie_rezygnacja' => true]);
     $bonS = array_replace($b[0], ['code' => 'EWA-AAAA-1111', 'initial_pln' => '300.00', 'price_id' => 'Bon Rubinowy', 'dla' => 'Ola <b>&', 'od' => 'Ania']);
-    $bonS2 = array_replace($b[0], ['code' => 'EWA-BBBB-2222', 'initial_pln' => '250.00', 'price_id' => 'bon-dowolna', 'dla' => null, 'od' => null]);
+    $bonS2 = array_replace($b[0], ['code' => 'EWA-BBBB-2222', 'initial_pln' => '400.00', 'price_id' => 'bon-dowolna', 'dla' => null, 'od' => null]);
     [, $tekstS, $htmlS] = bon_mail_tresc($kS, [$bonS]);
     [, , $htmlS2] = bon_mail_tresc(array_replace($kS, ['mail_zdanie_rezygnacja' => false]), [$bonS, $bonS2]);
     [, , $htmlWyl] = bon_mail_tresc(array_replace($kS, ['mail_szablon_html' => false]), [$bonS]);
     [, , $htmlBrak] = bon_mail_tresc(array_replace($kS, ['mail_szablon_plik' => $katS . '/nie-ma.tpl']), [$bonS]);
     $bezZnacznikow = static fn(string $h) => !preg_match('/\{\{[A-Z_]+\}\}|<!--\/?(BON|DLA|PUSTE|REZYGNACJA)|OBRAZY_BONOW/', $h);
-    $t('szablon maila: 1 bon – obraz wg nazwy, kwota, numer, „dla” zescape’owane, bez pustych linii, z rezygnacją, bez znaczników',
-        $bezZnacznikow($htmlS) && str_contains($htmlS, 'src="https://x.test/rub.png"') && str_contains($htmlS, 'EWA-AAAA-1111')
+    $t('szablon maila: 1 bon – obraz wg kamienia, kwota, numer, „dla” zescape’owane, bez pustych linii, z rezygnacją, bez znaczników',
+        $bezZnacznikow($htmlS) && str_contains($htmlS, 'src="https://x.test/szaf.png"') && str_contains($htmlS, 'EWA-AAAA-1111')
         && str_contains($htmlS, 'dla Ola &lt;b&gt;&amp;') && !str_contains($htmlS, 'puste linie') && str_contains($htmlS, 'Rezygnacja na /bon')
         && str_contains($htmlS, 'Twój bon podarunkowy') && str_contains($htmlS, 'ważny 6 miesięcy'), $htmlS);
-    $t('szablon maila: 2 bony – dwa bloki, drugi bez „dla”, wersja „Na bonach…”, bez rezygnacji (przełącznik), Szafirowy z obrazem',
+    $t('szablon maila: 2 bony – dwa bloki, drugi bez „dla”, „Na bonach…”, bez rezygnacji (przełącznik), Szmaragdowy 400 zł z obrazem kamienia (nie starym 200 zł), „6 albo 12”',
         $bezZnacznikow($htmlS2) && substr_count($htmlS2, 'class="bon"') === 2 && substr_count($htmlS2, ' dla ') === 1
         && str_contains($htmlS2, 'Na bonach są puste linie') && !str_contains($htmlS2, 'Na bonie są') && !str_contains($htmlS2, 'Rezygnacja')
-        && str_contains($htmlS2, 'https://x.test/szaf.png') && str_contains($htmlS2, 'Twoje bony podarunkowe'), $htmlS2);
+        && str_contains($htmlS2, 'https://x.test/szm.png') && !str_contains($htmlS2, 'stary-200') && str_contains($htmlS2, 'Twoje bony podarunkowe')
+        && str_contains($htmlS2, 'ważny 6 albo 12 miesięcy'), $htmlS2);
+    $wzorStary = str_replace('"kamien:granat":"https://x.test/szaf.png","kamien:zielen":"https://x.test/szm.png",', '', $wzor);
+    file_put_contents($katS . '/stary.tpl', $wzorStary);
+    [, , $htmlStary] = bon_mail_tresc(array_replace($kS, ['mail_szablon_plik' => $katS . '/stary.tpl']), [array_replace($bonS2, ['initial_pln' => '500.00'])]);
+    $t('szablon maila bez kluczy „kamien:” (stara mapa po nazwach) → HTML zapasowy, bez złego obrazu, mail wychodzi',
+        !str_contains($htmlStary, 'x.test') && str_contains($htmlStary, 'EWA-BBBB-2222'), $htmlStary);
+    @unlink($katS . '/stary.tpl');
     $t('szablon maila: przełącznik wyłączony albo brak pliku → dotychczasowy HTML; tekst maila bez zmian',
         !str_contains($htmlWyl, 'x.test') && !str_contains($htmlBrak, 'x.test') && str_contains($htmlWyl, 'EWA-AAAA-1111') && str_contains($tekstS, 'EWA-AAAA-1111'));
     // prawdziwy szablon z buildu (dist lokalnie, obok lib/ na OVH) – gdy jest
     $prawdziwy = is_file(__DIR__ . '/mail-bon.tpl') ? __DIR__ . '/mail-bon.tpl' : dirname(__DIR__, 4) . '/dist/api/bon/lib/mail-bon.tpl';
     if (is_file($prawdziwy)) {
         [, , $hP] = bon_mail_tresc(array_replace($kS, ['mail_szablon_plik' => $prawdziwy]), [$bonS, $bonS2]);
-        $t('szablon maila (prawdziwy z buildu): 2 bony wypełnione, bez znaczników, obrazy z img/bon-mail', $bezZnacznikow($hP)
-            && substr_count($hP, '/img/bon-mail/') >= 2 && str_contains($hP, 'EWA-BBBB-2222') && str_contains($hP, 'Bon Szafirowy'), mb_substr($hP, 0, 300));
+        // wpis 21:47: obrazy po kamieniu („kamien:<kolor>”) dodaje Front 1 w mail-bon.tpl.ts; do tego czasu prawdziwy szablon = HTML zapasowy
+        if (str_contains((string)file_get_contents($prawdziwy), '"kamien:')) {
+            $t('szablon maila (prawdziwy z buildu): 2 bony wypełnione, bez znaczników, obrazy z img/bon-mail', $bezZnacznikow($hP)
+                && substr_count($hP, '/img/bon-mail/') >= 2 && str_contains($hP, 'EWA-BBBB-2222') && str_contains($hP, 'Bon Szmaragdowy'), mb_substr($hP, 0, 300));
+        } else {
+            $t('szablon maila (prawdziwy z buildu, jeszcze bez kluczy „kamien:” – czeka na Front 1) → HTML zapasowy, mail wychodzi',
+                str_contains($hP, 'EWA-BBBB-2222') && str_contains($hP, 'Bon Szmaragdowy') && !str_contains($hP, '{{'), mb_substr($hP, 0, 300));
+        }
     }
     @unlink($katS . '/mail-bon.tpl');
     @rmdir($katS);

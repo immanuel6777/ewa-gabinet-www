@@ -49,8 +49,8 @@ if (extension_loaded('gd')) {
 $wiersz('  date.timezone=' . (ini_get('date.timezone') ?: '(puste)') . ', memory_limit=' . ini_get('memory_limit') . ', max_execution_time=' . ini_get('max_execution_time'));
 $wiersz('  mail(): ' . (function_exists('mail') ? 'jest' : 'BRAK'));
 $wiersz('  konfiguracja: webhook_tryb=' . $k['webhook_tryb'] . ', kwota_jednostka=' . $k['kwota_jednostka'] . ', wariantów w „ceny”: ' . count((array)$k['ceny']));
-// ważność bonu: regulamin i /bony mówią 6 mies.; konfig z etapu 1 miał 12 (review 2026-11-22)
-$wiersz('  waznosc_miesiecy=' . (int)$k['waznosc_miesiecy'] . ((int)$k['waznosc_miesiecy'] === 6 ? ' (zgodnie z regulaminem)' : ' → UWAGA: regulamin mówi 6 – popraw konfig/bony.php'));
+// ważność bonu: z progów „kamienie” (wpis 21:47) – do 300 zł 6 mies., powyżej 12; regulamin musi mówić to samo
+$wiersz('  kamienie: ' . implode('; ', array_map(static fn($p) => ($p['do_pln'] === null ? 'powyżej' : 'do ' . $p['do_pln'] . ' zł') . ' ' . $p['nazwa'] . ' ' . $p['waznosc_miesiecy'] . ' mies.', (array)$k['kamienie'])));
 try {
     $kon = bon_kontakt($k);
     $wiersz('  kontakt.json (z buildu): telefon ' . $kon['telefon'] . ', ' . $kon['ulica']);

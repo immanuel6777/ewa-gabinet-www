@@ -29,18 +29,19 @@ function bon_zwolnij(PDO $pdo, string $nazwa): void {
 /** Treść maila dla listy bonów jednego zamówienia: [temat, tekst, html]. */
 function bon_mail_tresc(array $k, array $bony): array {
     $kontakt = bon_kontakt($k);
-    $miesiace = bon_miesiace_tekst((int)($k['waznosc_miesiecy'] ?? 6));
+    // wpis 21:47: ważność zależy od kamienia (wartości) – przy koszyku z różnymi bonami „6 albo 12 miesięcy”, data przy każdym bonie
+    $miesiace = bon_miesiace_lista(array_map(static fn($b) => (int)bon_kamien_bonu($k, $b)['waznosc_miesiecy'], $bony));
     $n = count($bony);
     $temat = $n === 1 ? 'Twój bon podarunkowy – Gabinet EWA' : "Twoje bony podarunkowe ($n) – Gabinet EWA";
     $lista = [];
     foreach ($bony as $b) {
         $lista[] = [
             'kod' => (string)$b['code'],
-            'nazwa' => bon_nazwa($k, $b), // etykieta wg rodzaju bonu (2026-11-24), kwota nadal z nominału
+            'nazwa' => bon_nazwa($k, $b), // kamień z wartości (wpis 21:47), kwota nadal z nominału
             'kwota' => bon_kwota_tekst((int)bon_grosze($b['initial_pln'])),
             'do' => bon_data_tekst(substr((string)$b['expires_at'], 0, 10)),
             'dla' => (string)($b['dla'] ?? ''),
-            'kolor' => bon_pdf_kolor($k, $b), // obraz w szablonie HTML, gdy nazwy nie ma w mapie OBRAZY_BONOW
+            'kolor' => bon_kolor($k, $b), // obraz w szablonie HTML: klucz „kamien:<kolor>” w mapie OBRAZY_BONOW
         ];
     }
     $wstep = $n === 1
@@ -106,12 +107,13 @@ function bon_mail_html_z_szablonu(array $k, array $lista, string $wstep, string 
         return null;
     }
     $obrazy = json_decode($m[1], true) ?: [];
-    $poKolorze = ['zielen' => 'Bon Szmaragdowy', 'czerwony' => 'Bon Rubinowy', 'zloty' => 'Bon Bursztynowy', 'granat' => 'Bon Szafirowy'];
     $e = static fn(string $x) => htmlspecialchars($x, ENT_QUOTES, 'UTF-8');
     $n = count($lista);
     $bloki = [];
     foreach ($lista as $l) {
-        $obraz = $obrazy[$l['nazwa']] ?? $obrazy[$poKolorze[$l['kolor']] ?? ''] ?? null;
+        // wpis 21:47: obraz po kamieniu – klucz „kamien:<kolor>” (szablon frontu od 25.11). Starej mapy po nazwach NIE używamy:
+        // „Bon Szmaragdowy” był tam bonem 200 zł, więc dałby zły obraz. Bez nowego klucza → null → zostaje HTML zapasowy.
+        $obraz = $obrazy['kamien:' . $l['kolor']] ?? null;
         if (!is_string($obraz)) { bon_zdarzenie($k, 'mail-szablon', ['blad' => 'brak obrazu dla ' . $l['nazwa']]); return null; }
         $h = strtr($mb[1], ['{{OBRAZ}}' => $e($obraz), '{{NAZWA}}' => $e($l['nazwa']), '{{KWOTA}}' => $e($l['kwota']), '{{KOD}}' => $e($l['kod']), '{{WAZNY_DO}}' => $e($l['do'])]);
         $h = $l['dla'] !== '' ? str_replace(['{{DLA}}', '<!--DLA-->', '<!--/DLA-->'], [$e($l['dla']), '', ''], $h) : (preg_replace('/<!--DLA-->.*?<!--\/DLA-->/s', '', $h) ?? $h);

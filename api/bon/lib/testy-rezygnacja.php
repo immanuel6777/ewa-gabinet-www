@@ -234,8 +234,8 @@ function bon_testy_zwrot_proporcjonalny(array $k, PDO $pdo): array {
     $zam = bon_test_uuid();
     bon_utworz_bony(array_replace($k, ['prog_wstrzymania' => 0.8]), $pdo, ['zamowienie' => $zam, 'zrodlo' => 'api', 'email' => 'koszyk-' . random_int(1000, 9999) . '@example.com',
         'waluta' => 'pln', 'promo' => 'RABAT10', 'pozycje' => [
-            ['wariant' => 'Bon Szmaragdowy', 'nominal' => 200, 'ilosc' => 1, 'zaplacono' => 18000],
-            ['wariant' => 'Bon Bursztynowy', 'nominal' => 500, 'ilosc' => 2, 'zaplacono' => 90000],
+            ['wariant' => 'Bon Topazowy', 'nominal' => 200, 'ilosc' => 1, 'zaplacono' => 18000],
+            ['wariant' => 'Bon Szmaragdowy', 'nominal' => 500, 'ilosc' => 2, 'zaplacono' => 90000],
         ]]);
     $bm = bon_test_bony($k, $pdo, $zam);
     usort($bm, static fn($a, $c) => $a['nr_w_zamowieniu'] <=> $c['nr_w_zamowieniu']);
@@ -253,16 +253,16 @@ function bon_testy_zwrot_proporcjonalny(array $k, PDO $pdo): array {
         $przed = strlen((string)@file_get_contents($plikPow));
         $zam = bon_test_uuid();
         bon_utworz_bony($kS, $pdo, ['zamowienie' => $zam, 'zrodlo' => 'api', 'email' => 'szafir-' . random_int(1000, 9999) . '@example.com', 'waluta' => 'pln', 'promo' => $promo,
-            'pozycje' => [['wariant' => 'Bon Szafirowy', 'nominal' => 'dowolna', 'ilosc' => 1, 'zaplacono' => $gr]]]);
+            'pozycje' => [['wariant' => 'Dowolna kwota (od 180 zł)', 'nominal' => 'dowolna', 'ilosc' => 1, 'zaplacono' => $gr]]]);
         $b = bon_test_bony($kS, $pdo, $zam)[0] ?? [];
         return [$b['status'] ?? '', (string)($b['status_uwagi'] ?? ''), substr((string)@file_get_contents($plikPow), $przed)];
     };
     [$s1, $u1, $a1] = $szafir(22500, 'RABAT10');
     [$s2, $u2, $a2] = $szafir(17000, '');
     [$s3, , $a3] = $szafir(25000, '');
-    $t('Szafirowy z kodem (225 zł) i Szafirowy 170 zł bez kodu → held, alert „Szafirowy z rabatem, sprawdź”; 250 zł bez kodu → ważny, bez alertu',
-        $s1 === 'held' && str_contains($u1, 'kod RABAT10') && str_contains($a1, 'Bon WSTRZYMANY – Szafirowy z rabatem, sprawdź')
-        && $s2 === 'held' && str_contains($u2, 'poniżej minimum') && str_contains($a2, 'Szafirowy z rabatem, sprawdź')
+    $t('dowolna kwota z kodem (225 zł) i 170 zł bez kodu → held, alert „Dowolna kwota z rabatem, sprawdź”; 250 zł bez kodu → ważny, bez alertu',
+        $s1 === 'held' && str_contains($u1, 'kod RABAT10') && str_contains($a1, 'Bon WSTRZYMANY – Dowolna kwota z rabatem, sprawdź')
+        && $s2 === 'held' && str_contains($u2, 'poniżej minimum') && str_contains($a2, 'Dowolna kwota z rabatem, sprawdź')
         && $s3 === 'valid' && $a3 === '', json_encode([$s1, $u1, $s2, $u2, $s3, $a3], JSON_UNESCAPED_UNICODE));
     return $wyniki;
 }
