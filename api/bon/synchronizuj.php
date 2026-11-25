@@ -14,6 +14,7 @@ $zadania = [];
 $zrodlo = 'strona';
 try {
     $sesja = $token !== '' ? bon_panel_sesja($k, $pdo, $token) : null;
+    if ($sesja && !empty($sesja['zmiana_hasla'])) $sesja = null; // wpis 13:20: przed zmianą hasła jak strona (bez raportu)
     if ($sesja && hash_equals($sesja['csrf'], (string)($_SERVER['HTTP_X_CSRF'] ?? ''))) $zrodlo = 'panel';
     [$raport, $zadania] = bon_synchronizuj($k, $pdo, $zrodlo);
     if ($zrodlo === 'panel') $raport['kto'] = $sesja['login'];

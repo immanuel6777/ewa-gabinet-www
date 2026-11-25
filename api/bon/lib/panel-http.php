@@ -62,8 +62,10 @@ function bon_http_json_body(?array $sesja, bool $wymagajCsrf = true): array {
     return $d;
 }
 
-function bon_http_wymagaj_sesji(array $k, PDO $pdo, string $token): array {
+function bon_http_wymagaj_sesji(array $k, PDO $pdo, string $token, bool $takzeZmianaHasla = false): array {
     $sesja = bon_panel_sesja($k, $pdo, $token);
     if (!$sesja) { bon_json(401, ['ok' => false, 'zalogowany' => false, 'blad' => 'Zaloguj się.']); exit; }
+    // wpis 13:20: po haśle tymczasowym sesja może tylko zmienić hasło (konta.php, akcja zmien-haslo)
+    if (!empty($sesja['zmiana_hasla']) && !$takzeZmianaHasla) { bon_json(403, ['ok' => false, 'zmiana_hasla' => true, 'blad' => 'Najpierw ustaw własne hasło.']); exit; }
     return $sesja;
 }

@@ -43,8 +43,8 @@
   <link rel="stylesheet" href="/_astro/sciezka-bonow.B4U7Ywh7.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.DVFVPQQn.css">
-<link rel="stylesheet" href="/_astro/Baza.B2VWrLGu.css">
+<link rel="stylesheet" href="/_astro/panel-bonow.DD0GHgxN.css">
+<link rel="stylesheet" href="/_astro/Baza.BuoUc1Kt.css">
 <link rel="stylesheet" href="/_astro/KartaBonu.DVx0KRYz.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
     <a class="przeskocz" href="#tresc">Przejdź do treści</a>
@@ -106,6 +106,24 @@
       <p class="blad" data-p-blad-logowania hidden data-astro-cid-nl2nwxtk></p>
     </form>
 
+    <!-- wpis 13:20: własne hasło – wymuszone po haśle tymczasowym (tylko ten ekran) albo „Zmień hasło” z panelu -->
+    <form class="karta logowanie formularz" data-p-haslo hidden data-astro-cid-nl2nwxtk>
+      <h2 data-p-haslo-tytul data-astro-cid-nl2nwxtk>Zmień hasło</h2>
+      <p class="podpowiedz" data-p-haslo-opis data-astro-cid-nl2nwxtk></p>
+      <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-p-haslo-stare-etykieta data-astro-cid-nl2nwxtk>Obecne hasło</span>
+        <input name="stare" type="password" autocomplete="current-password" required maxlength="200" data-astro-cid-nl2nwxtk>
+      </label>
+      <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Nowe hasło (co najmniej 10 znaków)</span>
+        <input name="nowe" type="password" autocomplete="new-password" required minlength="10" maxlength="200" data-astro-cid-nl2nwxtk>
+      </label>
+      <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Powtórz nowe hasło</span>
+        <input name="powtorz" type="password" autocomplete="new-password" required minlength="10" maxlength="200" data-astro-cid-nl2nwxtk>
+      </label>
+      <button class="przycisk" type="submit" data-astro-cid-nl2nwxtk>Zapisz hasło</button>
+      <button class="przycisk obrys" type="button" data-p-haslo-anuluj data-astro-cid-nl2nwxtk>Anuluj</button>
+      <p class="blad" data-p-blad-hasla hidden data-astro-cid-nl2nwxtk></p>
+    </form>
+
     <!-- po zalogowaniu -->
     <div data-p-zalogowany hidden data-astro-cid-nl2nwxtk>
       <!-- wpisy 01:24/01:27: przełącznik „Kasa | Biuro” – Ewa i admin (Karolina tylko Kasa, bez przełącznika); zapamiętany na urządzeniu -->
@@ -115,7 +133,7 @@
       </div>
       <!-- wpis czatu 10:30: „Instrukcja” obok „Wyloguj” (Kasa i Biuro, każda rola) – PDF w nowej karcie; aktualizacja = podmiana
            public/panel-bonow/instrukcja.pdf + wrzuta; noindex w .htaccess (produkcja.mjs) i _headers -->
-      <p class="kto" data-astro-cid-nl2nwxtk>Zalogowano: <strong data-p-imie data-astro-cid-nl2nwxtk></strong> · <a class="link-przycisk" href="/panel-bonow/instrukcja.pdf" target="_blank" rel="noopener" data-p-instrukcja data-astro-cid-nl2nwxtk>Instrukcja</a> · <button type="button" class="link-przycisk" data-p-wyloguj data-astro-cid-nl2nwxtk>Wyloguj</button></p>
+      <p class="kto" data-astro-cid-nl2nwxtk>Zalogowano: <strong data-p-imie data-astro-cid-nl2nwxtk></strong> · <a class="link-przycisk" href="/panel-bonow/instrukcja.pdf" target="_blank" rel="noopener" data-p-instrukcja data-astro-cid-nl2nwxtk>Instrukcja</a> <span data-p-zmien-haslo-wiersz hidden data-astro-cid-nl2nwxtk> · <button type="button" class="link-przycisk" data-p-zmien-haslo data-astro-cid-nl2nwxtk>Zmień hasło</button></span> · <button type="button" class="link-przycisk" data-p-wyloguj data-astro-cid-nl2nwxtk>Wyloguj</button></p>
       <div class="sync tylko-biuro" aria-live="polite" data-astro-cid-nl2nwxtk>
         <button type="button" class="link-przycisk" data-p-sync data-astro-cid-nl2nwxtk>Pobierz nowe zamówienia</button>
         <p class="podpowiedz" data-p-sync-wynik hidden data-astro-cid-nl2nwxtk></p>
@@ -932,6 +950,38 @@
         <p class="blad" data-p-blad-rez hidden data-astro-cid-nl2nwxtk></p>
       </section>
 
+      <!-- wpis 13:20: Biuro → Konta (tylko admin). Przed przełączeniem konta_z_bazy: „Przenieś konta z konfigu” (po migracji konta.sql) -->
+      <section class="karta konta tylko-biuro" data-p-konta hidden data-astro-cid-nl2nwxtk>
+        <h2 data-astro-cid-nl2nwxtk>Konta</h2>
+        <div data-p-konta-konfig hidden data-astro-cid-nl2nwxtk>
+          <p class="podpowiedz" data-astro-cid-nl2nwxtk>Konta są jeszcze w konfiguracji serwera. Po migracji bazy (plan/BONY-KONTA-WDROZENIE.md) przenieś je tutaj, potem Bartek włącza przełącznik.</p>
+          <button class="przycisk obrys" type="button" data-p-konta-przenies data-astro-cid-nl2nwxtk>Przenieś konta z konfigu do bazy</button>
+        </div>
+        <div data-p-konta-baza hidden data-astro-cid-nl2nwxtk>
+          <ul class="konta-lista" data-p-konta-lista data-astro-cid-nl2nwxtk></ul>
+          <div class="konta-haslo" data-p-konta-haslo hidden aria-live="polite" data-astro-cid-nl2nwxtk></div>
+          <form class="admin-forma formularz" data-p-konta-dodaj data-astro-cid-nl2nwxtk>
+            <h3 data-astro-cid-nl2nwxtk>Dodaj konto</h3>
+            <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Login (małe litery, bez spacji)</span><input name="login" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" required maxlength="40" pattern="[a-z0-9._\-]{2,40}" data-astro-cid-nl2nwxtk></label>
+            <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Imię (widać je w historii bonów)</span><input name="imie" type="text" required maxlength="60" data-astro-cid-nl2nwxtk></label>
+            <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Uprawnienia</span>
+              <select name="uprawnienia" data-astro-cid-nl2nwxtk>
+                <!-- Bartek 25.11: Kasa = realizacja; Biuro = realizacja + uprawnienie rezygnacje; Administrator = admin -->
+                <option value="realizacja" data-astro-cid-nl2nwxtk>Kasa – realizacja bonów</option>
+                <option value="rezygnacje" data-astro-cid-nl2nwxtk>Biuro – Kasa + rezygnacje, zwroty, przedłużenia</option>
+                <option value="admin" data-astro-cid-nl2nwxtk>Administrator</option>
+              </select>
+            </label>
+            <button class="przycisk obrys" type="submit" data-astro-cid-nl2nwxtk>Dodaj i pokaż hasło tymczasowe</button>
+          </form>
+          <details class="zwijane" data-astro-cid-nl2nwxtk>
+            <summary data-astro-cid-nl2nwxtk>Historia zmian kont</summary>
+            <ol class="konta-historia" data-p-konta-historia data-astro-cid-nl2nwxtk></ol>
+          </details>
+        </div>
+        <p class="blad" data-p-blad-konta hidden data-astro-cid-nl2nwxtk></p>
+      </section>
+
       <!-- tylko admin -->
       <section class="karta admin tylko-biuro" data-p-admin hidden data-astro-cid-nl2nwxtk>
         <h2 data-astro-cid-nl2nwxtk>Administracja</h2>
@@ -989,4 +1039,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.BvkTvp27.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.C5y9wjwR.js"></script>

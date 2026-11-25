@@ -71,6 +71,7 @@ const BON_USTAWIENIA_JAWNE = [
     'mail_obsluga',       // P-12: adres obsługi klientów (bony@)
     'mail_zdanie_rezygnacja', // wpis 17:47: zdanie o rezygnacji na /bon w mailu z bonem
     'mail_szablon_html',      // wpis 22:47: HTML maila z bonem z szablonu frontu (mail-bon.tpl)
+    'konta_z_bazy',           // wpis 13:20 (25.11): konta panelu z bazy zamiast panel_konta
 ];
 
 /**

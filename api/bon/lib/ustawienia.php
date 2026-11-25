@@ -21,6 +21,10 @@ return [
     //     z API; podpisany zakup od razu uruchamia synchronizację z API, bon z danych API (decyzja Bartka 24.11 23:52);
     //     'log' = tylko zapis, wycofanie bez zmiany kodu) ---
     'webhook_tryb' => 'dzwonek',
+
+    // --- konta panelu (wpis 13:20): false = konta z panel_konta w konfigu; true = z tabeli voucher_accounts (po migracji konta.sql
+    //     i przeniesieniu kont – plan/BONY-KONTA-WDROZENIE.md). Włączenie po starcie, na słowo Bartka; wycofanie = false + wrzuta ---
+    'konta_z_bazy' => false,
     'kwota_jednostka' => 'pln',
 
     // --- warianty i ceny → nominał; nieznany = bon wstrzymany ---

@@ -184,6 +184,7 @@ function bon_diagnostyka(array $k, int $ile = 10, int $dni = 2, int $bony = 20, 
             'mail_tryb' => $k['mail_tryb'],
             'wariantow_w_cenach' => count((array)$k['ceny']),
             'kont_panelu' => count((array)($k['panel_konta'] ?? [])),
+            'konta_z_bazy' => ($k['konta_z_bazy'] ?? false) === true, // wpis 13:20
             // synchronizacja z API Easytools (2026-11-23): sam fakt ustawienia klucza, nigdy klucz
             'sync_tryb' => (string)($k['sync_tryb'] ?? ''),
             'sync_od' => (string)($k['sync_od'] ?? ''),
@@ -210,7 +211,7 @@ function bon_diagnostyka(array $k, int $ile = 10, int $dni = 2, int $bony = 20, 
     try {
         $pdo ??= bon_pdo($k);
         $wynik['baza'] = ['ok' => true, 'tabele' => []];
-        foreach (['vouchers', 'redemptions', 'voucher_sessions', 'voucher_login_attempts', 'voucher_admin_log', 'voucher_verify_limit', 'voucher_withdrawals', 'voucher_withdrawal_tokens'] as $t) {
+        foreach (['vouchers', 'redemptions', 'voucher_sessions', 'voucher_login_attempts', 'voucher_admin_log', 'voucher_verify_limit', 'voucher_withdrawals', 'voucher_withdrawal_tokens', 'voucher_accounts', 'voucher_account_log'] as $t) { // konta: 25.11 (brak tabeli = migracja konta.sql jeszcze nie wykonana)
             // brak tabeli (np. migracja kroku 1 jeszcze nie wykonana) nie psuje reszty podglądu
             try { $wynik['baza']['tabele'][$t] = (int)$pdo->query('SELECT COUNT(*) FROM ' . bon_tabela($k, $t))->fetchColumn(); }
             catch (PDOException) { $wynik['baza']['tabele'][$t] = 'brak tabeli'; }

@@ -18,6 +18,7 @@
 
 declare(strict_types=1);
 require_once __DIR__ . '/bon.php';
+require_once __DIR__ . '/konta.php'; // konta panelu w bazie (wpis 13:20), za przełącznikiem konta_z_bazy
 
 const BON_PANEL_CIASTKO = 'bon_panel';
 // hash nieistniejącego konta: przy nieznanym loginie password_verify i tak liczy (czas odpowiedzi nie zdradza, czy login jest)
@@ -81,7 +82,9 @@ function bon_panel_zaloguj(array $k, PDO $pdo, string $login, string $haslo, boo
     }
 
     if (isset($k['_test_przed_haslem']) && is_callable($k['_test_przed_haslem'])) ($k['_test_przed_haslem'])(); // testy Z3: równoległe żądanie
-    $konto = is_array($k['panel_konta'][$login] ?? null) ? $k['panel_konta'][$login] : null;
+    // wpis 13:20: konto z konfigu albo z bazy (konta_z_bazy); wyłączone = jak nieznane (ten sam czas odpowiedzi – atrapa hasha)
+    $konto = bon_panel_konto($k, $pdo, $login);
+    if ($konto && !$konto['aktywne']) $konto = null;
     $hash = (string)($konto['haslo'] ?? '');
     $ok = password_verify($haslo, $hash !== '' ? $hash : BON_PANEL_HASH_ATRAPA) && $konto !== null && $hash !== '';
     if (!$ok) {
@@ -99,12 +102,18 @@ function bon_panel_zaloguj(array $k, PDO $pdo, string $login, string $haslo, boo
     $csrf = bin2hex(random_bytes(32));
     $wygasa = $zapamietaj ? $teraz->modify('+' . (int)$k['panel_zapamietaj_dni'] . ' days') : $teraz->modify('+' . (int)$k['panel_sesja_godzin'] . ' hours');
     $tabSesje = bon_tabela($k, 'voucher_sessions');
-    $pdo->prepare("INSERT INTO $tabSesje (token_hash, login, csrf, created_at, expires_at) VALUES (?, ?, ?, ?, ?)")
-        ->execute([hash('sha256', $token), $login, $csrf, $teraz->format('Y-m-d H:i:s'), $wygasa->format('Y-m-d H:i:s')]);
+    if (bon_konta_z_bazy($k)) { // sesja z wersją hasła – zmiana/reset hasła unieważnia ją (kolumna z migracji konta.sql)
+        $pdo->prepare("INSERT INTO $tabSesje (token_hash, login, csrf, created_at, expires_at, wersja_hasla) VALUES (?, ?, ?, ?, ?, ?)")
+            ->execute([hash('sha256', $token), $login, $csrf, $teraz->format('Y-m-d H:i:s'), $wygasa->format('Y-m-d H:i:s'), (int)$konto['wersja']]);
+    } else {
+        $pdo->prepare("INSERT INTO $tabSesje (token_hash, login, csrf, created_at, expires_at) VALUES (?, ?, ?, ?, ?)")
+            ->execute([hash('sha256', $token), $login, $csrf, $teraz->format('Y-m-d H:i:s'), $wygasa->format('Y-m-d H:i:s')]);
+    }
     if (random_int(1, 20) === 1) $pdo->prepare("DELETE FROM $tabSesje WHERE expires_at < ?")->execute([$teraz->format('Y-m-d H:i:s')]);
 
     return [200, ['ok' => true, 'zalogowany' => true, 'login' => $login, 'imie' => (string)($konto['imie'] ?? $login), 'rola' => bon_panel_rola($konto),
-        'rezygnacje' => bon_panel_moze_rezygnacje($konto), 'csrf' => $csrf], // tryb kasy: przełącznik Kasa | Biuro dla admina i Ewy (jak GET sesja.php)
+        'rezygnacje' => bon_panel_moze_rezygnacje($konto), 'csrf' => $csrf, // tryb kasy: przełącznik Kasa | Biuro dla admina i Ewy (jak GET sesja.php)
+        'zmiana_hasla' => $konto['zmiana_hasla'], 'konta_z_bazy' => bon_konta_z_bazy($k)], // wpis 13:20: hasło tymczasowe → najpierw własne hasło
         ['wartosc' => $token, 'wygasa' => $zapamietaj ? $wygasa->getTimestamp() : 0]];
 }
 
@@ -125,14 +134,18 @@ function bon_panel_moze_rezygnacje(?array $konto): bool {
 function bon_panel_sesja(array $k, PDO $pdo, string $token, ?DateTimeImmutable $teraz = null): ?array {
     $k = bon_panel_konfig($k);
     if (!preg_match('/^[a-f0-9]{64}$/', $token)) return null;
-    $st = $pdo->prepare('SELECT login, csrf, expires_at FROM ' . bon_tabela($k, 'voucher_sessions') . ' WHERE token_hash = ?');
+    $zBazy = bon_konta_z_bazy($k);
+    $st = $pdo->prepare('SELECT login, csrf, expires_at' . ($zBazy ? ', wersja_hasla' : '') . ' FROM ' . bon_tabela($k, 'voucher_sessions') . ' WHERE token_hash = ?');
     $st->execute([hash('sha256', $token)]);
     $s = $st->fetch();
     if (!$s || (string)$s['expires_at'] < ($teraz ?? bon_teraz())->format('Y-m-d H:i:s')) return null;
-    $konto = $k['panel_konta'][$s['login']] ?? null;
-    if (!is_array($konto) || empty($konto['haslo'])) return null; // konto skreślone z konfigu = wylogowane wszędzie
-    return ['login' => (string)$s['login'], 'imie' => (string)($konto['imie'] ?? $s['login']), 'rola' => bon_panel_rola($konto),
-        'rezygnacje' => bon_panel_moze_rezygnacje($konto), 'csrf' => (string)$s['csrf']];
+    $konto = bon_panel_konto($k, $pdo, (string)$s['login']);
+    if (!$konto || !$konto['aktywne']) return null; // konto skreślone z konfigu / wyłączone w bazie = wylogowane wszędzie
+    // wpis 13:20 (SEC F6): sesja z inną wersją hasła (zmiana, reset, „Wyloguj ze wszystkich urządzeń”) albo sprzed przełączenia na bazę
+    if ($zBazy && (int)($s['wersja_hasla'] ?? 0) !== (int)$konto['wersja']) return null;
+    if ($zBazy) $GLOBALS['bon_konta_imiona'] = bon_konta_imiona($k, $pdo); // historia bonów: imiona z bazy
+    return ['login' => (string)$s['login'], 'imie' => $konto['imie'], 'rola' => bon_panel_rola($konto),
+        'rezygnacje' => bon_panel_moze_rezygnacje($konto), 'csrf' => (string)$s['csrf'], 'zmiana_hasla' => $konto['zmiana_hasla'], 'konta_z_bazy' => $zBazy];
 }
 
 function bon_panel_wyloguj(array $k, PDO $pdo, string $token): void {
@@ -611,6 +624,7 @@ function bon_panel_przedluz(array $k, PDO $pdo, array $sesja, string $wpisany, ?
 function bon_panel_imie(array $k, string $login): string {
     if ($login === 'klient') return 'Klient (strona)';
     if ($login === 'system') return 'System';
+    if (bon_konta_z_bazy($k) && isset($GLOBALS['bon_konta_imiona'][$login])) return (string)$GLOBALS['bon_konta_imiona'][$login];
     $konto = $k['panel_konta'][$login] ?? null;
     return is_array($konto) && !empty($konto['imie']) ? (string)$konto['imie'] : $login;
 }

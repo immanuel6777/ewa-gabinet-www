@@ -16,6 +16,7 @@ $tekst = static function (int $kod, string $tresc): void {
 };
 try {
     $sesja = bon_panel_sesja($k, $pdo, $token);
+    if ($sesja && !empty($sesja['zmiana_hasla'])) $sesja = null; // wpis 13:20: najpierw własne hasło
     if (!$sesja) { $tekst(401, 'Zaloguj się w panelu bonów i spróbuj ponownie.'); exit; }
     [$kod, $wynik] = bon_panel_pdf_bon($k, $pdo, $sesja, (string)($_GET['kod'] ?? ''));
     if ($kod !== 200) { $tekst($kod, (string)$wynik['blad']); exit; }
