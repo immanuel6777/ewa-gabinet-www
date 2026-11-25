@@ -36,7 +36,7 @@
 <style>.eyebrow[data-astro-cid-zedojbgr]{font-size:var(--fs-eyebrow-m);color:var(--c-ink-muted);letter-spacing:.06em;text-transform:uppercase;align-items:center;gap:8px;line-height:1.3;display:inline-flex}.kropka[data-astro-cid-zedojbgr]{background:var(--c-coral);border-radius:50%;flex-shrink:0;width:7px;height:7px}@media (width>=900px){.eyebrow[data-astro-cid-zedojbgr]{font-size:var(--fs-eyebrow);gap:10px}.kropka[data-astro-cid-zedojbgr]{width:8px;height:8px}}
 .pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/bon.1wLmjvPx.css">
+<link rel="stylesheet" href="/_astro/bon.jeZaYEXN.css">
 <link rel="stylesheet" href="/_astro/Baza.BbY1oj4X.css">
 <link rel="stylesheet" href="/_astro/KartaBonu.DVx0KRYz.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body>
@@ -2037,10 +2037,19 @@
 
       <button type="button" class="link-akcji inny" data-bon-inny hidden data-astro-cid-b3uxbwor>Sprawdź inny numer</button>
       <form class="szukaj formularz" action="/bon" method="get" data-bon-form data-astro-cid-b3uxbwor>
-        <label class="pole" data-astro-cid-b3uxbwor>
-          <span class="etykieta" data-astro-cid-b3uxbwor>Numer bonu</span>
-          <!-- maska (src/scripts/maska-numeru-bonu.ts): „EWA-” na stałe, myślnik sam, tylko znaki numeru; bez JS zwykłe pole -->
-          <input name="nr" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="EWA-XXXX-XXXX" maxlength="20" required data-bon-pole data-astro-cid-b3uxbwor>
+        <!-- wpisy 14:45 + 16:10 (Bartek 2026-11-25): szablon „EWA – ▢▢▢▢ – ▢▢▢▢” jak w panelu – przedrostek i kreski stałe (rysunek),
+             kratki wypełniają się znakami, jedno przezroczyste pole nad szablonem. Logika: src/scripts/pole-numeru-panelu.ts (backend,
+             tylko import) – szuka kontenera po [data-p-nr-pole]. Bez JS szablon znika, zostaje zwykłe pole. -->
+        <label class="pole" data-astro-cid-b3uxbwor><span class="etykieta" aria-hidden="true" data-astro-cid-b3uxbwor>Numer bonu</span>
+          <span class="nr-pole" data-p-nr-pole data-astro-cid-b3uxbwor>
+            <span class="nr-szablon" aria-hidden="true" data-bon-nr-kratki data-astro-cid-b3uxbwor>
+              <span class="nr-stale" data-astro-cid-b3uxbwor>EWA</span><span class="nr-kreska" data-astro-cid-b3uxbwor>–</span>
+              <span class="nr-kratka" data-kratka data-astro-cid-b3uxbwor></span><span class="nr-kratka" data-kratka data-astro-cid-b3uxbwor></span><span class="nr-kratka" data-kratka data-astro-cid-b3uxbwor></span><span class="nr-kratka" data-kratka data-astro-cid-b3uxbwor></span>
+              <span class="nr-kreska" data-astro-cid-b3uxbwor>–</span>
+              <span class="nr-kratka" data-kratka data-astro-cid-b3uxbwor></span><span class="nr-kratka" data-kratka data-astro-cid-b3uxbwor></span><span class="nr-kratka" data-kratka data-astro-cid-b3uxbwor></span><span class="nr-kratka" data-kratka data-astro-cid-b3uxbwor></span>
+            </span>
+            <input class="nr-wpis" name="nr" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" aria-label="Numer bonu, zaczyna się od EWA – wpisz 8 znaków" required data-bon-pole data-astro-cid-b3uxbwor>
+          </span>
         </label>
         <button class="przycisk" type="submit" data-astro-cid-b3uxbwor>Sprawdź</button>
       </form>
@@ -2768,4 +2777,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/bon.astro_astro_type_script_index_0_lang.DJAh6U41.js"></script>
+<script type="module" src="/_astro/bon.astro_astro_type_script_index_0_lang.BEGpA8M_.js"></script>
