@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="/_astro/sciezka-bonow.B4U7Ywh7.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.Vs-XdGth.css">
+<link rel="stylesheet" href="/_astro/panel-bonow.BXKMay4U.css">
 <link rel="stylesheet" href="/_astro/Baza.CUaZgc7R.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
     <a class="przeskocz" href="#tresc">Przejdź do treści</a>
@@ -94,8 +94,17 @@
 
       <!-- KASA, ekran startowy: skan aparatem telefonu (kod QR otwiera panel z ?nr=), numer z maską, e-mail jako link -->
       <section class="kasa-start tylko-kasa" data-k-start data-astro-cid-nl2nwxtk>
-        <button class="przycisk duzy" type="button" data-k-skan aria-expanded="false" aria-controls="k-skan-info" data-astro-cid-nl2nwxtk>Zeskanuj bon</button>
-        <p class="k-skan-info" id="k-skan-info" data-k-skan-info hidden data-astro-cid-nl2nwxtk>Otwórz aparat w telefonie i nakieruj go na kod QR z bonu. Bon otworzy się tutaj, w panelu.</p>
+        <button class="przycisk duzy" type="button" data-k-skan data-astro-cid-nl2nwxtk>Zeskanuj bon</button>
+        <!-- skaner w panelu (Bartek 2026-11-25): tylny aparat, ramka na środku; po odczycie bon otwiera się od razu w Kasie -->
+        <div class="k-skaner" data-k-skaner hidden data-astro-cid-nl2nwxtk>
+          <div class="k-podglad" data-astro-cid-nl2nwxtk>
+            <video data-k-wideo playsinline muted data-astro-cid-nl2nwxtk></video>
+            <span class="k-ramka" aria-hidden="true" data-astro-cid-nl2nwxtk></span>
+          </div>
+          <p class="k-skaner-info" aria-live="polite" data-k-skaner-info data-astro-cid-nl2nwxtk>Nakieruj aparat na kod QR z bonu.</p>
+          <button class="przycisk obrys" type="button" data-k-skaner-zamknij data-astro-cid-nl2nwxtk>Zamknij aparat</button>
+        </div>
+        <p class="k-skan-info" data-k-skan-info hidden data-astro-cid-nl2nwxtk></p>
       </section>
 
       <!-- wpis 01:34: osobne pola – numer z pełną maską jak na /bon (EWA- od razu, myślniki same, przycisk aktywny przy pełnym
@@ -125,7 +134,8 @@
 
       <!-- KASA: karta bonu – kamień, duże saldo, ważność; nieaktywny = jedno zdanie, bez przycisków; jedna linijka historii -->
       <section class="karta kasa-bon tylko-kasa" data-k-bon hidden data-astro-cid-nl2nwxtk>
-        <p class="k-nazwa" data-astro-cid-nl2nwxtk><span class="k-kolor" aria-hidden="true" data-astro-cid-nl2nwxtk></span><span data-k-nazwa data-astro-cid-nl2nwxtk></span></p>
+        <!-- Bartek 2026-11-25: kolor = stan bonu (pasek z lewej + pigułka); kamień tylko jako delikatny podpis -->
+        <p class="k-glowa" data-astro-cid-nl2nwxtk><span class="k-status" data-k-status data-astro-cid-nl2nwxtk></span><span class="k-nazwa" data-k-nazwa data-astro-cid-nl2nwxtk></span></p>
         <p class="k-saldo" data-k-saldo data-astro-cid-nl2nwxtk></p>
         <p class="k-wazny" data-k-wazny data-astro-cid-nl2nwxtk></p>
         <p class="k-stan" data-k-stan hidden data-astro-cid-nl2nwxtk></p>
@@ -859,4 +869,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.BdKEt5bn.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.0-rofs6d.js"></script>
