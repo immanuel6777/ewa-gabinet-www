@@ -257,7 +257,7 @@ function bon_zwroty_a1(array $k, PDO $pdo, ?DateTimeImmutable $teraz = null, int
             . 'Znane panelowi: ' . bon_zl($znane) . ' zł, spoza panelu: ' . bon_zl($spoza) . " zł\n"
             . "Zamówienie Easytools: $zamowienie\nTransakcja: $tr\n"
             . "Sprawdź w Easytools, za który bon to zwrot, i kliknij przy nim „Oznacz zwrot”. Do tego czasu bon można zrealizować przy kasie.");
-        bon_zdarzenie($k, 'a1-zwrot-spoza-panelu', ['transakcja' => (string)$tr, 'bony' => $dzialaja, 'spoza_gr' => $spoza, 'znane_gr' => $znane]);
+        bon_zdarzenie($k, 'a1-zwrot-spoza-panelu', ['transakcja' => (string)$tr, 'bony' => array_map('bon_kod_maska', $dzialaja), 'spoza_gr' => $spoza, 'znane_gr' => $znane]);
         if ($plik !== '' && (is_dir(dirname($plik)) || @mkdir(dirname($plik), 0700, true))) @file_put_contents($plik, (string)$spoza, LOCK_EX);
         $wynik['alerty']++;
     }

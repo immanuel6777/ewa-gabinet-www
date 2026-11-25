@@ -128,6 +128,85 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     $b = bon_test_bony($k, $pdo, $c['id']);
     $t('webhook przed synchronizacją: 1 bon, id transakcji uzupełnione', count($b) === 1 && $b[0]['easytools_transaction_id'] === $c['transakcja'] && $b[0]['dla'] === 'Mama');
 
+    // 2026-11-25: webhook_tryb log+bon – zakup jak prawdziwy z 25.11 00:29 (zamówienie a0a30770…): single_product_bought,
+    // 4 s później product_assigned, 3 s później synchronizacja ze strony /bony/dziekujemy. Payload bez custom_fields (tak przyszedł),
+    // kwota w zł, price_id ze Stripe, price_custom_id bon-200, kod rabatowy, próg 0 (testy). Wynik: 1 bon, 1 mail, transakcja z API.
+    $kLB = array_replace($k, ['webhook_tryb' => 'log+bon', 'prog_wstrzymania' => 0, 'ceny' => $k['ceny'] + ['price_1UeMn8DJkxNsH4K3wXFIBCh4' => 200]]);
+    $ksLB = array_replace($ks, ['webhook_tryb' => 'log+bon', 'prog_wstrzymania' => 0]);
+    [, $zaleglosci] = bon_synchronizuj($ksLB, $pdo, 'cron'); // zaległe wysyłki z testów wyżej – żeby liczyć tylko maile tego scenariusza
+    foreach ($zaleglosci as $z) $z();
+    $prawdziwy = $dodaj(['amount' => 800, 'line_items' => [['variant_name' => 'Bon 200 zł', 'amount' => 800, 'amount_total' => 800]]]);
+    $payloadLB = bon_test_payload(['order_uuid' => $prawdziwy['id'], 'order_id' => 1604262, 'amount_paid' => 8, 'order_amount' => 8,
+        'price_id' => 'price_1UeMn8DJkxNsH4K3wXFIBCh4', 'price_custom_id' => 'bon-200', 'promo_code' => 'TEST966', 'customer_email' => 'sync@example.com']);
+    unset($payloadLB['custom_fields']);
+    $mailiPrzed = is_file($jsonl) ? count(file($jsonl)) : 0;
+    $logPrzed = count(glob($k['_katalog'] . '/bony-webhook-log/*') ?: []) ? strlen(implode('', array_map('file_get_contents', glob($k['_katalog'] . '/bony-webhook-log/*')))) : 0;
+    [$h1, $o1, $zad1] = bon_test_webhook($kLB, $pdo, $payloadLB);
+    $b = bon_test_bony($k, $pdo, $prawdziwy['id']);
+    $t('log+bon: webhook tworzy bon od razu (200 zł nominał, zapłacono 8 zł, kod rabatowy, bez Dla/Od, bez transakcji)', $h1 === 200
+        && ($o1['bonow'] ?? 0) === 1 && count($b) === 1 && $b[0]['status'] === 'valid' && $b[0]['initial_pln'] == 200 && $b[0]['paid_pln'] == 8
+        && $b[0]['promo_code'] === 'TEST966' && $b[0]['dla'] === null && $b[0]['easytools_transaction_id'] === null && $zad1, json_encode([$o1, $b[0] ?? null]));
+    $logPo = strlen(implode('', array_map('file_get_contents', glob($k['_katalog'] . '/bony-webhook-log/*') ?: [])));
+    $t('log+bon: surowy webhook nadal trafia do logu', $logPo > $logPrzed);
+    [$h2, $o2, $zad2] = bon_test_webhook($kLB, $pdo, array_replace($payloadLB, ['event' => 'product_assigned', 'amount_paid' => null]));
+    $t('log+bon: product_assigned pominięty (bez bonu i bez maila)', $h2 === 200 && ($o2['pominieto'] ?? '') === 'product_assigned' && !$zad2 && $ile($prawdziwy['id']) === 1);
+    $w1 = $zad1();
+    [, $zadS] = bon_synchronizuj($ksLB, $pdo, 'cron');
+    $wS = array_map(static fn($z) => $z(), $zadS);
+    $b = bon_test_bony($k, $pdo, $prawdziwy['id']);
+    $mailiPo = is_file($jsonl) ? count(file($jsonl)) : 0;
+    $t('log+bon: webhook + synchronizacja tego samego zamówienia → 1 bon, 1 mail, transakcja uzupełniona z API',
+        count($b) === 1 && ($w1['wyslane'] ?? 0) === 1 && array_sum(array_column($wS, 'wyslane')) === 0 && $mailiPo === $mailiPrzed + 1
+        && $b[0]['easytools_transaction_id'] === $prawdziwy['transakcja'] && $b[0]['mail_wyslany_at'] !== null, json_encode([$w1, $wS, $mailiPo - $mailiPrzed]));
+    // 2026-11-25: webhook_tryb dzwonek (Bartek 24.11 23:52 pkt 3) – podpisany zakup uruchamia synchronizację z API; treść
+    // webhooka (kwota, e-mail, wariant, kod) NIE trafia do bonu; niepodpisany / zły podpis / inne zdarzenie → nic
+    $kD = array_replace($ks, ['webhook_tryb' => 'dzwonek', 'prog_wstrzymania' => 0]);
+    $dz = $dodaj(['amount' => 800, 'line_items' => [['variant_name' => 'Bon 200 zł', 'amount' => 800, 'amount_total' => 800]]]);
+    $payloadD = bon_test_payload(['order_uuid' => $dz['id'], 'amount_paid' => 999, 'customer_email' => 'inny@example.com',
+        'price_custom_id' => 'bon-500', 'promo_code' => 'Z-WEBHOOKA']);
+    unset($payloadD['custom_fields']);
+    $mailiPrzed = is_file($jsonl) ? count(file($jsonl)) : 0;
+    [$h, $o, $zad] = bon_test_webhook($kD, $pdo, $payloadD, 'zly-podpis');
+    $t('dzwonek: zły podpis → 200, podpis_ok false, bez synchronizacji i bez bonu', $h === 200 && ($o['podpis_ok'] ?? null) === false && !$zad && $ile($dz['id']) === 0, json_encode($o));
+    $raw = json_encode($payloadD);
+    [$h, $o, $zad] = bon_obsluz_webhook($kD, $raw, [], static fn() => $pdo);
+    $t('dzwonek: bez podpisu → 200, bez synchronizacji i bez bonu', $h === 200 && ($o['podpis_ok'] ?? null) === false && !$zad && $ile($dz['id']) === 0, json_encode($o));
+    [$h, $o, $zad] = bon_test_webhook($kD, $pdo, array_replace($payloadD, ['event' => 'product_assigned']));
+    $t('dzwonek: podpisany product_assigned → pominięty, bez synchronizacji', $h === 200 && ($o['pominieto'] ?? '') === 'product_assigned' && !$zad, json_encode($o));
+    $wywolania = [];
+    [$h, $o, $zad] = bon_test_webhook($kD, $pdo, $payloadD);
+    $t('dzwonek: podpisany zakup → 200 od razu, synchronizacja dopiero po odpowiedzi', $h === 200 && ($o['dzwonek'] ?? false) === true && $zad && $ile($dz['id']) === 0 && !$wywolania, json_encode($o));
+    $wD = $zad();
+    $listy = count(array_filter($wywolania, static fn($w) => $w === 'GET /orders'));
+    $b = bon_test_bony($k, $pdo, $dz['id']);
+    $t('dzwonek: synchronizacja wywołana raz, bon z danych API (200 zł, 8 zł, e-mail i wariant z API, bez kodu z webhooka), 1 mail',
+        $listy === 1 && count($b) === 1 && $b[0]['initial_pln'] == 200 && $b[0]['paid_pln'] == 8 && $b[0]['buyer_email'] === 'sync@example.com'
+        && $b[0]['price_id'] === 'Bon 200 zł' && $b[0]['promo_code'] === null && $b[0]['easytools_transaction_id'] === $dz['transakcja']
+        && ($wD['bonow_zamowienia'] ?? 0) === 1 && (is_file($jsonl) ? count(file($jsonl)) : 0) === $mailiPrzed + 1, json_encode([$wD, $b[0] ?? null]));
+    // dwa takie same dzwonki (Easytools ponawia) – drugi nic nie dokłada (na MySQL dodatkowo GET_LOCK synchronizacji i wysyłki)
+    [, , $zad1] = bon_test_webhook($kD, $pdo, $payloadD);
+    [, , $zad2] = bon_test_webhook($kD, $pdo, $payloadD);
+    $zad1();
+    $w2 = $zad2();
+    $t('dzwonek: dwa takie same → jeden komplet bonów, bez drugiego maila', $ile($dz['id']) === 1 && ($w2['nowe'] ?? 1) === 0
+        && (is_file($jsonl) ? count(file($jsonl)) : 0) === $mailiPrzed + 1, json_encode($w2));
+    // dzwonek, gdy API jeszcze nie ma zamówienia (np. status nie „completed”) – bez błędu, bonow_zamowienia 0; cron/strona dokończą
+    $brak = bon_test_uuid();
+    [, , $zadB] = bon_test_webhook($kD, $pdo, bon_test_payload(['order_uuid' => $brak]));
+    $wB = $zadB();
+    $t('dzwonek: zamówienia jeszcze nie ma w API → bez błędu, 0 bonów (dokończy strona albo cron)', ($wB['bonow_zamowienia'] ?? null) === 0 && $ile($brak) === 0, json_encode($wB));
+
+    // odwrotna kolejność (cron/strona przed webhookiem, np. webhook spóźniony) – też jeden mail
+    $odwrotny = $dodaj();
+    $mailiPrzed = is_file($jsonl) ? count(file($jsonl)) : 0;
+    [, $zadS] = bon_synchronizuj($ksLB, $pdo, 'cron');
+    foreach ($zadS as $z) $z();
+    [, , $zadW] = bon_test_webhook($kLB, $pdo, bon_test_payload(['order_uuid' => $odwrotny['id'], 'customer_email' => 'sync@example.com']));
+    $wW = $zadW ? $zadW() : [];
+    $t('log+bon: synchronizacja przed webhookiem → 1 bon, 1 mail, Dla/Od dopisane bez drugiego maila',
+        $ile($odwrotny['id']) === 1 && ($wW['wyslane'] ?? 0) === 0 && (is_file($jsonl) ? count(file($jsonl)) : 0) === $mailiPrzed + 1
+        && (bon_test_bony($k, $pdo, $odwrotny['id'])[0]['dla'] ?? null) === 'Mama', json_encode($wW));
+
     // inne produkty i zamówienia sprzed sync_od pomijane
     $testowy = $dodaj(['_produkt' => bon_test_uuid(), 'product_name' => 'TEST webhook – nie kupować']);
     $stare = $dodaj(['created_at' => $teraz->modify('-2 days')->format('c')]);

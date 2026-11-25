@@ -235,12 +235,17 @@ function bon_pdf_wycinanka(TCPDF $pdf, array $u, string $tlo, string $tytul, str
     $pdf->setFontSpacing(0);
 
     // Dla / Od / Kwota: tekst NAD linią (dół 1,2 mm nad nią); Dla/Od od lewej, kwota na środku linii; puste = do wpisania ręcznie
-    $pdf->SetFont('lato', '', $pt(18));
+    // kwota odręczną czcionką Kalam (OFL, decyzja Bartka 24.11 23:50, pliki z scripts/pdf-czcionka.php); Dla/Od zostają Lato
+    // Kalam ma głębokie zejścia (Descent 531/1000, Lato 213): wyrównanie 'B' stawia dół zejść na dole komórki, więc kwotę
+    // przesuwamy w dół o różnicę zejść – linia bazowa kwoty wypada tam, gdzie Dla/Od w Lato (1,2 mm nad linią)
+    $kalamPx = 26;
+    $kalamDol = (0.531 * $kalamPx - 0.213 * 18) * $s + 1.0; // +1 mm: na wydruku cyfry Kalamu i tak wyglądały na zawieszone (zrzut 300 dpi)
     foreach ([$bon['dla'] ?? '', $bon['od'] ?? '', $kwota] as $i => $tekst) {
         if ($tekst === '' || $tekst === null) continue;
+        $i === 2 ? $pdf->SetFont('kalam', '', $pt($kalamPx)) : $pdf->SetFont('lato', '', $pt(18));
         $l = $t['linie'][$i];
         $wys = 7.0;
-        $pdf->SetXY($X($l['x'] + 4), $Y($l['y']) - 1.2 - $wys);
+        $pdf->SetXY($X($l['x'] + 4), $Y($l['y']) - 1.2 - $wys + ($i === 2 ? $kalamDol : 0));
         $pdf->Cell(($l['w'] - 8) * $s, $wys, (string)$tekst, 0, 0, $i === 2 ? 'C' : 'L', false, '', 1, false, 'T', 'B'); // stretch 1 = zmieść długie imię
     }
 

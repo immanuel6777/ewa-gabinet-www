@@ -269,7 +269,7 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $b = bon_test_bony($k, $pdo, $p['order_id']);
     $t('mail: 1 wiadomość do kupującego, 1 PDF, nadawca z konfigu', ($w['wyslane'] ?? 0) === 1 && count($m) === 1 && $m[0]['To'][0]['Email'] === 'kupujacy@example.com'
         && count($m[0]['Attachments']) === 1 && $m[0]['Attachments'][0]['pdf'] === true && $m[0]['From']['Email'] === 'powiadomienia@ewa-gabinet.pl', json_encode($w));
-    $t('mail: treść z numerem bonu, bez wykrzykników', $m && $b && str_contains($m[0]['TextPart'], $b[0]['code']) && !str_contains($m[0]['TextPart'] . strip_tags($m[0]['HTMLPart']), '!'));
+    $t('mail: treść z numerem bonu, bez wykrzykników', $m && $b && str_contains($m[0]['TextPart'], $b[0]['code']) && !str_contains($m[0]['TextPart'] . strip_tags(preg_replace('#<style.*?</style>#s', '', $m[0]['HTMLPart']) ?? ''), '!')); // CSS (!important) to nie tekst
     $t('mail: mail_wyslany_at ustawione', $b && $b[0]['mail_wyslany_at'] !== null);
     $t('mail: telefon, adres i ważność z kontakt.json i konfigu (nie na sztywno)', $m && str_contains($m[0]['TextPart'], '600 000 001') && str_contains($m[0]['TextPart'], 'ul. Testowa 1')
         && str_contains($m[0]['TextPart'], 'ważny ' . bon_miesiace_tekst((int)$k['waznosc_miesiecy'])));
@@ -506,6 +506,12 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $sk = bon_powrot_skrot('sprawdzenie-wrzuty');
     $t('powrót z kasy: skrót przeżywa ukrywanie w podglądzie logu', $sk === '3f95-6e56-2653-5769' && bon_log_ukryj(['skroty' => ['x' => $sk]])['skroty']['x'] === $sk, $sk);
     $t('podgląd: kod bonu zamaskowany', bon_kod_maska('EWA-7KQ4-M9TX') === 'EWA-****-M9TX');
+    // 2026-11-25: alert A1 zapisał pełne numery w liście „bony” – odczyt maskuje każdy pełny numer, UUID i skróty zostają
+    $a1 = bon_log_ukryj(['typ' => 'a1-zwrot-spoza-panelu', 'transakcja' => '6a8c6d15-73cd-47d8-9957-2299de87d67d', 'bony' => ['EWA-X34V-9PHZ', 'EWA-****-AB12'],
+        'opis' => 'bon EWA-7KQ4-M9TX zwrócony']);
+    $t('podgląd: pełny numer bonu w liście i w tekście zamaskowany, UUID transakcji jawny',
+        $a1['bony'] === ['EWA-****-9PHZ', 'EWA-****-AB12'] && $a1['opis'] === 'bon EWA-****-M9TX zwrócony'
+        && $a1['transakcja'] === '6a8c6d15-73cd-47d8-9957-2299de87d67d', json_encode($a1));
     $mj = bon_log_ukryj(['typ' => 'mail', 'buyer_email' => 'jan@example.com', 'mailjet' => [['http' => 200, 'status' => 'success', 'id' => [1152921520000000001], 'proby' => 1]]]);
     $t('podgląd: odpowiedź Mailjeta (HTTP, Status, MessageID, próby) jawna, e-mail nadal ukryty',
         ($mj['mailjet'][0]['http'] ?? null) === 200 && ($mj['mailjet'][0]['status'] ?? null) === 'success'

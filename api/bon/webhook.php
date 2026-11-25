@@ -1,7 +1,8 @@
 <?php
 // Webhook Easytools po zakupie bonu → bon w MySQL → PDF mailem (plan/BONY-PLAN-TECHNICZNY.md, etapy 1–2: 2026-11-21).
 // Adres w Easytools (dokładnie, z www i .php – inaczej 301 i POST przepada): https://www.ewa-gabinet.pl/api/bon/webhook.php
-// Logika w lib/bon.php (bon_obsluz_webhook) i lib/mail.php (PDF + Mailjet), tu tylko HTTP. Tryb: webhook_tryb = log | log+bon | bon.
+// Logika w lib/bon.php (bon_obsluz_webhook) i lib/mail.php (PDF + Mailjet), tu tylko HTTP. Tryb: webhook_tryb = log | dzwonek | log+bon | bon.
+// dzwonek (od 2026-11-25): podpisany zakup → synchronizacja z API po odpowiedzi (bon z danych API, nie z treści webhooka).
 // Kolejność: zapis bonu → odpowiedź 200 dla sklepu → (po zamknięciu połączenia) PDF i mail. Sklep nie czeka na wysyłkę.
 // Gdy test z panelu dostaje 403, a w logu nic nie ma – pierwszy podejrzany: zapora aplikacyjna OVH (ModSecurity).
 
@@ -42,7 +43,9 @@ if ($poOdpowiedzi) {
     ignore_user_abort(true);
     @set_time_limit(120);
     try {
-        bon_zdarzenie($k, 'mail', ['po' => 'webhook'] + $poOdpowiedzi());
+        $wynik = $poOdpowiedzi();
+        // dzwonek: synchronizacja z API (maile loguje sama); log+bon / bon: wysyłka PDF bonu z webhooka
+        bon_zdarzenie($k, !empty($wynik['dzwonek']) ? 'dzwonek' : 'mail', ['po' => 'webhook'] + $wynik);
     } catch (Throwable $e) {
         error_log('bony/webhook (wysyłka): ' . $e->getMessage());
         bon_zdarzenie($k, 'blad', ['plik' => 'webhook (wysyłka)'] + bon_opis_bledu($e));

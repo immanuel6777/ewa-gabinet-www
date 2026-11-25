@@ -313,6 +313,9 @@ function bon_testy_zwroty(array $k, PDO $pdo): array {
     $nowe = substr($powiadomienia(), $przed);
     $t('REVIEW R3 (A1): transakcja zwrócona w Easytools, bon ważny → alert z numerem bonu i linkiem; bon bez zwrotu bez alertu',
         str_contains($nowe, 'spoza panelu') && str_contains($nowe, $kodA1) && !str_contains($nowe, $zA1['bony'][0]['code']), json_encode([$r1, $nowe], JSON_UNESCAPED_UNICODE));
+    // 2026-11-25: w dzienniku zdarzeń numer zamaskowany (pełny tylko w powiadomieniu do gabinetu)
+    $dziennikA1 = implode('', array_map('file_get_contents', glob($kA1['_katalog'] . '/bony-zdarzenia/*.log') ?: []));
+    $t('REVIEW R3 (A1): w dzienniku zdarzeń numer bonu zamaskowany', str_contains($dziennikA1, bon_kod_maska($kodA1)) && !str_contains($dziennikA1, $kodA1), $dziennikA1);
     $przed = strlen($powiadomienia());
     bon_zwroty_a1($kA1, $pdo, null, 100000);
     $t('REVIEW R3 (A1): drugi przebieg crona → bez drugiego alertu dla tej samej transakcji', !str_contains(substr($powiadomienia(), $przed), $kodA1));

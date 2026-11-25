@@ -325,21 +325,43 @@ function bon_tekst(?string $v, int $max): string {
  * Cały dokument HTML maila: nagłówek, treść (gotowy HTML), przyciski [[tekst, adres], …] i stopka.
  * $wewnetrzny – mail do gabinetu (bony@, alerty@): stopka „System bonów”, bez pozdrowień dla klienta.
  */
+// 2026-11-25 (wpis 01:12 pkt 3, propozycja frontu 23:30 przyjęta 1:1): wygląd jak mail-bon.tpl – tło #EAF2EE, biała karta 600 px
+// z promieniem 24 px (telefon: 100%, odstępy 22/18), głowa: logo 44 px + „EWA” / „Gabinet podologiczny”, tytuł 30 px waga 300,
+// tekst 17 px/1.6 #2E5C57, przycisk-pigułka #236E66, podpis, pod kartą adres gabinetu. Układ tabelami (Outlook).
+const BON_MAIL_FONT = "Lato, 'Segoe UI', Helvetica, Arial, sans-serif";
+const BON_MAIL_AKAPIT = 'margin:0 0 14px;font-size:17px;line-height:1.6;color:#2E5C57';
+
 function bon_mail_szablon(string $naglowek, string $trescHtml, array $przyciski = [], bool $wewnetrzny = false): string {
     $e = static fn(string $s) => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+    $f = BON_MAIL_FONT;
     $guziki = '';
     foreach ($przyciski as [$napis, $adres]) {
-        $guziki .= '<p style="margin:22px 0"><a href="' . $e((string)$adres) . '" style="display:inline-block;background:#236E66;color:#ffffff;'
-            . 'text-decoration:none;padding:13px 24px;border-radius:999px;font-weight:bold;font-size:17px">' . $e((string)$napis) . '</a></p>';
+        $guziki .= '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 22px"><tr><td style="border-radius:999px;background:#236E66">'
+            . '<a href="' . $e((string)$adres) . '" style="display:inline-block;padding:13px 24px;font-family:' . $e($f) . ';font-size:17px;font-weight:700;'
+            . 'color:#FFFFFF;text-decoration:none;border-radius:999px">' . $e((string)$napis) . '</a></td></tr></table>';
     }
-    $stopka = $wewnetrzny
-        ? '<p style="margin-top:28px;color:#3E6863;font-size:14px">System bonów · ewa-gabinet.pl</p>'
-        : '<p>Pozdrawiamy serdecznie<br>EWA Gabinet podologiczny<br><a href="https://www.ewa-gabinet.pl" style="color:#17504B">www.ewa-gabinet.pl</a></p>';
-    return '<!doctype html><html lang="pl"><body style="margin:0;background:#FBF7F4;font-family:Lato,Arial,sans-serif;color:#17504B;font-size:17px;line-height:1.55">'
-        . '<div style="max-width:560px;margin:0 auto;padding:28px 22px;background:#ffffff">'
-        . '<p style="font-size:24px;font-weight:300;margin:0 0 16px">' . $e($naglowek) . '</p>'
-        . $trescHtml . $guziki . $stopka
-        . '</div></body></html>';
+    $podpis = $wewnetrzny
+        ? '<p style="margin:22px 0 0;font-size:14px;line-height:1.5;color:#3E6863">System bonów · ewa-gabinet.pl</p>'
+        : '<p style="margin:8px 0 0;font-size:17px;line-height:1.6;color:#17504B">Pozdrawiamy serdecznie<br>EWA Gabinet podologiczny<br>'
+          . '<a href="https://www.ewa-gabinet.pl" style="color:#17504B;text-decoration:underline">www.ewa-gabinet.pl</a></p>';
+    $podKarta = $wewnetrzny ? '' : '<p style="margin:14px 0 0;font-family:' . $e($f) . ';font-size:13px;line-height:1.5;color:#3E6863">'
+        . 'EWA Gabinet Kosmetyczno-Podologiczny, ul. ks. Piotra Skargi 72, 95-200 Pabianice</p>';
+    return '<!doctype html><html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+        . '<meta name="x-apple-disable-message-reformatting"><meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">'
+        . '<title>' . $e($naglowek) . '</title><style>@media (max-width: 620px) { .kontener { width: 100% !important; } .wnetrze { padding: 22px 18px !important; }'
+        . ' .tytul { font-size: 26px !important; } } a { color: #17504B; }</style></head>'
+        . '<body style="margin:0;padding:0;background:#EAF2EE;-webkit-text-size-adjust:100%">'
+        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#EAF2EE"><tr><td align="center" style="padding:24px 12px">'
+        . '<table role="presentation" class="kontener" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background:#FFFFFF;border-radius:24px">'
+        . '<tr><td class="wnetrze" style="padding:28px 32px;font-family:' . $e($f) . ';color:#17504B;font-size:17px;line-height:1.6">'
+        . '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px"><tr>'
+        . '<td style="padding:0 12px 0 0;vertical-align:middle"><img src="https://www.ewa-gabinet.pl/img/gabinet/logo.png" width="44" height="44" alt="EWA" style="display:block;width:44px;height:44px;border:0"></td>'
+        . '<td style="vertical-align:middle;font-family:' . $e($f) . ';color:#17504B"><span style="font-size:19px;font-weight:700;letter-spacing:.04em">EWA</span><br>'
+        . '<span style="font-size:14px;color:#3E6863">Gabinet podologiczny</span></td></tr></table>'
+        . '<h1 class="tytul" style="margin:0 0 14px;font-size:30px;line-height:1.2;font-weight:300;color:#17504B">' . $e($naglowek) . '</h1>'
+        . $trescHtml . $guziki . $podpis
+        . '</td></tr></table>' . $podKarta
+        . '</td></tr></table></body></html>';
 }
 
 /**
@@ -352,8 +374,10 @@ function bon_mail_tekst_na_html(string $tekst): string {
     $html = '';
     foreach ($akapity as $a) {
         $a = htmlspecialchars($a, ENT_QUOTES, 'UTF-8');
-        $a = preg_replace('#https://[^\s<]+#', '<a href="$0" style="color:#17504B">$0</a>', $a) ?? $a;
-        $html .= '<p>' . nl2br($a, false) . '</p>';
+        $a = preg_replace('#https://[^\s<]+#', '<a href="$0" style="color:#17504B;text-decoration:underline">$0</a>', $a) ?? $a;
+        // numer bonu w jednej linii (na telefonie łamał się na myślniku); poza adresami (tam numer jest w href i tekście linku)
+        $a = preg_replace('#(?<![=?/])\b[A-Z]{2,10}-[A-Z0-9]{4}-[A-Z0-9]{4}\b(?![^<]*</a>)#', '<span style="white-space:nowrap">$0</span>', $a) ?? $a;
+        $html .= '<p style="' . BON_MAIL_AKAPIT . '">' . nl2br($a, false) . '</p>';
     }
     return $html;
 }
@@ -536,9 +560,21 @@ function bon_obsluz_webhook(array $k, string $raw, array $naglowki, ?callable $p
     $podpis = (string)($naglowki['x-webhook-signature'] ?? '');
     $podpisOk = bon_podpis_ok($k, $raw, $podpis);
 
-    if ($tryb === 'log' || $tryb === 'log+bon') bon_log_webhooka($k, $raw, $naglowki, $podpisOk);
+    if ($tryb === 'log' || $tryb === 'log+bon' || $tryb === 'dzwonek') bon_log_webhooka($k, $raw, $naglowki, $podpisOk);
     // tryb log: nic nie tworzymy, zawsze 200 (żeby sklep nie ponawiał i nie wyłączył webhooka w trakcie testu)
     if ($tryb === 'log') return [200, ['ok' => true, 'tryb' => 'log', 'podpis_ok' => $podpisOk]];
+    // tryb dzwonek (Bartek 24.11 23:52, wpis 01:12): podpisany zakup = sygnał „sprawdź teraz”. Po odpowiedzi 200 uruchamia
+    // bon_synchronizuj (ta sama ścieżka co /bony/dziekujemy i cron: dane bonu z API, GET_LOCK, idempotentnie). Treści webhooka
+    // NIE używamy do bonu. Bez podpisu, zły podpis, inne zdarzenie → tylko wpis w logu, 200 (sklep nie ponawia, nie wyłącza webhooka).
+    if ($tryb === 'dzwonek') {
+        $odp = ['ok' => true, 'tryb' => 'dzwonek', 'podpis_ok' => $podpisOk];
+        if (!$podpisOk) return [200, $odp];
+        $d = json_decode($raw, true);
+        $zdarzenie = is_array($d) ? (string)($d['event'] ?? '') : '';
+        if ($zdarzenie !== 'single_product_bought' || ($d['success'] ?? null) !== true) return [200, $odp + ['pominieto' => $zdarzenie ?: 'zły JSON']];
+        $zam = is_string($d['order_uuid'] ?? null) && preg_match('/^[0-9a-f-]{36}$/i', $d['order_uuid']) ? strtolower($d['order_uuid']) : null;
+        return [200, $odp + ['dzwonek' => true], static fn() => bon_webhook_dzwonek($k, $pdoFabryka, $zam)];
+    }
     if ($tryb !== 'log+bon' && $tryb !== 'bon') return [500, ['ok' => false, 'blad' => 'nieznany webhook_tryb']];
 
     if (!$podpisOk) return [401, ['ok' => false, 'blad' => 'zły podpis']];
@@ -582,6 +618,27 @@ function bon_obsluz_webhook(array $k, string $raw, array $naglowki, ?callable $p
         'od' => bon_pole_wlasne($d['custom_fields'] ?? null, (array)$k['pole_od']),
         'zaplacono_at' => $d['timestamp'] ?? null, // chwila zdarzenia w Easytools (webhook przychodzi zaraz po zapłacie)
     ]);
+}
+
+/**
+ * Dzwonek (po odpowiedzi 200 dla sklepu): synchronizacja z API jak z crona, źródło 'webhook' (bez odstępu strony – podpis
+ * wystarcza za ochronę). Zwraca podsumowanie do dziennika (zdarzenie „dzwonek”); maile loguje bon_synchronizuj_wyslij.
+ * $zam: order_uuid z webhooka – tylko do sprawdzenia, czy po synchronizacji zamówienie ma bony (np. API jeszcze nie „completed”).
+ */
+function bon_webhook_dzwonek(array $k, ?callable $pdoFabryka, ?string $zam): array {
+    require_once __DIR__ . '/easytools.php';
+    $pdo = $pdoFabryka ? $pdoFabryka($k) : bon_pdo($k);
+    [$raport, $zadania] = bon_synchronizuj($k, $pdo, 'webhook');
+    bon_zdarzenie($k, 'synchronizacja', $raport);
+    bon_synchronizuj_wyslij($k, $zadania, 'webhook');
+    $bonow = null;
+    if ($zam !== null) {
+        $st = $pdo->prepare('SELECT COUNT(*) FROM ' . bon_tabela($k, 'vouchers') . ' WHERE easytools_order_id = ?');
+        $st->execute([$zam]);
+        $bonow = (int)$st->fetchColumn();
+    }
+    return ['dzwonek' => true, 'zamowienie' => $zam, 'bonow_zamowienia' => $bonow, 'nowe' => count((array)($raport['nowe'] ?? [])),
+        'do_wysylki' => count($zadania), 'pominieto' => $raport['pominieto'] ?? null];
 }
 
 /**

@@ -103,7 +103,8 @@ function bon_panel_zaloguj(array $k, PDO $pdo, string $login, string $haslo, boo
         ->execute([hash('sha256', $token), $login, $csrf, $teraz->format('Y-m-d H:i:s'), $wygasa->format('Y-m-d H:i:s')]);
     if (random_int(1, 20) === 1) $pdo->prepare("DELETE FROM $tabSesje WHERE expires_at < ?")->execute([$teraz->format('Y-m-d H:i:s')]);
 
-    return [200, ['ok' => true, 'zalogowany' => true, 'login' => $login, 'imie' => (string)($konto['imie'] ?? $login), 'rola' => bon_panel_rola($konto), 'csrf' => $csrf],
+    return [200, ['ok' => true, 'zalogowany' => true, 'login' => $login, 'imie' => (string)($konto['imie'] ?? $login), 'rola' => bon_panel_rola($konto),
+        'rezygnacje' => bon_panel_moze_rezygnacje($konto), 'csrf' => $csrf], // tryb kasy: przełącznik Kasa | Biuro dla admina i Ewy (jak GET sesja.php)
         ['wartosc' => $token, 'wygasa' => $zapamietaj ? $wygasa->getTimestamp() : 0]];
 }
 
@@ -212,6 +213,9 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
     $odp = [
         'ok' => true,
         'kod' => $bon['code'],
+        // tryb kasy (wpis 01:24): nazwa kamienia i kolor bonu na karcie kasy – te same co w wynikach wyszukiwania
+        'nazwa' => bon_nazwa($k, $bon),
+        'kolor' => match (bon_rodzaj($k, $bon)) { 200 => 'zielen', 300 => 'czerwony', 500 => 'zloty', default => 'granat' },
         'status' => bon_status_efektywny($bon, $teraz),
         'saldo' => bon_zl((int)bon_grosze($bon['balance_pln'])),
         'wartosc' => bon_zl((int)bon_grosze($bon['initial_pln'])),

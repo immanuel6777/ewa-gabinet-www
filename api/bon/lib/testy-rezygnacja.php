@@ -165,7 +165,9 @@ function bon_testy_szablon_maili(array $k, PDO $pdo, callable $nowy, callable $m
     $hK = (string)($doK['HTMLPart'] ?? '');
     $hO = (string)($doO['HTMLPart'] ?? '');
     [, , $hBon] = bon_mail_tresc($k, [$b]);
-    $wspolne = static fn(string $h) => str_contains($h, 'max-width:560px') && str_contains($h, 'background:#FBF7F4') && str_contains($h, 'font-size:24px;font-weight:300');
+    // 2026-11-25: wygląd jak mail-bon.tpl (tło #EAF2EE, karta 600 px z promieniem 24, logo, tytuł 30 px waga 300)
+    $wspolne = static fn(string $h) => str_contains($h, 'background:#EAF2EE') && str_contains($h, 'width:600px;max-width:600px;background:#FFFFFF;border-radius:24px')
+        && str_contains($h, 'img/gabinet/logo.png') && str_contains($h, 'font-size:30px;line-height:1.2;font-weight:300');
     $t('szablon: mail z bonem, potwierdzenie rezygnacji i mail obsługi mają ten sam wygląd (tło, szerokość, nagłówek)',
         $wspolne($hBon) && $wspolne($hK) && $wspolne($hO), json_encode([strlen($hBon), strlen($hK), strlen($hO)]));
     $t('potwierdzenie: przycisk „Zmieniam zdanie / to nie ja” = mailto na bony@ z tematem i numerem; tekst z adresem i telefonem; podpis gabinetu',

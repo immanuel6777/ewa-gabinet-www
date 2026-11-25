@@ -17,8 +17,10 @@ return [
     'sync_dni' => 7,
     'sync_odstep_s' => 20,
 
-    // --- webhook (zostaje 'log', bony tworzy synchronizacja; zob. plan/konfig-bony.przyklad.php) ---
-    'webhook_tryb' => 'log',
+    // --- webhook (2026-11-25: 'dzwonek' – prawdziwy zakup 25.11 00:29 przyszedł z podpis_ok = true, order_uuid = id zamówienia
+    //     z API; podpisany zakup od razu uruchamia synchronizację z API, bon z danych API (decyzja Bartka 24.11 23:52);
+    //     'log' = tylko zapis, wycofanie bez zmiany kodu) ---
+    'webhook_tryb' => 'dzwonek',
     'kwota_jednostka' => 'pln',
 
     // --- warianty i ceny → nominał; nieznany = bon wstrzymany ---
