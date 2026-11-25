@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="/_astro/sciezka-bonow.B4U7Ywh7.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.DD0GHgxN.css">
+<link rel="stylesheet" href="/_astro/panel-bonow.Dsh19u1L.css">
 <link rel="stylesheet" href="/_astro/Baza.BuoUc1Kt.css">
 <link rel="stylesheet" href="/_astro/KartaBonu.DVx0KRYz.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
@@ -157,8 +157,18 @@
       <!-- wpis 01:34: osobne pola – numer z pełną maską jak na /bon (EWA- od razu, myślniki same, przycisk aktywny przy pełnym
            numerze) i e-mail / nr zamówienia bez maski (w Kasie pod linkiem, w Biurze widoczne pod numerem) -->
       <form class="szukaj formularz" data-p-szukaj data-astro-cid-nl2nwxtk>
-        <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" data-astro-cid-nl2nwxtk>Numer bonu</span>
-          <input name="nr" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="EWA-XXXX-XXXX" maxlength="13" required data-astro-cid-nl2nwxtk>
+        <!-- wpisy 14:10/14:40: szablon „EWA – ▢▢▢▢ – ▢▢▢▢” – przedrostek i kreski stałe (rysunek), kratki wypełniają się znakami;
+             jedno przezroczyste pole tekstowe nad szablonem (pisanie, wklejanie, skan) – src/scripts/pole-numeru-panelu.ts -->
+        <label class="pole" data-astro-cid-nl2nwxtk><span class="etykieta" aria-hidden="true" data-astro-cid-nl2nwxtk>Numer bonu</span>
+          <span class="nr-pole" data-p-nr-pole data-astro-cid-nl2nwxtk>
+            <span class="nr-szablon" aria-hidden="true" data-p-nr-kratki data-astro-cid-nl2nwxtk>
+              <span class="nr-stale" data-astro-cid-nl2nwxtk>EWA</span><span class="nr-kreska" data-astro-cid-nl2nwxtk>–</span>
+              <span class="nr-kratka" data-kratka data-astro-cid-nl2nwxtk></span><span class="nr-kratka" data-kratka data-astro-cid-nl2nwxtk></span><span class="nr-kratka" data-kratka data-astro-cid-nl2nwxtk></span><span class="nr-kratka" data-kratka data-astro-cid-nl2nwxtk></span>
+              <span class="nr-kreska" data-astro-cid-nl2nwxtk>–</span>
+              <span class="nr-kratka" data-kratka data-astro-cid-nl2nwxtk></span><span class="nr-kratka" data-kratka data-astro-cid-nl2nwxtk></span><span class="nr-kratka" data-kratka data-astro-cid-nl2nwxtk></span><span class="nr-kratka" data-kratka data-astro-cid-nl2nwxtk></span>
+            </span>
+            <input class="nr-wpis" name="nr" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" aria-label="Numer bonu, zaczyna się od EWA – wpisz 8 znaków" required data-astro-cid-nl2nwxtk>
+          </span>
         </label>
         <button class="przycisk" type="submit" data-p-szukaj-przycisk disabled data-astro-cid-nl2nwxtk>Szukaj</button>
       </form>
@@ -1039,4 +1049,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.C5y9wjwR.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.D1WrQr83.js"></script>

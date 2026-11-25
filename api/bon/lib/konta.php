@@ -77,6 +77,19 @@ function bon_konta_haslo_tymczasowe(int $dl = 12): string {
     return $h;
 }
 
+/**
+ * Blokada na zmianę uprawnień i wyłączanie kont (MySQL GET_LOCK; SQLite w testach – jeden proces): dwa żądania naraz
+ * („admin A degraduje B, B degraduje A”) nie przejdą obu kontroli ostatniego admina (security 25.11, pkt 2).
+ */
+function bon_konta_blokada(array $k, PDO $pdo, bool $zaloz): bool {
+    if ($pdo->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'mysql') return true;
+    $nazwa = 'bon_konta_' . md5(bon_tabela($k, 'voucher_accounts'));
+    if (!$zaloz) { $pdo->prepare('SELECT RELEASE_LOCK(?)')->execute([$nazwa]); return true; }
+    $st = $pdo->prepare('SELECT GET_LOCK(?, 5)');
+    $st->execute([$nazwa]);
+    return (int)$st->fetchColumn() === 1;
+}
+
 /** Ile aktywnych adminów (poza $bez) – ostatniego admina nie da się wyłączyć ani zdegradować. */
 function bon_konta_adminow(array $k, PDO $pdo, ?string $bez = null): int {
     $st = $pdo->prepare('SELECT COUNT(*) FROM ' . bon_tabela($k, 'voucher_accounts') . " WHERE rola = 'admin' AND aktywne = 1 AND login <> ?");
@@ -137,6 +150,12 @@ function bon_panel_konta(array $k, PDO $pdo, array $sesja, array $d, string $tok
 
     if ($akcja === 'zmien-haslo') {
         if (!bon_konta_z_bazy($k)) return $blad(409, 'Hasła są jeszcze w konfiguracji – zmienia je Bartek.');
+        // security 25.11, pkt 1: limit prób jak przy logowaniu – przejęta sesja nie zgadnie obecnego hasła bez końca.
+        // Próba rezerwowana atomowo przed sprawdzeniem (bon_limit_ok), udana zmiana zeruje licznik.
+        $okno = (int)($k['panel_limit_okno_min'] ?? 15) * 60;
+        if (!bon_limit_ok($pdo, $k, 'haslo|' . $ja, 'panel-haslo', 5, $okno)) {
+            return $blad(429, 'Za dużo prób zmiany hasła. Spróbuj ponownie za ' . (int)($k['panel_limit_okno_min'] ?? 15) . ' minut.');
+        }
         $konto = bon_panel_konto($k, $pdo, $ja);
         $nowe = (string)($d['nowe'] ?? '');
         if (!$konto || !password_verify((string)($d['stare'] ?? ''), $konto['haslo'])) return $blad(403, 'Obecne hasło się nie zgadza.');
@@ -144,6 +163,7 @@ function bon_panel_konta(array $k, PDO $pdo, array $sesja, array $d, string $tok
         if (password_verify($nowe, $konto['haslo'])) return $blad(400, 'Nowe hasło musi być inne niż obecne.');
         $pdo->prepare("UPDATE $tab SET haslo_hash = ?, zmiana_wymuszona = 0, haslo_zmienione_at = ? WHERE login = ?")->execute([password_hash($nowe, PASSWORD_DEFAULT), $teraz, $ja]);
         bon_konta_uniewaznij_sesje($k, $pdo, $ja, $token); // inne urządzenia wylogowane, to zostaje zalogowane
+        bon_limit_oddaj($pdo, $k, 'haslo|' . $ja, 'panel-haslo', $okno, true);
         bon_konta_log($k, $pdo, $ja, 'zmiana-hasla', 'własne hasło zmienione, inne urządzenia wylogowane', $ja);
         return [200, ['ok' => true, 'opis' => 'Hasło zmienione. Inne urządzenia zostały wylogowane.']];
     }
@@ -189,16 +209,28 @@ function bon_panel_konta(array $k, PDO $pdo, array $sesja, array $d, string $tok
     }
     if ($akcja === 'rola') {
         if ($login === $ja) return $blad(409, 'Nie zmieniasz roli własnego konta – poproś drugiego admina.');
-        if ($cel['rola'] === 'admin' && $rola !== 'admin' && bon_konta_adminow($k, $pdo, $login) === 0) return $blad(409, 'To ostatni admin – panel zostałby bez administratora.');
-        $pdo->prepare("UPDATE $tab SET rola = ?, rezygnacje = ?, zmieniono_at = ? WHERE login = ?")->execute([$rola, $rezygnacje ? 1 : 0, $teraz, $login]);
+        if (!bon_konta_blokada($k, $pdo, true)) return $blad(409, 'Inna zmiana kont jest w toku – spróbuj za chwilę.');
+        try {
+            $cel = bon_panel_konto($k, $pdo, $login) ?? $cel; // świeży stan pod blokadą
+            if ($cel['rola'] === 'admin' && $rola !== 'admin' && bon_konta_adminow($k, $pdo, $login) === 0) return $blad(409, 'To ostatni admin – panel zostałby bez administratora.');
+            $pdo->prepare("UPDATE $tab SET rola = ?, rezygnacje = ?, zmieniono_at = ? WHERE login = ?")->execute([$rola, $rezygnacje ? 1 : 0, $teraz, $login]);
+        } finally {
+            bon_konta_blokada($k, $pdo, false);
+        }
         bon_konta_log($k, $pdo, $login, 'rola', "{$opisRoli($cel['rola'], $cel['rezygnacje'])} → {$opisRoli($rola, $rezygnacje)}", $ja);
         return [200, ['ok' => true]];
     }
     if ($akcja === 'wylacz' || $akcja === 'wlacz') {
         $wl = $akcja === 'wlacz';
         if (!$wl && $login === $ja) return $blad(409, 'Nie wyłączasz własnego konta.');
-        if (!$wl && $cel['rola'] === 'admin' && bon_konta_adminow($k, $pdo, $login) === 0) return $blad(409, 'To ostatni admin – panel zostałby bez administratora.');
-        $pdo->prepare("UPDATE $tab SET aktywne = ?, zmieniono_at = ? WHERE login = ?")->execute([$wl ? 1 : 0, $teraz, $login]);
+        if (!bon_konta_blokada($k, $pdo, true)) return $blad(409, 'Inna zmiana kont jest w toku – spróbuj za chwilę.');
+        try {
+            $cel = bon_panel_konto($k, $pdo, $login) ?? $cel; // świeży stan pod blokadą
+            if (!$wl && $cel['rola'] === 'admin' && bon_konta_adminow($k, $pdo, $login) === 0) return $blad(409, 'To ostatni admin – panel zostałby bez administratora.');
+            $pdo->prepare("UPDATE $tab SET aktywne = ?, zmieniono_at = ? WHERE login = ?")->execute([$wl ? 1 : 0, $teraz, $login]);
+        } finally {
+            bon_konta_blokada($k, $pdo, false);
+        }
         if (!$wl) bon_konta_uniewaznij_sesje($k, $pdo, $login);
         bon_konta_log($k, $pdo, $login, $wl ? 'wlaczenie' : 'wylaczenie', $wl ? 'konto włączone' : 'konto wyłączone, wszystkie urządzenia wylogowane', $ja);
         return [200, ['ok' => true]];

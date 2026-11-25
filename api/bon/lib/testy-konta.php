@@ -106,6 +106,18 @@ function bon_testy_konta(array $k, PDO $pdo): array {
     $t('ostatni aktywny admin: nie da się go zdegradować (drugi admin wyłączony)', $kodOst === 409 || bon_panel_sesja($kBaza, $pdo, $cAdmin['wartosc']) === null);
     bon_panel_konta($kBaza, $pdo, $sBA, ['akcja' => 'wlacz', 'login' => 'bartek'], $cBA['wartosc']);
 
+    // security 25.11 pkt 1: limit prób zmiany hasła (5 w oknie) – szósta próba 429, nawet z dobrym hasłem
+    $pdo->exec('DELETE FROM ' . bon_tabela($k, 'voucher_verify_limit'));
+    $cL = $loguj($kBaza, 'beata', 'nowe-haslo-beaty', false, '203.0.113.' . random_int(10, 250))[2];
+    $sL = bon_panel_sesja($kBaza, $pdo, $cL['wartosc']);
+    $kody = [];
+    for ($i = 0; $i < 5; $i++) $kody[] = bon_panel_konta($kBaza, $pdo, $sL, ['akcja' => 'zmien-haslo', 'stare' => 'zgaduje-' . $i, 'nowe' => 'cokolwiek-123'], $cL['wartosc'])[0];
+    [$kod6] = bon_panel_konta($kBaza, $pdo, $sL, ['akcja' => 'zmien-haslo', 'stare' => 'nowe-haslo-beaty', 'nowe' => 'jeszcze-inne-1'], $cL['wartosc']);
+    $t('zmiana hasła: 5 złych prób (403), szósta 429 nawet z dobrym hasłem', $kody === [403, 403, 403, 403, 403] && $kod6 === 429, json_encode([$kody, $kod6]));
+    $pdo->exec('DELETE FROM ' . bon_tabela($k, 'voucher_verify_limit'));
+    [$kodOk] = bon_panel_konta($kBaza, $pdo, $sL, ['akcja' => 'zmien-haslo', 'stare' => 'nowe-haslo-beaty', 'nowe' => 'jeszcze-inne-1'], $cL['wartosc']);
+    $t('zmiana hasła: po oknie limitu dobra próba przechodzi', $kodOk === 200);
+
     // historia: wpisy bez haseł
     $hist = json_encode($pdo->query("SELECT * FROM $tabL")->fetchAll(), JSON_UNESCAPED_UNICODE);
     $t('historia kont: dodanie, zmiana hasła, reset, wyloguj wszędzie, wyłączenie, rola – bez haseł i hashy',
@@ -116,14 +128,22 @@ function bon_testy_konta(array $k, PDO $pdo): array {
     // bo zablokowane konto (429) odpowiada przed sprawdzeniem hasła i fałszowałoby pomiar
     $tabLim = bon_tabela($k, 'voucher_verify_limit');
     $pdo->exec("DELETE FROM $tabLim");
-    $czas = static function (string $l) use ($loguj, $kBaza): float {
-        $najlepszy = INF;
-        for ($i = 0; $i < 3; $i++) { $s = hrtime(true); $loguj($kBaza, $l, 'zle-haslo-xyz', false, '203.0.113.' . random_int(10, 250)); $najlepszy = min($najlepszy, (hrtime(true) - $s) / 1e6); }
-        return $najlepszy;
-    };
-    $tZnany = $czas('ewa');
-    $tNieznany = $czas('ktos-nieznany');
-    $t('czas odpowiedzi: nieznany login ≈ znany (bcrypt atrapy, różnica < 50%)', $tNieznany > $tZnany * 0.5 && $tNieznany < $tZnany * 1.5, sprintf('%.1f ms / %.1f ms', $tZnany, $tNieznany));
+    // 2026-11-25: mediana z 5 prób na przemian (znany, nieznany, …) i szeroki margines – raz na kilka przebiegów test padał przy
+    // obciążonym komputerze (na OVH test-ovh.php to współdzielony serwer). Sprawdza to, o co chodzi: nieznany login przechodzi
+    // przez pełny bcrypt (bez atrapy byłby ok. 100× szybszy), a nie dokładną równość czasów.
+    $mediana = static function (array $x): float { sort($x); return $x[intdiv(count($x), 2)]; };
+    $proby = ['ewa' => [], 'ktos-nieznany' => []];
+    for ($i = 0; $i < 5; $i++) {
+        foreach (array_keys($proby) as $l) {
+            $s = hrtime(true);
+            $loguj($kBaza, $l, 'zle-haslo-xyz', false, '203.0.113.' . random_int(10, 250));
+            $proby[$l][] = (hrtime(true) - $s) / 1e6;
+        }
+    }
+    $tZnany = $mediana($proby['ewa']);
+    $tNieznany = $mediana($proby['ktos-nieznany']);
+    $t('czas odpowiedzi: nieznany login liczy bcrypt jak znany (mediana z 5, w granicach 0,4–2,5×)', $tNieznany >= $tZnany * 0.4 && $tNieznany <= $tZnany * 2.5,
+        sprintf('%.1f ms / %.1f ms', $tZnany, $tNieznany));
 
     // imię z bazy w historii bonów
     bon_panel_sesja($kBaza, $pdo, $cAdmin['wartosc']);
