@@ -113,8 +113,14 @@ function bon_panel_zaloguj(array $k, PDO $pdo, string $login, string $haslo, boo
 
     return [200, ['ok' => true, 'zalogowany' => true, 'login' => $login, 'imie' => (string)($konto['imie'] ?? $login), 'rola' => bon_panel_rola($konto),
         'rezygnacje' => bon_panel_moze_rezygnacje($konto), 'csrf' => $csrf, // tryb kasy: przełącznik Kasa | Biuro dla admina i Ewy (jak GET sesja.php)
-        'zmiana_hasla' => $konto['zmiana_hasla'], 'konta_z_bazy' => bon_konta_z_bazy($k)], // wpis 13:20: hasło tymczasowe → najpierw własne hasło
+        'zmiana_hasla' => $konto['zmiana_hasla'], 'konta_z_bazy' => bon_konta_z_bazy($k), // wpis 13:20: hasło tymczasowe → najpierw własne hasło
+        'pomoc' => bon_panel_pomoc($k)], // wpis 15:12
         ['wartosc' => $token, 'wygasa' => $zapamietaj ? $wygasa->getTimestamp() : 0]];
+}
+
+/** Wpis 15:12: pomoc z panelem (imię i telefon z ustawień) – tylko w odpowiedziach dla zalogowanych, stopka panelu frontu. */
+function bon_panel_pomoc(array $k): array {
+    return ['imie' => (string)($k['pomoc_imie'] ?? 'Bartek'), 'telefon' => (string)($k['telefon_pomoc_bony'] ?? '')];
 }
 
 function bon_panel_rola(?array $konto): string {
@@ -145,7 +151,8 @@ function bon_panel_sesja(array $k, PDO $pdo, string $token, ?DateTimeImmutable $
     if ($zBazy && (int)($s['wersja_hasla'] ?? 0) !== (int)$konto['wersja']) return null;
     if ($zBazy) $GLOBALS['bon_konta_imiona'] = bon_konta_imiona($k, $pdo); // historia bonów: imiona z bazy
     return ['login' => (string)$s['login'], 'imie' => $konto['imie'], 'rola' => bon_panel_rola($konto),
-        'rezygnacje' => bon_panel_moze_rezygnacje($konto), 'csrf' => (string)$s['csrf'], 'zmiana_hasla' => $konto['zmiana_hasla'], 'konta_z_bazy' => $zBazy];
+        'rezygnacje' => bon_panel_moze_rezygnacje($konto), 'csrf' => (string)$s['csrf'], 'zmiana_hasla' => $konto['zmiana_hasla'], 'konta_z_bazy' => $zBazy,
+        'pomoc' => bon_panel_pomoc($k)]; // wpis 15:12: stopka panelu po zalogowaniu
 }
 
 function bon_panel_wyloguj(array $k, PDO $pdo, string $token): void {

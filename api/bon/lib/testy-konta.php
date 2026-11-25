@@ -22,6 +22,8 @@ function bon_testy_konta(array $k, PDO $pdo): array {
     // przy konta_z_bazy = false nic się nie zmienia (konto z konfigu, bez kolumny wersji w INSERT)
     [$kod, $odp] = $loguj($kKonf, 'ewa', 'haslo-ewy-test');
     $t('konta z konfigu (przełącznik wyłączony): logowanie jak dotąd, odpowiedź z konta_z_bazy = false', $kod === 200 && ($odp['konta_z_bazy'] ?? null) === false, json_encode($odp));
+    // wpis 15:12: pomoc (imię, telefon) w odpowiedzi logowania i sesji – tylko dla zalogowanych
+    $t('pomoc w odpowiedzi logowania: imię i telefon z ustawień', ($odp['pomoc']['imie'] ?? '') !== '' && array_key_exists('telefon', $odp['pomoc'] ?? []), json_encode($odp['pomoc'] ?? null));
 
     // przeniesienie z konfigu: hashe, nie hasła; idempotentne; nic z hasha w odpowiedzi
     $sAdminKonf = bon_panel_sesja($kKonf, $pdo, (string)$loguj($kKonf, 'bartek', 'haslo-bartka-test')[2]['wartosc']);

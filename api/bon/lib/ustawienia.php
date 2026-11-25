@@ -56,6 +56,7 @@ return [
     // sprawy klientów (rezygnacja ze strony /bon, P-12): Reply-To = kupujący, link do panelu; awarie dalej na alerty@
     'mail_obsluga' => ['bony@ewa-gabinet.pl'],
     'telefon_pomoc_bony' => '506 102 340',
+    'pomoc_imie' => 'Bartek',             // wpis 15:12: stopka panelu po zalogowaniu – „Pomoc: Bartek, 506 102 340”
     'telefon_pomoc_bony_godziny' => 'pon.–pt. 9–17',
     // wpis 17:47: zdanie „Rezygnacja w ciągu 14 dni od zapłaty: najszybciej na stronie ewa-gabinet.pl/bon…” w mailu z bonem.
     // włączone 2026-11-24 razem z nowym § 14 (funkcjeBonu.rezygnacja frontu, PR #84) – Ewa zaakceptowała, wpis doradcy 18:35.
