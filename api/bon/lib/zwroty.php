@@ -173,7 +173,7 @@ function bon_panel_zwroc(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
     }
     $opis = bon_zl($kwota) . ' zł, transakcja ' . $tr;
     if ($http === 202 || $http === 200) {
-        bon_historia($k, $pdo, (int)$bon['id'], 'zwrot-zlecony', "zlecony w Easytools z panelu: $opis", $sesja['login'], $teraz);
+        bon_historia($k, $pdo, (int)$bon['id'], 'zwrot-zlecony', "z panelu przez Easytools: $opis", $sesja['login'], $teraz);
         bon_powiadom($k, 'Bon: zlecono zwrot ' . bon_zl($kwota) . ' zł – ' . $bon['code'], "Zwrot zlecony z panelu przez {$sesja['login']}.\n"
             . "Bon: {$bon['code']}\nKwota: " . bon_zl($kwota) . " zł\nZamówienie Easytools: {$bon['easytools_order_id']}\nTransakcja: $tr\n"
             . "Easytools zaksięguje zwrot po potwierdzeniu przez operatora płatności (BLIK nawet kilka dni). Panel pokaże „Zwrot potwierdzony”.");
