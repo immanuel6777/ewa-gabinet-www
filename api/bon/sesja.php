@@ -1,6 +1,6 @@
 <?php
 // Panel realizacji bonów – sesja (etap 3: 2026-11-21). Woła ją strona /panel-bonow.
-//   GET    → {zalogowany, login, imie, rola, csrf, instrukcja}  (csrf idzie potem w nagłówku X-CSRF przy każdym POST; instrukcja = link z biletem: do 12 h i tylko dopóki ta sesja żyje)
+//   GET    → {zalogowany, login, imie, rola, csrf, instrukcja}  (csrf idzie potem w nagłówku X-CSRF przy każdym POST; instrukcja = link z biletem: 10 min i tylko dopóki ta sesja żyje)
 //   POST   {login, haslo, zapamietaj} → logowanie (limit prób), ciasteczko bon_panel (HttpOnly, Secure, SameSite=Lax)
 //   DELETE → wylogowanie (wymaga X-CSRF)
 // Logika: lib/panel.php.

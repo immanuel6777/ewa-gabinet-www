@@ -141,10 +141,12 @@ function bon_panel_moze_rezygnacje(?array $konto): bool {
 // Aplikacja „EWA Podologia” z ekranu iPhone'a (standalone, scope /panel-bonow) otwiera /api/bon/instrukcja.php w osobnym widoku
 // Safari, który NIE ma ciasteczek aplikacji – sama sesja nie wystarczy. Dlatego sesja.php (GET, zalogowany) podaje link z biletem:
 // t = <ważny do (unix)>.<sid>.<podpis>.<login>; sid = początek token_hash sesji, z której bilet wydano; podpis = HMAC(klucz z sekretu
-// webhooka, ważny_do|sid|login|wersja hasła). Bilet działa najwyżej 12 h i TYLKO dopóki ta sesja istnieje: gaśnie po „Wyloguj”,
+// webhooka, ważny_do|sid|login|wersja hasła). Bilet działa najwyżej 10 min i TYLKO dopóki ta sesja istnieje: gaśnie po „Wyloguj”,
 // wygaśnięciu sesji, zmianie/resecie hasła, „Wyloguj wszędzie” i wyłączeniu konta (zgłoszenie Bartka 26.11: skopiowany link działał
 // po wylogowaniu). Bez sekretu – brak biletu (zostaje sam link z ciasteczkiem).
-const BON_INSTRUKCJA_BILET_S = 43200;
+// 10 min (Front 1: link z biletem działa dla każdego, kto go ma – w widoku Safari bez ciasteczek inaczej się nie da): skopiowany
+// link szybko gaśnie, a menu ☰ pobiera świeży bilet przy każdym otwarciu (stopka-panelu.ts → odswiezInstrukcje).
+const BON_INSTRUKCJA_BILET_S = 600;
 
 function bon_instrukcja_klucz(array $k): ?string {
     $s = (string)($k['easytools_webhook_sekret'] ?? '');
