@@ -320,5 +320,26 @@ function bon_testy_kwoty_kasy(array $k, PDO $pdo): array {
     $t('#195: „Oznacz zwrot” – wykorzystany i po terminie 409; rezygnacja (Ewa) i wstrzymany (admin) 200',
         $kody === ['wykorzystany' => 409, 'po terminie' => 409, 'Ewa rezygnacja' => 200, 'admin wstrzymany' => 200], json_encode($kody, JSON_UNESCAPED_UNICODE));
     $t('#195: Karolina (kasa) nie dostaje flag akcji', !array_key_exists('akcje', bon_panel_historia($k, $pdo, $sKasa, $bV)[1]));
+
+    // --- karta #201: szukanie po fragmencie e-maila / id zamówienia (admin i Ewa; nie Karolina) ---
+    $bF = $nowy(200);
+    $fr = static fn(?array $s, string $q) => bon_panel_szukaj($k, $pdo, $q, null, $s, true);
+    $czesc = substr($email, 2, 8); // środek adresu kupującego (kwoty-NNNNN@example.com)
+    [$hK] = $fr($sKasa, $czesc);
+    [$h2] = $fr($sEwa, 'kw');
+    [$hE, $oE] = $fr($sEwa, strtoupper($czesc));
+    $tenBon = array_values(array_filter($oE['bony'] ?? [], static fn($c) => ($c['email'] ?? '') === $email));
+    $t('#201: fragment – Karolina 403, 2 znaki 400; Ewa po fragmencie adresu (bez wielkości liter) znajduje bony z polem „email”, numer zamaskowany',
+        $hK === 403 && $h2 === 400 && $hE === 200 && ($oE['typ'] ?? '') === 'fragment' && $tenBon && array_key_exists('kod', $tenBon[0]) && $tenBon[0]['kod'] === null
+        && !empty($tenBon[0]['uchwyt']), json_encode([$hK, $h2, $hE, $oE['typ'] ?? null, count($oE['bony'] ?? [])]));
+    [$hZ, $oZ] = $fr($sAdmin, substr((string)$bF['easytools_order_id'], 2, 6));
+    $t('#201: admin po fragmencie id zamówienia → ten bon z pełnym numerem', $hZ === 200
+        && in_array($bF['code'], array_column($oZ['bony'] ?? [], 'kod'), true), json_encode([$hZ, count($oZ['bony'] ?? [])]));
+    [$hW, $oW] = $fr($sAdmin, '%%%');
+    $t('#201: „%” i „_” traktowane dosłownie (nie jako wzorzec SQL) → 0 wyników', $hW === 200 && ($oW['bony'] ?? null) === [], json_encode([$hW, count($oW['bony'] ?? [])]));
+    $sLim = ['login' => 'limit-' . random_int(10000, 99999), 'imie' => 'Test', 'rola' => 'admin', 'csrf' => 'x'];
+    $kody = [];
+    for ($i = 0; $i < 31; $i++) $kody[] = $fr($sLim, 'zzq')[0];
+    $t('#201: limit 30 wyszukiwań po fragmencie na konto → 31. = 429', array_slice($kody, 0, 30) === array_fill(0, 30, 200) && $kody[30] === 429, json_encode(array_count_values($kody)));
     return $wyniki;
 }

@@ -33,6 +33,7 @@ function bon_panel_konfig(array $k): array {
         'panel_limit_login_ip' => 5,
         'panel_limit_ip' => 20,
         'panel_limit_login' => 10, // Z3: nieudane próby na sam login (z dowolnych adresów) w oknie; do decyzji Bartka
+        'panel_limit_fragment' => 30, // karta #201: wyszukiwania po fragmencie na konto w oknie panel_limit_okno_min
 
         'panel_limit_okno_min' => 15,
         'uslugi_plik' => dirname(__DIR__) . '/lib/uslugi.json',
@@ -543,12 +544,34 @@ function bon_panel_rezygnacja(array $k, PDO $pdo, int $voucherId): ?array {
 const BON_PANEL_SZUKAJ_MAX = 20;
 
 /** [kod HTTP, odpowiedź]: {typ: kod, kod} albo {typ: email|zamowienie, bony: [...], wiecej}. */
-function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $teraz = null, ?array $sesja = null): array {
+const BON_PANEL_FRAGMENT_MIN = 3;
+
+function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $teraz = null, ?array $sesja = null, bool $fragment = false): array {
     $q = trim($q);
-    $kod = bon_normalizuj_kod($q, (string)$k['kod_prefix']);
-    if ($kod !== null) return [200, ['ok' => true, 'typ' => 'kod', 'kod' => $kod]];
     $tab = bon_tabela($k, 'vouchers');
-    if (str_contains($q, '@')) {
+    $parametr = [];
+    $kolumna = '';
+    if ($fragment) {
+        // karta #201 (Bartek 2026-11-26 18:04): kupujący pomylił się w adresie – szukanie po FRAGMENCIE e-maila albo id zamówienia
+        // Easytools. Tylko admin i Gabinet (konto z uprawnieniem rezygnacji), nigdy tryb Bon (Karolina); min. 3 znaki, „zawiera”,
+        // bez wielkości liter; limit na konto; ślad w dzienniku zdarzeń (szukaj.php, fragment ukryty w log.php).
+        if ($sesja === null || ($sesja['rola'] !== 'admin' && empty($sesja['rezygnacje']))) {
+            return [403, ['ok' => false, 'blad' => 'Szukanie po fragmencie adresu jest dla Bartka i Ewy.']];
+        }
+        $wartosc = mb_strtolower($q, 'UTF-8');
+        if (mb_strlen($wartosc) < BON_PANEL_FRAGMENT_MIN) return [400, ['ok' => false, 'blad' => 'Wpisz co najmniej ' . BON_PANEL_FRAGMENT_MIN . ' znaki adresu albo numeru zamówienia.']];
+        if (mb_strlen($wartosc) > 100) return [400, ['ok' => false, 'blad' => 'Za długi tekst – wpisz fragment adresu.']];
+        $k = bon_panel_konfig($k);
+        if (!bon_limit_ok($pdo, $k, 'login|' . $sesja['login'], 'panel-fragment', (int)$k['panel_limit_fragment'], (int)$k['panel_limit_okno_min'] * 60)) {
+            return [429, ['ok' => false, 'blad' => 'Za dużo wyszukiwań w krótkim czasie. Spróbuj za kwadrans.']];
+        }
+        $typ = 'fragment';
+        $wzor = '%' . strtr($wartosc, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+        $warunek = "(LOWER(buyer_email) LIKE ? ESCAPE '!' OR LOWER(easytools_order_id) LIKE ? ESCAPE '!')";
+        $parametr = [$wzor, $wzor];
+    } elseif (($kod = bon_normalizuj_kod($q, (string)$k['kod_prefix'])) !== null) {
+        return [200, ['ok' => true, 'typ' => 'kod', 'kod' => $kod]];
+    } elseif (str_contains($q, '@')) {
         $wartosc = mb_strtolower($q, 'UTF-8');
         if (!filter_var($wartosc, FILTER_VALIDATE_EMAIL)) return [400, ['ok' => false, 'blad' => 'Wpisz cały adres e-mail kupującego.']];
         $typ = 'email';
@@ -562,10 +585,13 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
     }
     // Gmail ignoruje kropki w nazwie skrzynki (bartosz.kalwinski = bartoszkalwinski) – szukamy bez kropek (2026-11-24)
     $gmail = $typ === 'email' && preg_match('/@(gmail|googlemail)\.com$/', $wartosc) === 1;
-    $warunek = $gmail ? "REPLACE(LOWER(buyer_email), '.', '') = ? AND (LOWER(buyer_email) LIKE '%@gmail.com' OR LOWER(buyer_email) LIKE '%@googlemail.com')"
-        : "LOWER($kolumna) = ?";
+    if (!$fragment) {
+        $warunek = $gmail ? "REPLACE(LOWER(buyer_email), '.', '') = ? AND (LOWER(buyer_email) LIKE '%@gmail.com' OR LOWER(buyer_email) LIKE '%@googlemail.com')"
+            : "LOWER($kolumna) = ?";
+        $parametr = [$gmail ? str_replace('.', '', $wartosc) : $wartosc];
+    }
     $st = $pdo->prepare("SELECT * FROM $tab WHERE $warunek ORDER BY created_at DESC, id DESC LIMIT " . (BON_PANEL_SZUKAJ_MAX + 1));
-    $st->execute([$gmail ? str_replace('.', '', $wartosc) : $wartosc]);
+    $st->execute($parametr);
     $wiersze = $st->fetchAll();
     $wiersze20 = array_slice($wiersze, 0, BON_PANEL_SZUKAJ_MAX);
     $dodatki = bon_panel_karty_dodatki($k, $pdo, array_map(static fn($b) => (int)$b['id'], $wiersze20));
@@ -574,7 +600,7 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
     // związany z sesją; pełny numer dopiero po potwierdzeniu 4 ostatnich znaków przez pacjenta (bon_panel_potwierdz_numer)
     $maskuj = $sesja !== null && $sesja['rola'] !== 'admin';
     $kasa = $sesja !== null && $sesja['rola'] !== 'admin' && empty($sesja['rezygnacje']); // wpis 19:33: kasa bez kwot bonu nieaktywnego
-    $bony = array_map(static function ($b) use ($k, $sesja, $maskuj, $kasa, $teraz, $dodatki) {
+    $bony = array_map(static function ($b) use ($k, $sesja, $maskuj, $kasa, $teraz, $dodatki, $fragment) {
         $status = bon_status_efektywny($b, $teraz);
         $bezKwot = $kasa && $status !== 'valid';
         $doKonca = (int)$teraz->setTime(0, 0)->diff(new DateTimeImmutable(substr((string)$b['expires_at'], 0, 10), new DateTimeZone(BON_STREFA)))->format('%r%a');
@@ -599,7 +625,7 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
             'grupa' => substr(hash('sha256', (string)$b['easytools_order_id']), 0, 10),
             // P-15: rabat na karcie – tylko Ewa i admin (kasa liczy saldo, nie cenę zakupu); bez sesji (testy, stare wywołania) też
             'rabat' => ($sesja === null || $sesja['rola'] === 'admin' || !empty($sesja['rezygnacje'])) ? bon_panel_rabat($b) : null,
-        ];
+        ] + ($fragment ? ['email' => (string)$b['buyer_email']] : []); // #201: widać, który adres pasuje (tylko admin i Ewa)
     }, $wiersze20);
     if ($kasa) $bony = array_map(static function ($c) { unset($c['rabat']); return $c; }, $bony); // wpis 19:33: kasa bez pola rabatu
     // kolejność: najpierw bony, którymi można płacić, potem pozostałe; w każdej grupie najnowsze pierwsze (zapytanie już tak sortuje)
