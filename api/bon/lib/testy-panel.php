@@ -335,6 +335,15 @@ function bon_testy_kwoty_kasy(array $k, PDO $pdo): array {
     [$hZ, $oZ] = $fr($sAdmin, substr((string)$bF['easytools_order_id'], 2, 6));
     $t('#201: admin po fragmencie id zamówienia → ten bon z pełnym numerem', $hZ === 200
         && in_array($bF['code'], array_column($oZ['bony'] ?? [], 'kod'), true), json_encode([$hZ, count($oZ['bony'] ?? [])]));
+    // Bartek 27.11 00:40: 4 ostatnie znaki numeru bonu w tym samym polu (tylko Gabinet i admin; Karolina nadal 403)
+    $koncowka = strtolower(substr((string)$bF['code'], -4));
+    [$hN, $oN] = $fr($sAdmin, $koncowka);
+    [$hNe, $oNe] = $fr($sEwa, strtoupper($koncowka));
+    [$hNk] = $fr($sKasa, $koncowka);
+    $t('27.11: fragment = końcówka numeru bonu → admin ten bon z pełnym numerem, Ewa zamaskowany z uchwytem, Karolina 403',
+        $hN === 200 && in_array($bF['code'], array_column($oN['bony'] ?? [], 'kod'), true)
+        && $hNe === 200 && count(array_filter($oNe['bony'] ?? [], static fn($c) => $c['kod'] === null && !empty($c['uchwyt']))) >= 1
+        && $hNk === 403, json_encode([$hN, count($oN['bony'] ?? []), $hNe, count($oNe['bony'] ?? []), $hNk]));
     [$hW, $oW] = $fr($sAdmin, '%%%');
     $t('#201: „%” i „_” traktowane dosłownie (nie jako wzorzec SQL) → 0 wyników', $hW === 200 && ($oW['bony'] ?? null) === [], json_encode([$hW, count($oW['bony'] ?? [])]));
     $sLim = ['login' => 'limit-' . random_int(10000, 99999), 'imie' => 'Test', 'rola' => 'admin', 'csrf' => 'x'];

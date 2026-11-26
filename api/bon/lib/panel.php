@@ -568,8 +568,10 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
         }
         $typ = 'fragment';
         $wzor = '%' . strtr($wartosc, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
-        $warunek = "(LOWER(buyer_email) LIKE ? ESCAPE '!' OR LOWER(easytools_order_id) LIKE ? ESCAPE '!')";
-        $parametr = [$wzor, $wzor];
+        // Bartek 27.11 00:40: także fragment numeru bonu (np. 4 ostatnie znaki „9PHZ”) – tylko tu, czyli Gabinet i admin;
+        // w trybie Bon 4 ostatnie znaki to dowód od pacjenta (P-10), więc tam szukania po nich nie ma
+        $warunek = "(LOWER(buyer_email) LIKE ? ESCAPE '!' OR LOWER(easytools_order_id) LIKE ? ESCAPE '!' OR LOWER(code) LIKE ? ESCAPE '!')";
+        $parametr = [$wzor, $wzor, $wzor];
     } elseif (($kod = bon_normalizuj_kod($q, (string)$k['kod_prefix'])) !== null) {
         return [200, ['ok' => true, 'typ' => 'kod', 'kod' => $kod]];
     } elseif (str_contains($q, '@')) {
