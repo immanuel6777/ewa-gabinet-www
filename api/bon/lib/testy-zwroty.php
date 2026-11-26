@@ -271,8 +271,8 @@ function bon_testy_zwroty(array $k, PDO $pdo): array {
     $rezygnuj($bB['code']);
     $posty = [];
     [$h, $o] = bon_panel_zwroc($kz, $pdo, $sEwa, ['kod' => $bB['code']]);
-    $t('REVIEW nr 2: „Oznacz zwrot” zamyka rezygnację ze stanu nieudany (zlecony, ręcznie); potem zwrot B → POST 20000',
-        $hO === 200 && $stan($bA['id'])['zwrot_stan'] === 'zlecony' && $h === 200 && ($posty[0]['body']['amount'] ?? 0) === 20000,
+    $t('REVIEW nr 2: „Oznacz zwrot” zamyka rezygnację ze stanu nieudany (potwierdzony, ręcznie – #226); potem zwrot B → POST 20000',
+        $hO === 200 && $stan($bA['id'])['zwrot_stan'] === 'potwierdzony' && $h === 200 && ($posty[0]['body']['amount'] ?? 0) === 20000,
         json_encode([$hO, $stan($bA['id']), $h, $o, $posty], JSON_UNESCAPED_UNICODE));
 
     // przycisk pokazuje kwotę, która naprawdę wyjdzie (Easytools ma mniej do zwrotu niż kwota z rezygnacji, bez nieznanego zwrotu)

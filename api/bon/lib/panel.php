@@ -522,7 +522,7 @@ function bon_panel_pdf_bon(array $k, PDO $pdo, array $sesja, string $wpisany, ?D
 /** Złożona (nieanulowana) rezygnacja bonu albo null. Przed migracją kroku 1 na OVH (brak tabeli) – null, panel działa dalej. */
 function bon_panel_rezygnacja(array $k, PDO $pdo, int $voucherId): ?array {
     try {
-        $st = $pdo->prepare('SELECT zlozono_at, potwierdzono_at, kanal, saldo_pln, kwota_pln, zwrot_stan FROM ' . bon_tabela($k, 'voucher_withdrawals') . " WHERE voucher_id = ? AND zwrot_stan <> 'anulowana'");
+        $st = $pdo->prepare('SELECT zlozono_at, potwierdzono_at, kanal, saldo_pln, kwota_pln, zwrot_stan, zwrot_ref FROM ' . bon_tabela($k, 'voucher_withdrawals') . " WHERE voucher_id = ? AND zwrot_stan <> 'anulowana'");
         $st->execute([$voucherId]);
         $w = $st->fetch();
     } catch (PDOException) {
@@ -536,16 +536,17 @@ function bon_panel_rezygnacja(array $k, PDO $pdo, int $voucherId): ?array {
         'godzina' => $w['kanal'] === 'strona' ? substr((string)$w['zlozono_at'], 11, 5) : null, // P-12: zgłoszona na /bon – z godziną
         'zwrot_do' => (new DateTimeImmutable($otrzymano, new DateTimeZone(BON_STREFA)))->modify('+14 days')->format('Y-m-d'),
         'kanal' => (string)$w['kanal'], 'saldo' => bon_zl((int)bon_grosze($w['saldo_pln'])), 'kwota' => bon_zl((int)bon_grosze($w['kwota_pln'])),
-        'stan' => (string)$w['zwrot_stan']];
+        // #226: wpisy sprzed poprawki – „Oznacz zwrot” zapisywał 'zlecony' + 'recznie', którego cron nie potwierdza
+        'stan' => $w['zwrot_stan'] === 'zlecony' && ($w['zwrot_ref'] ?? '') === 'recznie' ? 'potwierdzony' : (string)$w['zwrot_stan']];
 }
 
 // --- wyszukiwanie (krok 4): numer bonu, e-mail kupującego albo id zamówienia Easytools ---
 // POST (nie GET): e-mail nie trafia do logów serwera ani historii przeglądarki. Porównanie bez wielkości liter.
 const BON_PANEL_SZUKAJ_MAX = 20;
 
-/** [kod HTTP, odpowiedź]: {typ: kod, kod} albo {typ: email|zamowienie, bony: [...], wiecej}. */
 const BON_PANEL_FRAGMENT_MIN = 3;
 
+/** [kod HTTP, odpowiedź]: {typ: kod, kod} albo {typ: email|zamowienie|fragment, bony: [...], wiecej}. */
 function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $teraz = null, ?array $sesja = null, bool $fragment = false): array {
     $q = trim($q);
     $tab = bon_tabela($k, 'vouchers');
@@ -930,10 +931,11 @@ function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
             $opis = $bon['status'] . ' → zwrócony, saldo w chwili zwrotu ' . bon_zl($saldoZ) . ' zł, do zwrotu ' . bon_zl($kwotaZ) . ' zł'
                 . ($kwotaZ < $saldoZ ? ' (przeliczone do zapłaconej ceny)' : '');
             if ($bon['status'] === 'withdrawn') {
-                // pieniądze oddane ręcznie w Easytools: oczekująca rezygnacja → 'zlecony' z zwrot_ref = 'recznie', żeby lista
+                // karta #226 (zrzut Bartka 26.11): pieniądze już oddane ręcznie w Easytools → rezygnacja od razu 'potwierdzony' (wcześniej
+                // 'zlecony', którego cron nie potwierdza – panel pokazywał „Zwrócony” i „Zwrot w toku” naraz); zwrot_ref = 'recznie', żeby lista
                 // oczekujących w kroku 3 nie zleciła drugiego zwrotu przez API (krok 3 nie odpytuje transakcji dla 'recznie')
-                $pdo->prepare('UPDATE ' . bon_tabela($k, 'voucher_withdrawals') . " SET zwrot_stan = 'zlecony', zwrot_zlecono_at = ?, zwrot_kwota_pln = kwota_pln, zwrot_ref = 'recznie'
-                               WHERE voucher_id = ? AND zwrot_stan IN ('oczekuje', 'nieudany')")->execute([$teraz->format('Y-m-d H:i:s'), $bon['id']]);
+                $pdo->prepare('UPDATE ' . bon_tabela($k, 'voucher_withdrawals') . " SET zwrot_stan = 'potwierdzony', zwrot_zlecono_at = ?, zwrot_potwierdzono_at = ?, zwrot_kwota_pln = kwota_pln, zwrot_ref = 'recznie'
+                               WHERE voucher_id = ? AND zwrot_stan IN ('oczekuje', 'nieudany')")->execute([$teraz->format('Y-m-d H:i:s'), $teraz->format('Y-m-d H:i:s'), $bon['id']]);
                 // REVIEW nr 2: także po nieudanym zleceniu (kilka bonów po HTTP 0 → „Oznacz zwrot”), inaczej ten zwrot zostałby
                 // nieznany panelowi i blokował zwrot przyciskiem pozostałych bonów zamówienia
                 $opis .= '; rezygnacja zamknięta (zwrot ręczny w Easytools)';

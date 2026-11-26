@@ -189,9 +189,12 @@ function bon_testy_krok4(array $k, PDO $pdo): array {
     // zwrot ręczny (Oznacz zwrot) zamyka oczekującą rezygnację – krok 3 nie zleci drugiego zwrotu przez API
     [$kod, $odp] = bon_panel_admin($k, $pdo, $sAdmin, ['kod' => $b5['code'], 'akcja' => 'zwrot', 'powod' => 'zwrot w Easytools']);
     $w5 = $rezygnacja((int)$b5['id']);
-    $t('zwrot ręczny przy rezygnacji: bon refunded, rezygnacja „zlecony” z ref „recznie” i kwotą', $kod === 200 && $wiersz((string)$b5['code'])['status'] === 'refunded'
-        && $w5[0]['zwrot_stan'] === 'zlecony' && $w5[0]['zwrot_ref'] === 'recznie' && bon_zl((int)bon_grosze($w5[0]['zwrot_kwota_pln'])) === '135.00'
-        && str_contains((string)$odp['opis'], 'rezygnacja zamknięta'), json_encode([$odp, $w5], JSON_UNESCAPED_UNICODE));
+    $t('zwrot ręczny przy rezygnacji: bon refunded, rezygnacja „potwierdzony” (#226) z ref „recznie”, kwotą i datą potwierdzenia', $kod === 200 && $wiersz((string)$b5['code'])['status'] === 'refunded'
+        && $w5[0]['zwrot_stan'] === 'potwierdzony' && $w5[0]['zwrot_ref'] === 'recznie' && bon_zl((int)bon_grosze($w5[0]['zwrot_kwota_pln'])) === '135.00'
+        && !empty($w5[0]['zwrot_potwierdzono_at']) && str_contains((string)$odp['opis'], 'rezygnacja zamknięta'), json_encode([$odp, $w5], JSON_UNESCAPED_UNICODE));
+    // #226: stary wpis sprzed poprawki („zlecony” + „recznie”) panel pokazuje jako potwierdzony – bez „Zwrot w toku” przy bonie zwróconym
+    $pdo->prepare('UPDATE ' . bon_tabela($k, 'voucher_withdrawals') . " SET zwrot_stan = 'zlecony', zwrot_potwierdzono_at = NULL WHERE voucher_id = ?")->execute([(int)$b5['id']]);
+    $t('#226: stary wpis „zlecony” + „recznie” → w panelu stan „potwierdzony”', (bon_panel_rezygnacja($k, $pdo, (int)$b5['id'])['stan'] ?? '') === 'potwierdzony');
     [$kod] = bon_panel_przedluz($k, $pdo, $sEwaP, (string)$b5['code']);
     $t('przedłużenie: bon zwrócony → 409', $kod === 409);
 
