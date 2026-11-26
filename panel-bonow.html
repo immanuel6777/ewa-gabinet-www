@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="/_astro/sciezka-bonow.Aej5KZTB.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.AIMD6hHj.css">
+<link rel="stylesheet" href="/_astro/panel-bonow.DiqLvHn6.css">
 <link rel="stylesheet" href="/_astro/Baza.DyE6WHxw.css">
 <link rel="stylesheet" href="/_astro/KartaBonu.DVx0KRYz.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
@@ -145,7 +145,7 @@
           <p class="n-menu-poz n-menu-pomoc" data-p-menu-poz="pomoc" data-n-pomoc="bez-instrukcji" hidden data-astro-cid-lkdlr2dg></p>
           <button class="n-menu-poz n-menu-wyloguj" type="button" data-p-menu-poz="wyloguj" data-astro-cid-lkdlr2dg>Wyloguj</button>
         </nav>
-        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu 242826f · 26.11.2026</p>
+        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu 422bb80 · 26.11.2026</p>
       </div>
     </dialog>
   </header>
@@ -231,6 +231,27 @@
            (NarzedzieRamka.astro, [data-p-menu-poz]); tu zostaje tylko wynik automatycznego pobrania zamówień przy wejściu (Gabinet) -->
       <p class="podpowiedz sync-wynik tylko-biuro" aria-live="polite" data-p-sync-wynik hidden></p>
 
+      <!-- wpis 01:51 (Bartek 26.11): „Zrealizowano z bonów” – suma odjęć z sald po cofnięciach za okres; tylko Gabinet i Admin
+           (poziom Bon: serwer 403, kafelek schowany). Domyślnie bieżący miesiąc. Dane: /api/bon/raport.php (Backend, #158). -->
+      <section class="karta zrealizowano tylko-biuro" aria-labelledby="zr-tytul" data-p-zr hidden>
+        <h2 id="zr-tytul">Zrealizowano z bonów</h2>
+        <p class="zr-kwota" aria-live="polite" data-p-zr-kwota></p>
+        <p class="zr-podpis" data-p-zr-podpis></p>
+        <div class="zr-okresy" role="group" aria-label="Okres" data-p-zr-okresy>
+          <button type="button" data-p-zr-okres="dzis" aria-pressed="false">Dziś</button>
+          <button type="button" data-p-zr-okres="tydzien" aria-pressed="false">Tydzień</button>
+          <button type="button" data-p-zr-okres="miesiac" aria-pressed="true">Miesiąc</button>
+          <button type="button" data-p-zr-okres="rok" aria-pressed="false">Rok</button>
+          <button type="button" data-p-zr-okres="zakres" aria-pressed="false">Zakres dat</button>
+        </div>
+        <form class="zr-zakres formularz" data-p-zr-zakres hidden>
+          <label class="pole"><span class="etykieta">Od</span><input name="od" type="date" required></label>
+          <label class="pole"><span class="etykieta">Do</span><input name="do" type="date" required></label>
+          <button class="przycisk obrys" type="submit">Pokaż</button>
+        </form>
+        <p class="blad" data-p-zr-blad hidden></p>
+      </section>
+
       <!-- KASA, ekran startowy: skan aparatem telefonu (kod QR otwiera panel z ?nr=), numer z maską, e-mail jako link -->
       <section class="kasa-start tylko-kasa" data-k-start>
         <button class="przycisk duzy" type="button" data-k-skan>Zeskanuj bon</button>
@@ -271,7 +292,7 @@
         </label>
         <button class="przycisk obrys" type="submit">Szukaj</button>
       </form>
-      <p class="podpowiedz tylko-biuro">Możesz też zeskanować kod QR z bonu aparatem telefonu – bon otworzy się od razu tutaj. Pacjent bez bonu przy sobie? Znajdź bon po e-mailu kupującego, a potem poproś o cztery ostatnie znaki numeru.</p>
+      <p class="podpowiedz tylko-biuro">Pacjent bez bonu? Szukaj po e-mailu kupującego, potem poproś o 4 ostatnie znaki numeru.</p>
       <p class="blad" data-p-blad hidden></p>
 
       <!-- wyniki wyszukiwania po e-mailu albo zamówieniu (krok 4) -->
@@ -381,6 +402,8 @@
         </div>
         <!-- komunikaty Kasy we wspólnym wyglądzie frontu (pokazKomunikat, global.css .komunikat) -->
         <p class="komunikat" data-k-stan hidden></p>
+        <!-- projekt 3E (iteracja 2): pod „Nie realizuj – …” jedno zdanie, co zrobić (bez kafli zabiegów) -->
+        <p class="podpowiedz k-co" data-k-co hidden></p>
         <div class="k-stopka">
           <p class="k-ostatnia" data-k-ostatnia></p>
           <button type="button" class="link-przycisk k-szczegoly" data-k-szczegoly hidden>Szczegóły bonu</button>
@@ -549,7 +572,7 @@
         <label class="pole"><span class="etykieta">Kwota wizyty (zł)</span>
           <input type="text" inputmode="decimal" autocomplete="off" data-k-kwota placeholder="np. 180">
         </label>
-        <p class="podpowiedz">Przyciski wpisują kwotę same. Inna cena (np. klamra droższa niż „od”)? Wpisz kwotę ręcznie – wybór zabiegów się wtedy wyczyści.</p>
+        <p class="podpowiedz">Inna cena niż na przycisku? Wpisz kwotę ręcznie.</p>
         <p class="komunikat" data-k-blad hidden></p>
         <!-- projekt 3C: podsumowanie ukryte przy 0 zł (hidden – panel-bonow.ts), po wyborze ciemna karta przyklejona na dole (wygląd: Front 1) -->
         <div class="k-pasek" aria-live="polite" data-k-pasek hidden>
@@ -568,15 +591,24 @@
         <button class="przycisk" type="button" data-k-nastepny>Następny bon</button>
       </section>
 
-      <section class="karta bon tylko-biuro" data-p-bon hidden>
+      <!-- iteracja 2 (projekt 4C, 26.11): szczegóły bonu w Gabinecie = osobne białe karty z nadtytułem (h2) w kolejności
+           BON → REALIZACJA → HISTORIA → REZYGNACJA I ZWROT → MAIL Z BONEM → WAŻNOŚĆ → ADMINISTRACJA; [data-p-sekcja] = umowa z Frontem 1.
+           Karta bez widocznej treści jest schowana (panel-bonow.ts → pokazKarty). -->
+      <section class="karta bon tylko-biuro" data-p-bon data-p-sekcja="bon" hidden>
+        <h2>Bon</h2>
         <!-- wpis 19:33: jeden pasek stanu (kolor stanu, zdanie główne + „kto, kiedy, skąd”) zamiast powtórzeń w trzech miejscach -->
         <div class="stan" data-p-stan>
           <p class="stan-glowne"><span class="status" data-p-status></span> <span data-p-stan-zdanie></span></p>
           <p class="stan-drobne" data-p-stan-drobne hidden></p>
         </div>
-        <!-- jeden przycisk główny zależny od stanu i roli: ważny → „Zrealizuj”, rezygnacja (Bartek, Ewa) → „Zwróć pieniądze” -->
+        <!-- jeden przycisk główny zależny od stanu i roli: ważny → „Zrealizuj”, rezygnacja (Bartek, Ewa) → „Zwróć pieniądze”,
+             wstrzymany (admin) → „Zatwierdź wstrzymany bon” (4C pkt 1 – przeniesiony z Administracji) -->
         <div class="glowny" data-p-glowny hidden>
           <button class="przycisk" type="button" data-p-zrealizuj>Zrealizuj</button>
+        </div>
+        <div class="glowny" data-p-zatwierdz-sekcja hidden>
+          <button class="przycisk" type="button" data-p-zatwierdz-bon>Zatwierdź wstrzymany bon i wyślij PDF</button>
+          <p class="blad" data-p-blad-zatwierdz hidden></p>
         </div>
         <!-- P-11: zwrot pieniędzy z panelu (Bartek i Ewa) – przycisk główny przy rezygnacji -->
         <div class="zwrot" data-p-zwrot-sekcja hidden>
@@ -596,29 +628,16 @@
           <div data-p-dla-wiersz><dt>Dla</dt><dd data-p-dla></dd></div>
           <div data-p-przedluzony-wiersz hidden><dt>Przedłużony</dt><dd data-p-przedluzony></dd></div>
         </dl>
-        <!-- wpis 20:17: fakty jako wiersze „etykieta – wartość”: rezygnacja, do zwrotu, termin, potwierdzenie, zapłacono, Easytools -->
+        <!-- wpis 20:17: fakty jako wiersze „etykieta – wartość”; tu tylko zapłacono z rabatem – rezygnacja i Easytools w karcie niżej -->
         <dl class="dane fakty-bonu" data-p-fakty hidden></dl>
-        <!-- wpisy 17:33/17:35: ponowna wysyłka potwierdzenia rezygnacji (Bartek i Ewa) – mniejszy przycisk w drugim rzędzie -->
-        <div class="rez-potw" data-p-rez-potw hidden>
-          <button class="przycisk obrys maly" type="button" data-p-rez-potw-wyslij>Wyślij potwierdzenie ponownie</button>
-          <p class="blad" data-p-blad-rez-potw hidden></p>
-        </div>
-        <p class="blad" data-p-platnosc-ostrzezenie hidden></p>
-        <!-- REVIEW nr 5: stan płatności w Easytools na kliknięcie (otwarcie bonu przy kasie nie czeka na Easytools) -->
-        <button class="przycisk obrys maly" type="button" data-p-platnosc-sprawdz hidden>Sprawdź płatność w Easytools</button>
         <!-- TA-11: ostatni mail z bonem odbity (kontrola dostarczenia); znika po udanej wysyłce ponownej -->
         <p class="blad" data-p-odbity hidden>Mail z bonem NIE dotarł do kupującego. Potwierdź z nim adres i wyślij bon ponownie.</p>
-        <!-- jedno bezpłatne przedłużenie o 3 mies. (regulamin), każda rola; dowolną datę zmienia admin niżej -->
-        <div class="przedluz" data-p-przedluz hidden>
-          <p data-p-przedluz-tekst></p>
-          <button class="przycisk obrys" type="button" data-p-przedluz-przycisk>Przedłuż o 3 miesiące</button>
-        </div>
       </section>
 
       <!-- realizacja -->
-      <form class="karta realizacja formularz tylko-biuro" data-p-realizacja hidden>
+      <form class="karta realizacja formularz tylko-biuro" data-p-realizacja data-p-sekcja="realizacja" hidden>
         <h2>Realizacja</h2>
-        <p class="podpowiedz">Zaznacz wykonane zabiegi albo wpisz kwotę ręcznie (zabieg spoza listy, korekta).</p>
+        <p class="podpowiedz">Zaznacz zabiegi albo wpisz kwotę ręcznie.</p>
         <div class="grupy">
           <details class="grupa">
               
@@ -1007,7 +1026,7 @@
 
       <p class="komunikat-panelu tylko-biuro" data-p-sukces hidden aria-live="polite"></p>
 
-      <section class="karta tylko-biuro" data-p-historia-sekcja hidden>
+      <section class="karta tylko-biuro" data-p-historia-sekcja data-p-sekcja="historia" hidden>
         <h2>Historia</h2>
         <!-- wpis 20:22: jedna oś czasu (realizacje + zdarzenia), najnowsze na górze; domyślnie 2, „Pokaż całą historię (N)” rozwija w miejscu.
              Wzorzec: timeline / activity feed z shadcn przez 21st.dev – tylko układ, na naszych tokenach -->
@@ -1022,8 +1041,41 @@
         </div>
       </section>
 
+      <!-- 4C pkt 4: REZYGNACJA I ZWROT – fakty rezygnacji i płatności, ponowne potwierdzenie, „Sprawdź płatność”, „Zarejestruj rezygnację”
+           (przyciski zwrotu pieniędzy zostają w karcie Bon jako akcja główna) -->
+      <section class="karta tylko-biuro" data-p-rez-karta data-p-sekcja="rezygnacja" hidden>
+        <h2>Rezygnacja i zwrot</h2>
+        <!-- wpis 20:17: wiersze „etykieta – wartość”: rezygnacja, do zwrotu, termin, potwierdzenie, Easytools -->
+        <dl class="dane fakty-bonu" data-p-fakty-rez hidden></dl>
+        <!-- wpisy 17:33/17:35: ponowna wysyłka potwierdzenia rezygnacji (Bartek i Ewa) – mniejszy przycisk w drugim rzędzie -->
+        <div class="rez-potw" data-p-rez-potw hidden>
+          <button class="przycisk obrys maly" type="button" data-p-rez-potw-wyslij>Wyślij potwierdzenie ponownie</button>
+          <p class="blad" data-p-blad-rez-potw hidden></p>
+        </div>
+        <p class="blad" data-p-platnosc-ostrzezenie hidden></p>
+        <!-- REVIEW nr 5: stan płatności w Easytools na kliknięcie (otwarcie bonu przy kasie nie czeka na Easytools) -->
+        <button class="przycisk obrys maly" type="button" data-p-platnosc-sprawdz hidden>Sprawdź płatność w Easytools</button>
+        <!-- rezygnacja, która przyszła mailem albo na papierze (krok 4): admin i konto z 'rezygnacje' => true (Ewa) -->
+        <div data-p-rez-sekcja hidden>
+          <form class="admin-forma formularz" data-p-rez-forma>
+            <h3>Zarejestruj rezygnację</h3>
+            <fieldset class="kanal">
+              <legend class="etykieta">Jak przyszło oświadczenie</legend>
+              <label class="zaznacz"><input type="radio" name="kanal" value="mail" required><span>Mailem</span></label>
+              <label class="zaznacz"><input type="radio" name="kanal" value="gabinet"><span>Na papierze w gabinecie</span></label>
+            </fieldset>
+            <label class="pole"><span class="etykieta">Data wysłania maila lub listu (albo złożenia w gabinecie)</span><input type="date" name="data" required></label>
+            <label class="pole"><span class="etykieta">Data otrzymania przez gabinet</span><input type="date" name="otrzymano" required></label>
+            <p class="podpowiedz" data-p-rez-termin></p>
+            <label class="pole"><span class="etykieta">Powód (wymagany po terminie)</span><input type="text" name="powod" maxlength="150"></label>
+            <button class="przycisk obrys" type="submit">Zarejestruj rezygnację</button>
+          </form>
+          <p class="blad" data-p-blad-rez hidden></p>
+        </div>
+      </section>
+
       <!-- obsługa kupującego (2026-11-24, TA-11): admin i konto z uprawnieniem rezygnacji (Bartek, Ewa) – serwer daje „obsluga” tylko im -->
-      <section class="karta tylko-biuro" data-p-obsluga hidden>
+      <section class="karta tylko-biuro" data-p-obsluga data-p-sekcja="mail" hidden>
         <h2>Mail z bonem</h2>
         <form class="admin-forma formularz" data-p-wyslij-forma>
           <label class="pole"><span class="etykieta">Adres e-mail kupującego</span><input type="email" name="email" required maxlength="190" autocomplete="off"></label>
@@ -1040,44 +1092,35 @@
         <p class="blad" data-p-blad-wyslij hidden></p>
       </section>
 
-      <!-- rezygnacja, która przyszła mailem albo na papierze (krok 4): admin i konto z 'rezygnacje' => true (Ewa);
-           ze strony /bon dojdzie w kroku 2 -->
-      <section class="karta tylko-biuro" data-p-rez-sekcja hidden>
-        <h2>Zarejestruj rezygnację</h2>
-        <form class="admin-forma formularz" data-p-rez-forma>
-          <fieldset class="kanal">
-            <legend class="etykieta">Jak przyszło oświadczenie</legend>
-            <label class="zaznacz"><input type="radio" name="kanal" value="mail" required><span>Mailem</span></label>
-            <label class="zaznacz"><input type="radio" name="kanal" value="gabinet"><span>Na papierze w gabinecie</span></label>
-          </fieldset>
-          <label class="pole"><span class="etykieta">Data wysłania maila lub listu (albo złożenia w gabinecie)</span><input type="date" name="data" required></label>
-          <label class="pole"><span class="etykieta">Data otrzymania przez gabinet</span><input type="date" name="otrzymano" required></label>
-          <p class="podpowiedz" data-p-rez-termin></p>
-          <label class="pole"><span class="etykieta">Powód (wymagany po terminie)</span><input type="text" name="powod" maxlength="150"></label>
-          <button class="przycisk obrys" type="submit">Zarejestruj rezygnację</button>
-        </form>
-        <p class="blad" data-p-blad-rez hidden></p>
-      </section>
-
-      <!-- tylko admin -->
-      <section class="karta admin tylko-biuro" data-p-admin hidden>
-        <h2>Administracja</h2>
-        <!-- wpis 19:33: „Zamówienie i kupujący” zwinięte domyślnie -->
-        <details class="zwijane">
-          <summary>Zamówienie i kupujący</summary>
-          <dl class="dane" data-p-admin-dane></dl>
-        </details>
-        <form class="admin-forma formularz" data-p-waznosc>
+      <!-- 4C pkt 6: WAŻNOŚĆ – jedno bezpłatne przedłużenie o 3 mies. (regulamin; przycisk Ewa i Bartek, Karolina widzi informację)
+           i dowolna data (tylko admin) -->
+      <section class="karta tylko-biuro" data-p-waznosc-karta data-p-sekcja="waznosc" hidden>
+        <h2>Ważność</h2>
+        <div class="przedluz" data-p-przedluz hidden>
+          <p data-p-przedluz-tekst></p>
+          <button class="przycisk obrys" type="button" data-p-przedluz-przycisk>Przedłuż o 3 miesiące</button>
+        </div>
+        <form class="admin-forma formularz" data-p-waznosc hidden>
+          <h3>Zmień datę ważności</h3>
           <label class="pole"><span class="etykieta">Nowa data ważności</span><input type="date" name="data" required></label>
           <label class="pole"><span class="etykieta">Powód (np. zgoda Ewy)</span><input type="text" name="powod" maxlength="150"></label>
           <button class="przycisk obrys" type="submit">Zmień datę</button>
         </form>
-        <div class="admin-akcje">
-          <button class="przycisk" type="button" data-p-zatwierdz-bon hidden>Zatwierdź wstrzymany bon i wyślij PDF</button>
-          <button class="przycisk obrys" type="button" data-p-cofnij-rez hidden>Cofnij rezygnację</button>
-          <button class="przycisk obrys" type="button" data-p-zwrot>Oznacz zwrot (pieniądze zwraca się w Easytools)</button>
-          <p class="podpowiedz" data-p-zwrot-podpowiedz hidden>Zwykła droga: najpierw zarejestruj rezygnację, potem „Zwróć pieniądze”. „Oznacz zwrot” bez rezygnacji tylko awaryjnie, gdy pieniądze oddano już w Easytools.</p>
-        </div>
+        <p class="blad" data-p-blad-waznosc hidden></p>
+      </section>
+
+      <!-- 4C pkt 7: ADMINISTRACJA – tylko admin, zwinięta (zamówienie i kupujący, akcje rzadkie i awaryjne) -->
+      <section class="karta admin tylko-biuro" data-p-admin data-p-sekcja="admin" hidden>
+        <h2>Administracja</h2>
+        <details class="zwijane" data-p-admin-zwin>
+          <summary>Zamówienie, kupujący i akcje administratora</summary>
+          <dl class="dane" data-p-admin-dane></dl>
+          <div class="admin-akcje">
+            <button class="przycisk obrys" type="button" data-p-cofnij-rez hidden>Cofnij rezygnację</button>
+            <button class="przycisk obrys" type="button" data-p-zwrot>Oznacz zwrot (pieniądze zwraca się w Easytools)</button>
+            <p class="podpowiedz" data-p-zwrot-podpowiedz hidden>Zwykła droga: najpierw zarejestruj rezygnację, potem „Zwróć pieniądze”. „Oznacz zwrot” bez rezygnacji tylko awaryjnie, gdy pieniądze oddano już w Easytools.</p>
+          </div>
+        </details>
         <p class="blad" data-p-blad-admin hidden></p>
       </section>
     </div>
@@ -1138,7 +1181,7 @@
 
     <footer class="n-dol" data-astro-cid-lkdlr2dg>
     <span class="n-pomoc" data-n-pomoc hidden data-astro-cid-lkdlr2dg></span>
-    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu 242826f · 26.11.2026</span>
+    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu 422bb80 · 26.11.2026</span>
   </footer>
 
 
@@ -1149,8 +1192,8 @@
   <svg class="strzalka" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" data-astro-cid-kwdr2zt4><path d="M12 19V5M6 11l6-6 6 6" data-astro-cid-kwdr2zt4></path></svg>
 </button>
 
-    <script type="module" src="/_astro/Baza.astro_astro_type_script_index_0_lang.CwFcVVGc.js"></script>
+    <script type="module" src="/_astro/Baza.astro_astro_type_script_index_0_lang.DtxwhxQS.js"></script>
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.TwjQ1coA.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.JkRzbvKI.js"></script>
