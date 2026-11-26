@@ -565,7 +565,7 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
             'wartosc' => $bezKwot ? null : bon_zl((int)bon_grosze($b['initial_pln'])),
             'nieaktywny' => $status !== 'valid',
             'wazny_do' => substr((string)$b['expires_at'], 0, 10),
-            'kupiono' => substr((string)$b['created_at'], 0, 10),
+            'kupiono' => substr((string)$b['created_at'], 0, 16), // z godziną – nagłówek zamówienia (Bartek 2026-11-26)
             // karty wyników (Bartek 2026-11-24): nazwa i kolor bonu, „Dla”, ostatnia realizacja, kończąca się ważność, ostrzeżenia
             'nazwa' => bon_nazwa($k, $b),
             'kolor' => bon_kolor($k, $b), // wpis 21:47: kamień z wartości
