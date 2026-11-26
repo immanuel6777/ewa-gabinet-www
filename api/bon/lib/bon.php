@@ -41,6 +41,7 @@ function bon_konfig(): array {
         // od „nowe_od” → „warianty”, pomiędzy → bon wstrzymany. Kwota zapłacona NIE rozstrzyga (rabat: Szafirowy 300 zł za 270 zł = 300 zł).
         'warianty' => [
             'Bon 200 zł' => 200, 'Bon 300 zł' => 300, 'Bon 500 zł' => 500, 'Dowolna kwota (od 180 zł)' => 'dowolna', 'Dowolna kwota' => 'dowolna',
+        'Twoja kwota' => 'dowolna', // Bartek 2026-11-26 17:59: nowa nazwa wariantu dowolnej kwoty w Easytools (stare zostają dla zamówień sprzed zmiany)
             'Bon Topazowy' => 200, 'Bon Szafirowy' => 300, 'Bon Szmaragdowy' => 500,
         ],
         // stare nazwy (live do 25.11 22:39) – tylko zapas: wszystkie zamówienia sprzed publikacji to testy do wyczyszczenia przed startem

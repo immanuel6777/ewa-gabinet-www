@@ -296,12 +296,15 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     $rub = $dodaj(['amount' => 30000, 'line_items' => [['variant_name' => 'Bon Szafirowy', 'amount' => 30000, 'amount_total' => 30000]]]);
     $szaf = $dodaj(['amount' => 50000, 'line_items' => [['variant_name' => 'dowolna kwota', 'amount' => 50000, 'amount_total' => 50000]]]);
     $staraRub = $dodaj(['amount' => 30000, 'line_items' => [['variant_name' => 'Bon Rubinowy', 'amount' => 30000, 'amount_total' => 30000]]]);
+    $twoja = $dodaj(['amount' => 42000, 'line_items' => [['variant_name' => 'Twoja kwota', 'amount' => 42000, 'amount_total' => 42000]]]); // Bartek 26.11 17:59
     $nowaNieznana = $dodaj(['line_items' => [['variant_name' => 'Bon Diamentowy']]]);
     [, $zad] = bon_synchronizuj($ks, $pdo, 'cron');
     $brub = bon_test_bony($k, $pdo, $rub['id']);
     $bsz = bon_test_bony($k, $pdo, $szaf['id']);
     $bnn = bon_test_bony($k, $pdo, $nowaNieznana['id']);
     $bsr = bon_test_bony($k, $pdo, $staraRub['id']);
+    $btw = bon_test_bony($k, $pdo, $twoja['id']);
+    $t('wariant „Twoja kwota” (nowa nazwa 26.11) → dowolna kwota 420 zł valid', $btw && $btw[0]['initial_pln'] == 420 && $btw[0]['status'] === 'valid', json_encode($btw[0] ?? null, JSON_UNESCAPED_UNICODE));
     $t('wariant „Bon Szafirowy” → bon 300 zł valid', $brub && $brub[0]['initial_pln'] == 300 && $brub[0]['status'] === 'valid');
     $t('wariant „dowolna kwota” (małe litery) → dowolna kwota 500 zł valid', $bsz && $bsz[0]['initial_pln'] == 500 && $bsz[0]['status'] === 'valid');
     $t('stara nazwa „Bon Rubinowy” w zamówieniu po publikacji nowych nazw → nieznany wariant, wstrzymany', $bsr && $bsr[0]['status'] === 'held');
