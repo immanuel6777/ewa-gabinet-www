@@ -137,37 +137,59 @@ function bon_panel_moze_rezygnacje(?array $konto): bool {
 }
 
 /** Sesja z ciasteczka → ['login','imie','rola','rezygnacje','csrf'] albo null (brak, wygasła, konto usunięte z konfigu). */
-// --- bilet do instrukcji PDF (2026-11-26, uwaga Frontu 1 w #173) ---
+// --- bilet do instrukcji PDF (2026-11-26, uwagi Frontu 1 w #173 i po zgłoszeniu Bartka) ---
 // Aplikacja „EWA Podologia” z ekranu iPhone'a (standalone, scope /panel-bonow) otwiera /api/bon/instrukcja.php w osobnym widoku
 // Safari, który NIE ma ciasteczek aplikacji – sama sesja nie wystarczy. Dlatego sesja.php (GET, zalogowany) podaje link z biletem:
-// t = <ważny do (unix)>.<podpis>.<login>, podpis = HMAC(klucz z sekretu webhooka, ważny_do|login|wersja hasła). Bilet działa 12 h
-// i gaśnie od razu po zmianie/resecie hasła, „Wyloguj wszędzie” (wersja hasła) albo wyłączeniu konta. Bez sekretu – brak biletu.
+// t = <ważny do (unix)>.<sid>.<podpis>.<login>; sid = początek token_hash sesji, z której bilet wydano; podpis = HMAC(klucz z sekretu
+// webhooka, ważny_do|sid|login|wersja hasła). Bilet działa najwyżej 12 h i TYLKO dopóki ta sesja istnieje: gaśnie po „Wyloguj”,
+// wygaśnięciu sesji, zmianie/resecie hasła, „Wyloguj wszędzie” i wyłączeniu konta (zgłoszenie Bartka 26.11: skopiowany link działał
+// po wylogowaniu). Bez sekretu – brak biletu (zostaje sam link z ciasteczkiem).
 const BON_INSTRUKCJA_BILET_S = 43200;
 
 function bon_instrukcja_klucz(array $k): ?string {
     $s = (string)($k['easytools_webhook_sekret'] ?? '');
-    return $s === '' ? null : hash_hmac('sha256', 'instrukcja-pdf-v1', $s);
+    return $s === '' ? null : hash_hmac('sha256', 'instrukcja-pdf-v2', $s);
 }
 
-function bon_instrukcja_bilet(array $k, PDO $pdo, string $login, ?int $teraz = null): ?string {
+function bon_instrukcja_podpis(string $klucz, int $do, string $sid, string $login, int $wersja): string {
+    return substr(hash_hmac('sha256', $do . '|' . $sid . '|' . $login . '|' . $wersja, $klucz), 0, 32);
+}
+
+/** Bilet dla zalogowanej sesji (token z ciasteczka) albo null. */
+function bon_instrukcja_bilet(array $k, PDO $pdo, string $token, ?int $teraz = null): ?string {
     $klucz = bon_instrukcja_klucz($k);
-    $konto = $klucz ? bon_panel_konto($k, $pdo, $login) : null;
-    if (!$konto || !$konto['aktywne'] || $konto['zmiana_hasla']) return null;
+    $s = $klucz ? bon_panel_sesja($k, $pdo, $token) : null;
+    if (!$s || !empty($s['zmiana_hasla'])) return null;
+    $konto = bon_panel_konto(bon_panel_konfig($k), $pdo, (string)$s['login']);
+    if (!$konto) return null;
     $do = ($teraz ?? time()) + BON_INSTRUKCJA_BILET_S;
-    $podpis = substr(hash_hmac('sha256', $do . '|' . $login . '|' . (int)$konto['wersja'], $klucz), 0, 32);
-    return $do . '.' . $podpis . '.' . $login;
+    $sid = substr(hash('sha256', $token), 0, 24);
+    return $do . '.' . $sid . '.' . bon_instrukcja_podpis($klucz, $do, $sid, (string)$s['login'], (int)$konto['wersja']) . '.' . $s['login'];
 }
 
-/** Login z ważnego biletu albo null (zły format, po terminie, zły podpis, konto wyłączone, zmienione hasło). */
+/** Login z ważnego biletu albo null (zły format, po terminie, zły podpis, sesja wylogowana/wygasła, konto wyłączone, zmienione hasło). */
 function bon_instrukcja_bilet_login(array $k, PDO $pdo, string $t, ?int $teraz = null): ?string {
     $klucz = bon_instrukcja_klucz($k);
-    if (!$klucz || !preg_match('/^(\d{10})\.([a-f0-9]{32})\.([a-z0-9._-]{1,64})$/', $t, $m)) return null;
-    [, $do, $podpis, $login] = $m;
-    if ((int)$do < ($teraz ?? time()) || (int)$do > ($teraz ?? time()) + BON_INSTRUKCJA_BILET_S) return null;
+    if (!$klucz || !preg_match('/^(\d{10})\.([a-f0-9]{24})\.([a-f0-9]{32})\.([a-z0-9._-]{1,40})$/', $t, $m)) return null;
+    [, $do, $sid, $podpis, $login] = $m;
+    $t0 = $teraz ?? time();
+    if ((int)$do < $t0 || (int)$do > $t0 + BON_INSTRUKCJA_BILET_S) return null;
+    $k = bon_panel_konfig($k);
     $konto = bon_panel_konto($k, $pdo, $login);
     if (!$konto || !$konto['aktywne'] || $konto['zmiana_hasla']) return null;
-    $oczekiwany = substr(hash_hmac('sha256', $do . '|' . $login . '|' . (int)$konto['wersja'], $klucz), 0, 32);
-    return hash_equals($oczekiwany, $podpis) ? $login : null;
+    if (!hash_equals(bon_instrukcja_podpis($klucz, (int)$do, $sid, $login, (int)$konto['wersja']), $podpis)) return null;
+    // sesja, z której wydano bilet, nadal istnieje, nie wygasła i ma bieżącą wersję hasła
+    $zBazy = bon_konta_z_bazy($k);
+    $st = $pdo->prepare('SELECT expires_at' . ($zBazy ? ', wersja_hasla' : '') . ' FROM ' . bon_tabela($k, 'voucher_sessions')
+        . ' WHERE token_hash LIKE ? AND login = ?');
+    $st->execute([$sid . '%', $login]);
+    $teraz_s = (new DateTimeImmutable('@' . $t0))->setTimezone(bon_teraz()->getTimezone())->format('Y-m-d H:i:s');
+    foreach ($st->fetchAll() as $r) {
+        if ((string)$r['expires_at'] < $teraz_s) continue;
+        if ($zBazy && (int)($r['wersja_hasla'] ?? 0) !== (int)$konto['wersja']) continue;
+        return $login;
+    }
+    return null;
 }
 
 function bon_panel_sesja(array $k, PDO $pdo, string $token, ?DateTimeImmutable $teraz = null): ?array {

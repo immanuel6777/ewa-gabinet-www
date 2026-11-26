@@ -1,6 +1,6 @@
 <?php
 // Panel realizacji bonów – sesja (etap 3: 2026-11-21). Woła ją strona /panel-bonow.
-//   GET    → {zalogowany, login, imie, rola, csrf, instrukcja}  (csrf idzie potem w nagłówku X-CSRF przy każdym POST; instrukcja = link z biletem 12 h)
+//   GET    → {zalogowany, login, imie, rola, csrf, instrukcja}  (csrf idzie potem w nagłówku X-CSRF przy każdym POST; instrukcja = link z biletem: do 12 h i tylko dopóki ta sesja żyje)
 //   POST   {login, haslo, zapamietaj} → logowanie (limit prób), ciasteczko bon_panel (HttpOnly, Secure, SameSite=Lax)
 //   DELETE → wylogowanie (wymaga X-CSRF)
 // Logika: lib/panel.php.
@@ -15,7 +15,7 @@ try {
     if ($metoda === 'GET') {
         $s = bon_panel_sesja($k, $pdo, $token);
         // link do instrukcji z biletem (działa też w widoku Safari otwartym z aplikacji na iPhonie – bez ciasteczek), null = zwykły link
-        if ($s) $s['instrukcja'] = ($b = bon_instrukcja_bilet($k, $pdo, (string)$s['login'])) ? '/api/bon/instrukcja.php?t=' . $b : null;
+        if ($s) $s['instrukcja'] = ($b = bon_instrukcja_bilet($k, $pdo, $token)) ? '/api/bon/instrukcja.php?t=' . $b : null;
         bon_json(200, $s ? ['ok' => true, 'zalogowany' => true] + $s : ['ok' => true, 'zalogowany' => false]);
     } elseif ($metoda === 'POST') {
         $d = bon_http_json_body(null, false);
