@@ -357,6 +357,11 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
         $odp['rezygnacja_do'] = bon_rezygnacja_termin($bon);
         $odp['rezygnacja_kwota'] = bon_zl(bon_kwota_zwrotu($bon, $saldo)); // wpis 18:00: proporcjonalnie do zapłaconej ceny
         $odp['rezygnacja_kwota_przeliczona'] = bon_kwota_zwrotu($bon, $saldo) < $saldo;
+        // karta #195: flagi akcji wg stanu – panel pokazuje tylko to, co serwer przyjmie (te same funkcje co w bon_panel_admin)
+        $odp['akcje'] = [
+            'zmien_date' => $admin && bon_panel_zmiana_daty_wolno($bon),
+            'oznacz_zwrot' => bon_panel_oznacz_zwrot_wolno($bon, $sesja, $teraz),
+        ];
     }
     if ($admin) {
         $odp['status_bazy'] = $bon['status'];
@@ -411,6 +416,23 @@ function bon_panel_cofniete_realizacje(array $k, PDO $pdo, int $voucherId): arra
 }
 
 /** Ostatnia realizacja bonu, jeśli można ją cofnąć: ['id','kwota','kiedy','zabiegi'] albo null. */
+// --- akcje wg stanu bonu (karta #195, tabela zaakceptowana przez Bartka 2026-11-26 ok. 19:25) ---
+// ważny – wszystko; wstrzymany – Zatwierdź, Zmień datę, Oznacz zwrot; po terminie – Przedłuż (okno 30 dni), Zmień datę;
+// wykorzystany – tylko Historia i Mail z bonem; rezygnacja / zwrot w toku – Zwróć/Ponów, Oznacz zwrot, Cofnij rezygnację (admin),
+// Historia; zwrócony – tylko Historia. Reszta reguł żyje przy swoich akcjach (przedłużenie, rezygnacja, zwrot, wysyłka, zatwierdzenie).
+
+/** „Zmień datę” (admin): bon ważny (także po terminie) albo wstrzymany. Wykorzystany, z rezygnacją i zwrócony – nie. */
+function bon_panel_zmiana_daty_wolno(array $bon): bool {
+    return in_array((string)$bon['status'], ['valid', 'held'], true);
+}
+
+/** „Oznacz zwrot”: bon z rezygnacją – admin i Ewa; ważny (przed terminem) i wstrzymany – tylko admin; po terminie, wykorzystany, zwrócony – nikt. */
+function bon_panel_oznacz_zwrot_wolno(array $bon, array $sesja, ?DateTimeImmutable $teraz = null): bool {
+    $stan = bon_status_efektywny($bon, $teraz);
+    if ($stan === 'withdrawn') return $sesja['rola'] === 'admin' || !empty($sesja['rezygnacje']);
+    return $sesja['rola'] === 'admin' && in_array($stan, ['valid', 'held'], true);
+}
+
 function bon_panel_cofniecie_mozliwe(array $k, PDO $pdo, array $bon, ?DateTimeImmutable $teraz = null): ?array {
     if (!in_array($bon['status'], ['valid', 'used'], true)) return null; // wstrzymany, zwrócony, z rezygnacją – bez cofania
     $st = $pdo->prepare('SELECT id, amount_pln, pozycje, typ, redeemed_at FROM ' . bon_tabela($k, 'redemptions') . ' WHERE voucher_id = ? ORDER BY redeemed_at DESC, id DESC LIMIT 1');
@@ -856,6 +878,7 @@ function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
         if (!$bon) { $pdo->rollBack(); return [404, ['ok' => false, 'blad' => 'Nie ma bonu o tym numerze.']]; }
 
         if ($akcja === 'waznosc') {
+            if (!bon_panel_zmiana_daty_wolno($bon)) { $pdo->rollBack(); return [409, ['ok' => false, 'blad' => 'Datę ważności można zmienić tylko w bonie ważnym albo wstrzymanym.']]; }
             $data = (string)($dane['data'] ?? '');
             $d = DateTimeImmutable::createFromFormat('!Y-m-d', $data, new DateTimeZone(BON_STREFA));
             if (!$d || $d->format('Y-m-d') !== $data) { $pdo->rollBack(); return [400, ['ok' => false, 'blad' => 'Data w formacie RRRR-MM-DD.']]; }
@@ -872,6 +895,7 @@ function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
         } elseif ($akcja === 'zwrot') {
             if ($bon['status'] === 'refunded') { $pdo->rollBack(); return [409, ['ok' => false, 'blad' => 'Bon jest już oznaczony jako zwrócony.']]; }
             if ($sesja['rola'] !== 'admin' && $bon['status'] !== 'withdrawn') { $pdo->rollBack(); return [403, ['ok' => false, 'blad' => 'Oznaczyć zwrot bonu bez rezygnacji może tylko Bartek.']]; }
+            if (!bon_panel_oznacz_zwrot_wolno($bon, $sesja, $teraz)) { $pdo->rollBack(); return [409, ['ok' => false, 'blad' => 'Bonu wykorzystanego albo po terminie nie oznacza się jako zwrócony.']]; }
             $pdo->prepare("UPDATE $tabB SET status = 'refunded' WHERE id = ?")->execute([$bon['id']]);
             // do zwrotu: kwota z rezygnacji, a bez rezygnacji bon_kwota_zwrotu (wpis 18:00: proporcjonalnie do zapłaconej ceny)
             $saldoZ = (int)bon_grosze($bon['balance_pln']);

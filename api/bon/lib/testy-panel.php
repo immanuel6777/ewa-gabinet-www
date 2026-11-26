@@ -286,5 +286,39 @@ function bon_testy_kwoty_kasy(array $k, PDO $pdo): array {
         if ($kU === 200) { $udane++; bon_panel_wyloguj($k, $pdo, (string)($cU['wartosc'] ?? '')); }
     }
     $t('Z3: 25 udanych logowań z jednego IP → wszystkie 200 (udane nie zużywają limitu)', $udane === 25, (string)$udane);
+
+    // --- karta #195: akcje wg stanu bonu (Zmień datę, Oznacz zwrot + flagi w historii) ---
+    $nowyBon = static function (int $zl, array $nadpisz = []) use ($k, $pdo): string {
+        $p = bon_test_payload(array_replace(['price_custom_id' => "bon-$zl", 'amount_paid' => $zl], $nadpisz));
+        bon_test_webhook($k, $pdo, $p);
+        return (string)(bon_test_bony($k, $pdo, $p['order_id'])[0]['code'] ?? '');
+    };
+    $stan = static function (string $kod, string $status, ?string $wygasa = null) use ($pdo, $tab): void {
+        $pdo->prepare("UPDATE $tab SET status = ?" . ($wygasa ? ', expires_at = ?' : '') . ' WHERE code = ?')
+            ->execute($wygasa ? [$status, $wygasa, $kod] : [$status, $kod]);
+    };
+    $data = bon_teraz()->modify('+60 days')->format('Y-m-d');
+    $zmien = static fn(string $kod) => bon_panel_admin($k, $pdo, $sAdmin, ['kod' => $kod, 'akcja' => 'waznosc', 'data' => $data, 'powod' => 'test #195'])[0];
+    $oznacz = static fn(array $s, string $kod) => bon_panel_admin($k, $pdo, $s, ['kod' => $kod, 'akcja' => 'zwrot', 'powod' => 'test #195'])[0];
+    $akcje = static fn(array $s, string $kod) => bon_panel_historia($k, $pdo, $s, $kod)[1]['akcje'] ?? null;
+    $bV = $nowyBon(200); $bU = $nowyBon(200); $bW = $nowyBon(200); $bR = $nowyBon(200); $bE = $nowyBon(200); $bH = $nowyBon(300, ['amount_paid' => 100]);
+    $stan($bU, 'used'); $stan($bW, 'withdrawn'); $stan($bR, 'refunded');
+    $stan($bE, 'valid', bon_teraz()->modify('-3 days')->format('Y-m-d'));
+    $kody = ['ważny' => $zmien($bV), 'wstrzymany' => $zmien($bH), 'wykorzystany' => $zmien($bU), 'rezygnacja' => $zmien($bW), 'zwrócony' => $zmien($bR)];
+    $t('#195: „Zmień datę” – ważny i wstrzymany 200; wykorzystany, rezygnacja, zwrócony 409',
+        $kody === ['ważny' => 200, 'wstrzymany' => 200, 'wykorzystany' => 409, 'rezygnacja' => 409, 'zwrócony' => 409], json_encode($kody, JSON_UNESCAPED_UNICODE));
+    $a = ['admin ważny' => $akcje($sAdmin, $bV), 'admin wykorzystany' => $akcje($sAdmin, $bU), 'admin rezygnacja' => $akcje($sAdmin, $bW),
+          'admin po terminie' => $akcje($sAdmin, $bE), 'Ewa ważny' => $akcje($sEwa, $bV), 'Ewa rezygnacja' => $akcje($sEwa, $bW)];
+    $t('#195: flagi akcji w historii zgodne z tabelą (admin / Ewa × ważny, wykorzystany, rezygnacja, po terminie)',
+        $a['admin ważny'] === ['zmien_date' => true, 'oznacz_zwrot' => true]
+        && $a['admin wykorzystany'] === ['zmien_date' => false, 'oznacz_zwrot' => false]
+        && $a['admin rezygnacja'] === ['zmien_date' => false, 'oznacz_zwrot' => true]
+        && $a['admin po terminie'] === ['zmien_date' => true, 'oznacz_zwrot' => false]
+        && $a['Ewa ważny'] === ['zmien_date' => false, 'oznacz_zwrot' => false]
+        && $a['Ewa rezygnacja'] === ['zmien_date' => false, 'oznacz_zwrot' => true], json_encode($a, JSON_UNESCAPED_UNICODE));
+    $kody = ['wykorzystany' => $oznacz($sAdmin, $bU), 'po terminie' => $oznacz($sAdmin, $bE), 'Ewa rezygnacja' => $oznacz($sEwa, $bW), 'admin wstrzymany' => $oznacz($sAdmin, $bH)];
+    $t('#195: „Oznacz zwrot” – wykorzystany i po terminie 409; rezygnacja (Ewa) i wstrzymany (admin) 200',
+        $kody === ['wykorzystany' => 409, 'po terminie' => 409, 'Ewa rezygnacja' => 200, 'admin wstrzymany' => 200], json_encode($kody, JSON_UNESCAPED_UNICODE));
+    $t('#195: Karolina (kasa) nie dostaje flag akcji', !array_key_exists('akcje', bon_panel_historia($k, $pdo, $sKasa, $bV)[1]));
     return $wyniki;
 }
