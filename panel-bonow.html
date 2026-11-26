@@ -138,19 +138,19 @@
 </svg></button>
         </div>
         <nav class="n-menu-lista" aria-label="Menu panelu" data-astro-cid-lkdlr2dg>
-          <a class="n-menu-poz" href="/panel-bonow/instrukcja.pdf" target="_blank" rel="noopener" data-p-menu-poz="instrukcja" data-astro-cid-lkdlr2dg>Instrukcja<span class="sr-only" data-astro-cid-lkdlr2dg> (otwiera się w nowej karcie)</span></a>
+          <a class="n-menu-poz" href="/api/bon/instrukcja.php" target="_blank" rel="noopener" data-p-menu-poz="instrukcja" data-astro-cid-lkdlr2dg>Instrukcja<span class="sr-only" data-astro-cid-lkdlr2dg> (otwiera się w nowej karcie)</span></a>
           <button class="n-menu-poz" type="button" data-p-menu-poz="sync" hidden data-astro-cid-lkdlr2dg>Pobierz nowe zamówienia</button>
           <button class="n-menu-poz" type="button" data-p-menu-poz="konta" hidden data-astro-cid-lkdlr2dg>Konta</button>
           <button class="n-menu-poz" type="button" data-p-menu-poz="haslo" hidden data-astro-cid-lkdlr2dg>Zmień hasło</button>
           <p class="n-menu-poz n-menu-pomoc" data-p-menu-poz="pomoc" data-n-pomoc="bez-instrukcji" hidden data-astro-cid-lkdlr2dg></p>
           <button class="n-menu-poz n-menu-wyloguj" type="button" data-p-menu-poz="wyloguj" data-astro-cid-lkdlr2dg>Wyloguj</button>
         </nav>
-        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu 09c34cd · 26.11.2026</p>
+        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu 492a457 · 26.11.2026</p>
       </div>
     </dialog>
   </header>
 
-<script type="module">var e=/(?:\+?48[\s-]?)?\d{3}[\s-]?\d{3}[\s-]?\d{3}/;function t(t){let n=typeof t?.telefon==`string`?t.telefon.match(e)?.[0].trim():void 0,r=n?.replace(/[^\d]/g,``)??``,i=typeof t?.imie==`string`&&t.imie.trim()?`${t.imie.trim()} `:``;for(let e of document.querySelectorAll(`[data-n-pomoc]`)){if(e.replaceChildren(),!n){e.hidden=!0;continue}let t=Object.assign(document.createElement(`a`),{href:`tel:+${r.length===9?`48`+r:r}`,textContent:n});e.append(`Pomoc: ${i}`,t),e.dataset.nPomoc!==`bez-instrukcji`&&e.append(` · `,Object.assign(document.createElement(`a`),{href:`/panel-bonow/instrukcja.pdf`,textContent:`Instrukcja`,target:`_blank`,rel:`noopener`})),e.hidden=!1}}var n=!1;document.addEventListener(`panel:sesja`,e=>{n=!0;let r=e.detail;t(r?.zalogowany?r.pomoc:null)});var r=document.querySelector(`[data-p-zalogowany]`);if(r&&document.querySelector(`[data-n-pomoc]`)){let e=!1,i=async()=>{if(r.hidden!==!e){if(e=!r.hidden,!e)return t(null);if(!n)try{let e=await fetch(`/api/bon/sesja.php`,{credentials:`same-origin`,headers:{Accept:`application/json`}}),n=e.ok?await e.json():null;n?.zalogowany&&!r.hidden&&t(n.pomoc)}catch{}}};new MutationObserver(i).observe(r,{attributes:!0,attributeFilter:[`hidden`]}),i()}var i=document.querySelector(`[data-n-menu]`),a=document.querySelector(`[data-n-menu-przycisk]`),o=document.documentElement;if(i&&a){let e=()=>{i.open||(i.showModal(),i.focus(),a.setAttribute(`aria-expanded`,`true`))},t=()=>{i.open&&i.close()};a.addEventListener(`click`,e),i.querySelector(`[data-n-menu-zamknij]`)?.addEventListener(`click`,t),i.addEventListener(`click`,e=>{let n=e.target;if(n===i)return t();n.closest(`a[data-p-menu-poz], button[data-p-menu-poz]`)&&t()}),i.addEventListener(`close`,()=>{a.setAttribute(`aria-expanded`,`false`),o.hasAttribute(`data-zalogowany`)&&a.focus()}),new MutationObserver(()=>{o.hasAttribute(`data-zalogowany`)||t()}).observe(o,{attributes:!0,attributeFilter:[`data-zalogowany`]})}</script>
+<script type="module">var e=/(?:\+?48[\s-]?)?\d{3}[\s-]?\d{3}[\s-]?\d{3}/;function t(t){let n=typeof t?.telefon==`string`?t.telefon.match(e)?.[0].trim():void 0,r=n?.replace(/[^\d]/g,``)??``,i=typeof t?.imie==`string`&&t.imie.trim()?`${t.imie.trim()} `:``;for(let e of document.querySelectorAll(`[data-n-pomoc]`)){if(e.replaceChildren(),!n){e.hidden=!0;continue}let t=Object.assign(document.createElement(`a`),{href:`tel:+${r.length===9?`48`+r:r}`,textContent:n});e.append(`Pomoc: ${i}`,t),e.dataset.nPomoc!==`bez-instrukcji`&&e.append(` · `,Object.assign(document.createElement(`a`),{href:`/api/bon/instrukcja.php`,textContent:`Instrukcja`,target:`_blank`,rel:`noopener`})),e.hidden=!1}}var n=!1;document.addEventListener(`panel:sesja`,e=>{n=!0;let r=e.detail;t(r?.zalogowany?r.pomoc:null)});var r=document.querySelector(`[data-p-zalogowany]`);if(r&&document.querySelector(`[data-n-pomoc]`)){let e=!1,i=async()=>{if(r.hidden!==!e){if(e=!r.hidden,!e)return t(null);if(!n)try{let e=await fetch(`/api/bon/sesja.php`,{credentials:`same-origin`,headers:{Accept:`application/json`}}),n=e.ok?await e.json():null;n?.zalogowany&&!r.hidden&&t(n.pomoc)}catch{}}};new MutationObserver(i).observe(r,{attributes:!0,attributeFilter:[`hidden`]}),i()}var i=document.querySelector(`[data-n-menu]`),a=document.querySelector(`[data-n-menu-przycisk]`),o=document.documentElement;if(i&&a){let e=()=>{i.open||(i.showModal(),i.focus(),a.setAttribute(`aria-expanded`,`true`))},t=()=>{i.open&&i.close()};a.addEventListener(`click`,e),i.querySelector(`[data-n-menu-zamknij]`)?.addEventListener(`click`,t),i.addEventListener(`click`,e=>{let n=e.target;if(n===i)return t();n.closest(`a[data-p-menu-poz], button[data-p-menu-poz]`)&&t()}),i.addEventListener(`close`,()=>{a.setAttribute(`aria-expanded`,`false`),o.hasAttribute(`data-zalogowany`)&&a.focus()}),new MutationObserver(()=>{o.hasAttribute(`data-zalogowany`)||t()}).observe(o,{attributes:!0,attributeFilter:[`data-zalogowany`]})}</script>
 
     <!-- okruszki przed <main>: ta sama wysokość na każdej stronie, niezależnie od paddingu <main> (bezRamki) -->
     
@@ -1184,7 +1184,7 @@
 
     <footer class="n-dol" data-astro-cid-lkdlr2dg>
     <span class="n-pomoc" data-n-pomoc hidden data-astro-cid-lkdlr2dg></span>
-    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu 09c34cd · 26.11.2026</span>
+    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu 492a457 · 26.11.2026</span>
   </footer>
 
 

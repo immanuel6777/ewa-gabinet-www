@@ -137,6 +137,39 @@ function bon_panel_moze_rezygnacje(?array $konto): bool {
 }
 
 /** Sesja z ciasteczka → ['login','imie','rola','rezygnacje','csrf'] albo null (brak, wygasła, konto usunięte z konfigu). */
+// --- bilet do instrukcji PDF (2026-11-26, uwaga Frontu 1 w #173) ---
+// Aplikacja „EWA Podologia” z ekranu iPhone'a (standalone, scope /panel-bonow) otwiera /api/bon/instrukcja.php w osobnym widoku
+// Safari, który NIE ma ciasteczek aplikacji – sama sesja nie wystarczy. Dlatego sesja.php (GET, zalogowany) podaje link z biletem:
+// t = <ważny do (unix)>.<podpis>.<login>, podpis = HMAC(klucz z sekretu webhooka, ważny_do|login|wersja hasła). Bilet działa 12 h
+// i gaśnie od razu po zmianie/resecie hasła, „Wyloguj wszędzie” (wersja hasła) albo wyłączeniu konta. Bez sekretu – brak biletu.
+const BON_INSTRUKCJA_BILET_S = 43200;
+
+function bon_instrukcja_klucz(array $k): ?string {
+    $s = (string)($k['easytools_webhook_sekret'] ?? '');
+    return $s === '' ? null : hash_hmac('sha256', 'instrukcja-pdf-v1', $s);
+}
+
+function bon_instrukcja_bilet(array $k, PDO $pdo, string $login, ?int $teraz = null): ?string {
+    $klucz = bon_instrukcja_klucz($k);
+    $konto = $klucz ? bon_panel_konto($k, $pdo, $login) : null;
+    if (!$konto || !$konto['aktywne'] || $konto['zmiana_hasla']) return null;
+    $do = ($teraz ?? time()) + BON_INSTRUKCJA_BILET_S;
+    $podpis = substr(hash_hmac('sha256', $do . '|' . $login . '|' . (int)$konto['wersja'], $klucz), 0, 32);
+    return $do . '.' . $podpis . '.' . $login;
+}
+
+/** Login z ważnego biletu albo null (zły format, po terminie, zły podpis, konto wyłączone, zmienione hasło). */
+function bon_instrukcja_bilet_login(array $k, PDO $pdo, string $t, ?int $teraz = null): ?string {
+    $klucz = bon_instrukcja_klucz($k);
+    if (!$klucz || !preg_match('/^(\d{10})\.([a-f0-9]{32})\.([a-z0-9._-]{1,64})$/', $t, $m)) return null;
+    [, $do, $podpis, $login] = $m;
+    if ((int)$do < ($teraz ?? time()) || (int)$do > ($teraz ?? time()) + BON_INSTRUKCJA_BILET_S) return null;
+    $konto = bon_panel_konto($k, $pdo, $login);
+    if (!$konto || !$konto['aktywne'] || $konto['zmiana_hasla']) return null;
+    $oczekiwany = substr(hash_hmac('sha256', $do . '|' . $login . '|' . (int)$konto['wersja'], $klucz), 0, 32);
+    return hash_equals($oczekiwany, $podpis) ? $login : null;
+}
+
 function bon_panel_sesja(array $k, PDO $pdo, string $token, ?DateTimeImmutable $teraz = null): ?array {
     $k = bon_panel_konfig($k);
     if (!preg_match('/^[a-f0-9]{64}$/', $token)) return null;

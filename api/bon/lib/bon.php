@@ -117,6 +117,13 @@ function bon_pdo(array $k): PDO {
 }
 
 // nazwa tabeli z przedrostkiem (test_ na testach OVH); tylko litery, cyfry i _
+/** Instrukcja dla gabinetu (PDF) w katalogu konfigu na OVH, wgrana po FTP – ścieżka albo null, gdy pliku nie ma. */
+function bon_instrukcja_plik(array $k): ?string {
+    $kat = (string)($k['_katalog'] ?? '');
+    $p = $kat !== '' ? $kat . '/instrukcja-gabinet.pdf' : '';
+    return $p !== '' && is_file($p) ? $p : null;
+}
+
 function bon_tabela(array $k, string $nazwa): string {
     $p = (string)$k['tabele_przedrostek'];
     if (!preg_match('/^[a-z0-9_]*$/', $p)) throw new RuntimeException('zły przedrostek tabel');
