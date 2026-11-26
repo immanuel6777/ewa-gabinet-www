@@ -62,6 +62,7 @@ return [
     // --- bon (ważność: „kamienie” wyżej) ---
     'kod_prefix' => 'EWA',
     'verify_limit_na_minute' => 20,
+    'adres_limit_na_minute' => 30,       // strona podziękowania: pytań o stan bonu z jednego IP na minutę (Bartek 26.11: 10 → 30 – wspólny IP sieci/operatora)
     'bon_adres_pelny_min' => 60,         // /bony/dziekujemy: pełny adres do tylu minut od zapłaty, potem zamaskowany
 
     // --- maile ---

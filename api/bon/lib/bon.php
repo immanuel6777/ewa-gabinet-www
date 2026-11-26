@@ -79,7 +79,7 @@ const BON_USTAWIENIA_JAWNE = [
     'sync_tryb', 'sync_od', 'sync_dni', 'sync_odstep_s', 'warianty', 'warianty_stare', 'warianty_zmiana', 'kamienie', 'ceny', 'prog_wstrzymania', 'min_dowolna_pln',
     'kod_prefix', 'verify_limit_na_minute', 'mail_nadawca', 'mail_odpowiedz', 'mail_powiadomienie',
     'telefon_pomoc_bony', 'telefon_pomoc_bony_godziny', 'mail_zapas', 'mail_smtp_host', 'mail_smtp_port', 'mail_smtp_user',
-    'webhook_tryb', 'kwota_jednostka', 'easytools_tryb', 'easytools_produkt_uuid', 'bon_adres_pelny_min',
+    'webhook_tryb', 'kwota_jednostka', 'easytools_tryb', 'easytools_produkt_uuid', 'bon_adres_pelny_min', 'adres_limit_na_minute',
     'mail_zapas_test_do', // przełącznik testu zapasu – z repo zamiast FTP (wpis 11:35)
     'mail_obsluga',       // P-12: adres obsługi klientów (bony@)
     'mail_zdanie_rezygnacja', // wpis 17:47: zdanie o rezygnacji na /bon w mailu z bonem
@@ -945,7 +945,7 @@ function bon_adres_maska(string $adres): string {
  */
 function bon_stan_zamowienia(array $k, PDO $pdo, string $zamowienie, string $ip, ?DateTimeImmutable $teraz = null): ?array {
     if (!preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/', $zamowienie)) return null;
-    if (!bon_limit_ok($pdo, $k, $ip, 'adres', (int)($k['adres_limit_na_minute'] ?? 10))) return null;
+    if (!bon_limit_ok($pdo, $k, $ip, 'adres', (int)($k['adres_limit_na_minute'] ?? 30))) return null;
     $teraz ??= bon_teraz();
     $st = $pdo->prepare('SELECT status, buyer_email, mail_wyslany_at, created_at FROM ' . bon_tabela($k, 'vouchers')
         . ' WHERE easytools_order_id = ? ORDER BY id');

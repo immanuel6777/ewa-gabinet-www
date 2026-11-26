@@ -472,6 +472,7 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     $t('strona podziękowania: mail jeszcze nie wyszedł → w_toku z adresem, 2 bony', ($s['stan'] ?? '') === 'w_toku' && ($s['bonow'] ?? 0) === 2 && isset($s['adres']), json_encode($s));
     $ip2 = '198.51.100.' . random_int(1, 250);
     $ok = 0;
+    $t('limit pytań o stan bonu z ustawień: 30 na minutę z jednego IP (Bartek 26.11)', (int)(bon_ustawienia_repo()['adres_limit_na_minute'] ?? 0) === 30);
     for ($i = 0; $i < 12; $i++) if (bon_stan_zamowienia(array_replace($k, ['adres_limit_na_minute' => 10]), $pdo, $a['id'], $ip2) !== null) $ok++;
     $t('strona podziękowania: limit 10 zapytań na minutę z jednego IP, osobny od verify', $ok === 10 && bon_limit_ok($pdo, $k, $ip2), (string)$ok);
     $t('maska adresu: jedna litera przed @, brak @', bon_adres_maska('k@wp.pl') === 'k…@wp.pl' && bon_adres_maska('zle') === '…');
