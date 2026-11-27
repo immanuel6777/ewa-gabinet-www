@@ -65,7 +65,7 @@
 
       <h2 style="margin:0 0 8px;font-size:20px;line-height:1.3;font-weight:700;color:#17504B">Dobrze wiedzieć</h2>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px">
-        <tr><td width="22" style="width:22px;vertical-align:top;padding:2px 0 8px;font-size:17px;line-height:1.6;color:#236E66">&#10003;</td><td style="padding:2px 0 8px;font-family:Lato, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:17px;line-height:1.6;color:#2E5C57">Bon jest na zabiegi podologiczne w&nbsp;Gabinecie EWA, ul. ks. Piotra Skargi 72 w&nbsp;Pabianicach.</td></tr>
+        <tr><td width="22" style="width:22px;vertical-align:top;padding:2px 0 8px;font-size:17px;line-height:1.6;color:#236E66">&#10003;</td><td style="padding:2px 0 8px;font-family:Lato, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:17px;line-height:1.6;color:#2E5C57">Bon jest na zabiegi podologiczne w&nbsp;Gabinecie Podologicznym EWA, ul. ks. Piotra Skargi 72 w&nbsp;Pabianicach.</td></tr>
         <tr><td width="22" style="width:22px;vertical-align:top;padding:2px 0 8px;font-size:17px;line-height:1.6;color:#236E66">&#10003;</td><td style="padding:2px 0 8px;font-family:Lato, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:17px;line-height:1.6;color:#2E5C57">Niewykorzystana kwota zostaje na bonie na kolejną wizytę.</td></tr>
         <tr><td width="22" style="width:22px;vertical-align:top;padding:2px 0 8px;font-size:17px;line-height:1.6;color:#236E66">&#10003;</td><td style="padding:2px 0 8px;font-family:Lato, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:17px;line-height:1.6;color:#2E5C57">Bon jest ważny {{WAZNOSC}} od dnia zakupu.</td></tr>
         <tr><td width="22" style="width:22px;vertical-align:top;padding:2px 0 8px;font-size:17px;line-height:1.6;color:#236E66">&#10003;</td><td style="padding:2px 0 8px;font-family:Lato, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:17px;line-height:1.6;color:#2E5C57">Saldo i&nbsp;ważność możesz sprawdzić w&nbsp;każdej chwili na stronie <a href="https://www.ewa-gabinet.pl/bon" style="color:#17504B;text-decoration:underline"><span style="white-space:nowrap">ewa-gabinet.pl/bon</span></a>.</td></tr>
@@ -82,7 +82,7 @@
         </td></tr>
       </table>
 
-      <p style="margin:0 0 14px;font-size:17px;line-height:1.6;color:#2E5C57;color:#17504B;margin:0">Pozdrawiamy serdecznie<br>EWA Gabinet podologiczny<br><a href="https://www.ewa-gabinet.pl" style="color:#17504B;text-decoration:underline">www.ewa-gabinet.pl</a></p>
+      <p style="margin:0 0 14px;font-size:17px;line-height:1.6;color:#2E5C57;color:#17504B;margin:0">Pozdrawiamy serdecznie<br>Gabinet Podologiczny EWA<br><a href="https://www.ewa-gabinet.pl" style="color:#17504B;text-decoration:underline">www.ewa-gabinet.pl</a></p>
     </td></tr>
   </table>
   <p style="margin:14px 0 0;font-family:Lato, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:13px;line-height:1.5;color:#3E6863">EWA Gabinet Kosmetyczno-Podologiczny, ul. ks. Piotra Skargi 72, 95-200 Pabianice</p>

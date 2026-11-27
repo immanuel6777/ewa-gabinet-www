@@ -55,7 +55,7 @@
           <p style="margin:0"><a href="tel:+48506102340" style="color:#17504B;text-decoration:underline">506&nbsp;102&nbsp;340</a> <span style="color:#3E6863;white-space:nowrap">(pon.–pt. 9–17)</span><br><a href="mailto:bony@ewa-gabinet.pl" style="color:#17504B;text-decoration:underline">bony@ewa-gabinet.pl</a></p>
         </td></tr>
       </table>
-      <p style="margin:0 0 14px;font-family:Lato, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:17px;line-height:1.6;color:#2E5C57;color:#17504B;margin:0">Pozdrawiamy serdecznie<br>EWA Gabinet podologiczny<br><a href="https://www.ewa-gabinet.pl" style="color:#17504B;text-decoration:underline">www.ewa-gabinet.pl</a></p><!--/KLIENT-->
+      <p style="margin:0 0 14px;font-family:Lato, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:17px;line-height:1.6;color:#2E5C57;color:#17504B;margin:0">Pozdrawiamy serdecznie<br>Gabinet Podologiczny EWA<br><a href="https://www.ewa-gabinet.pl" style="color:#17504B;text-decoration:underline">www.ewa-gabinet.pl</a></p><!--/KLIENT-->
 
       <div style="margin:14px 0 0">
 <!--DROBNY-->        <p style="margin:0;font-family:Lato, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:13px;line-height:1.5;color:#3E6863;word-break:break-all">{{ETYKIETA}}: {{WARTOSC}}</p>
