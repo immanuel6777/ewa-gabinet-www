@@ -33,13 +33,14 @@ function bon_straznik_znacznik(array $k): void {
  *  - bon `valid` bez wysłanego maila, starszy niż BON_STRAZNIK_MIN min (ostatnie 14 dni – tyle ponawia synchronizacja);
  *  - cron bez synchronizacji od ponad BON_STRAZNIK_CRON_MIN min albo bez znacznika;
  *  - sync_tryb inny niż 'bon' albo brak konfiguracji synchronizacji (bony z API nie powstają);
- *  - błąd API Easytools (nie da się sprawdzić).
+ *  - błąd API Easytools (nie da się sprawdzić);
+ *  - #273: nieudany alarm do gabinetu (zdarzenie powiadomienie-blad) w ostatnich 24 h.
  */
 function bon_straznik(array $k, PDO $pdo, ?DateTimeImmutable $teraz = null): array {
     if (($k['straznik'] ?? true) === false) return ['wlaczony' => false, 'alarm' => false, 'powody' => []];
     $teraz ??= bon_teraz();
     $w = ['wlaczony' => true, 'alarm' => false, 'powody' => [], 'zamowien' => null, 'bez_bonu' => null, 'bez_bonu_id' => [],
-        'bez_maila' => 0, 'cron_minut' => null, 'api_blad' => false];
+        'bez_maila' => 0, 'cron_minut' => null, 'api_blad' => false, 'powiadomienia_blad' => 0];
     $granica = $teraz->modify('-' . BON_STRAZNIK_MIN . ' minutes');
 
     // 1. cron
@@ -106,6 +107,52 @@ function bon_straznik(array $k, PDO $pdo, ?DateTimeImmutable $teraz = null): arr
     $w['bez_maila'] = (int)$st->fetchColumn();
     if ($w['bez_maila'] > 0) $w['powody'][] = "mail: {$w['bez_maila']} bon(y) bez wysłanego maila od ponad " . BON_STRAZNIK_MIN . ' min';
 
+    // 4. #273 (Bartek 27.11 „C”): nieudany alarm do gabinetu (mail() OVH → zdarzenie powiadomienie-blad) w ostatnich 24 h – bez
+    //    zapasowej drogi maila; zgłasza to strażnik kartą „Pilne”
+    $w['powiadomienia_blad'] = bon_straznik_powiadomienia_blad($k, $teraz);
+    if ($w['powiadomienia_blad'] > 0) {
+        $w['powody'][] = "powiadomienie: {$w['powiadomienia_blad']} nieudany(-e) alarm(y) do gabinetu w ostatnich 24 h (mail() OVH) – szczegóły w log.php";
+    }
+
     $w['alarm'] = $w['powody'] !== [];
     return $w;
+}
+
+/** #273: ile zdarzeń „powiadomienie-blad” w dzienniku z ostatnich 24 h (pliki z dziś i wczoraj). */
+function bon_straznik_powiadomienia_blad(array $k, DateTimeImmutable $teraz): int {
+    $kat = (string)($k['_katalog'] ?? '') . '/bony-zdarzenia/';
+    $od = $teraz->getTimestamp() - 86400;
+    $ile = 0;
+    foreach ([$teraz->modify('-1 day'), $teraz] as $dzien) {
+        $plik = $kat . $dzien->format('Y-m-d') . '.log';
+        if (!is_file($plik)) continue;
+        foreach (@file($plik, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $linia) {
+            if (!str_contains($linia, '"powiadomienie-blad"')) continue;
+            $z = json_decode($linia, true);
+            if (!is_array($z) || ($z['typ'] ?? '') !== 'powiadomienie-blad') continue;
+            $czas = strtotime((string)($z['czas'] ?? ''));
+            if ($czas !== false && $czas >= $od) $ile++;
+        }
+    }
+    return $ile;
+}
+
+/**
+ * #264 (polityka prywatności: „dzienniki techniczne do 90 dni”): usuwa w konfig/ pliki dzienników starsze niż $dni dni –
+ * surowe webhooki (bez danych kupującego od Z4), zdarzenia, znaczniki nieudanych wysyłek i pliki trybu testowego (test-ovh).
+ * Wysyłki maili (bony-mail-wysylki/, 30 dni) czyści lib/mail.php. Woła cron; zwraca liczbę usuniętych plików na katalog.
+ */
+function bon_sprzatanie_dziennikow(array $k, int $dni = 90, ?int $teraz = null): array {
+    $kat = (string)($k['_katalog'] ?? '');
+    if ($kat === '') return [];
+    $granica = ($teraz ?? time()) - $dni * 86400;
+    $wynik = [];
+    foreach (['bony-webhook-log/*.log', 'bony-zdarzenia/*.log', 'bony-mail-bledy/*.txt', 'bony-mailjet.jsonl', 'bony-smtp.jsonl', 'bony-powiadomienia.txt'] as $wzor) {
+        foreach (glob($kat . '/' . $wzor) ?: [] as $plik) {
+            // pliki dzienne: data z nazwy (RRRR-MM-DD.log) – odporna na dopisywanie; inne: data ostatniej zmiany
+            $d = preg_match('/(\d{4}-\d{2}-\d{2})\.log$/', $plik, $m) ? strtotime($m[1] . ' 23:59:59') : (int)@filemtime($plik);
+            if ($d !== false && $d > 0 && $d < $granica && @unlink($plik)) $wynik[strtok($wzor, '/')] = ($wynik[strtok($wzor, '/')] ?? 0) + 1;
+        }
+    }
+    return $wynik;
 }

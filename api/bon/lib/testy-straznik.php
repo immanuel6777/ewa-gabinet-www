@@ -98,6 +98,46 @@ function bon_testy_straznik(array $k, PDO $pdo): array {
         && bon_straznik_token(['log_token' => 'krotki']) === null && bon_straznik_token([]) === null);
     $t('#259 strażnik: ustawienie „straznik” w repo włączone i jawne', (require __DIR__ . '/ustawienia.php')['straznik'] === true && in_array('straznik', BON_USTAWIENIA_JAWNE, true));
 
+    // #273: nieudany alarm do gabinetu (zdarzenie powiadomienie-blad) w ostatnich 24 h → alarm „powiadomienie”
+    @mkdir($kat . '/bony-zdarzenia', 0700, true);
+    $zdarzenie = static function (DateTimeImmutable $czas, string $typ = 'powiadomienie-blad') use ($kat): void {
+        file_put_contents($kat . '/bony-zdarzenia/' . $czas->format('Y-m-d') . '.log',
+            json_encode(['czas' => $czas->format('c'), 'typ' => $typ, 'temat' => 'Bon EWA-****-AB12', 'odbiorcow' => 1]) . "\n", FILE_APPEND);
+    };
+    $zdarzenie($teraz->modify('-25 hours'));
+    $zdarzenie($teraz->modify('-2 hours'), 'powiadomienie');
+    $w = $s();
+    $t('#273 strażnik: nieudany alarm sprzed 25 h i udany sprzed 2 h → bez alarmu', !$w['alarm'] && $w['powiadomienia_blad'] === 0, json_encode($w, JSON_UNESCAPED_UNICODE));
+    $zdarzenie($teraz->modify('-1 hour'));
+    $w = $s();
+    $t('#273 strażnik: nieudany alarm do gabinetu sprzed 1 h → alarm „powiadomienie: 1”', $w['alarm'] && $powod($w, 'powiadomienie: 1 ') && $w['powiadomienia_blad'] === 1,
+        json_encode($w, JSON_UNESCAPED_UNICODE));
+
+    // #264: sprzątanie dzienników > 90 dni (webhooki, zdarzenia, znaczniki błędów wysyłki, pliki trybu testowego)
+    $dzien = static fn(int $dniTemu) => $teraz->modify("-$dniTemu days")->format('Y-m-d');
+    @mkdir($kat . '/bony-webhook-log', 0700, true);
+    @mkdir($kat . '/bony-mail-bledy', 0700, true);
+    foreach ([100, 91, 89, 1] as $d) file_put_contents($kat . '/bony-webhook-log/' . $dzien($d) . '.log', "{}\n");
+    file_put_contents($kat . '/bony-zdarzenia/' . $dzien(120) . '.log', "{}\n");
+    file_put_contents($kat . '/bony-mail-bledy/stary.txt', '1');
+    touch($kat . '/bony-mail-bledy/stary.txt', time() - 100 * 86400);
+    file_put_contents($kat . '/bony-mail-bledy/nowy.txt', '1');
+    file_put_contents($kat . '/bony-mailjet.jsonl', "{}\n");
+    touch($kat . '/bony-mailjet.jsonl', time() - 95 * 86400);
+    $u = bon_sprzatanie_dziennikow($ks);
+    $zostaly = array_map('basename', glob($kat . '/bony-webhook-log/*.log') ?: []);
+    sort($zostaly);
+    $t('#264 sprzątanie: usuwa dzienniki > 90 dni (webhooki 2, zdarzenia 1, znacznik 1, plik testowy 1), zostawia nowsze',
+        $u === ['bony-webhook-log' => 2, 'bony-zdarzenia' => 1, 'bony-mail-bledy' => 1, 'bony-mailjet.jsonl' => 1]
+        && $zostaly === [$dzien(89) . '.log', $dzien(1) . '.log'] && is_file($kat . '/bony-mail-bledy/nowy.txt')
+        && !is_file($kat . '/bony-mail-bledy/stary.txt') && !is_file($kat . '/bony-mailjet.jsonl') && is_file($kat . '/bony-zdarzenia/' . $teraz->format('Y-m-d') . '.log'),
+        json_encode([$u, $zostaly]));
+    $t('#264 sprzątanie: drugi przebieg nic nie usuwa; bez katalogu konfigu – pusto', bon_sprzatanie_dziennikow($ks) === [] && bon_sprzatanie_dziennikow(['_katalog' => '']) === []);
+
+    foreach (['bony-zdarzenia', 'bony-webhook-log', 'bony-mail-bledy'] as $pod) {
+        foreach (glob($kat . '/' . $pod . '/*') ?: [] as $f) @unlink($f);
+        @rmdir($kat . '/' . $pod);
+    }
     foreach (glob($kat . '/*') ?: [] as $f) @unlink($f);
     @rmdir($kat);
     return $wyniki;

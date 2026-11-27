@@ -57,6 +57,14 @@ try {
     } catch (Throwable $e) {
         bon_zdarzenie($k, 'blad', ['plik' => 'cron (numer zamówienia)'] + bon_opis_bledu($e));
     }
+    // #264: dzienniki techniczne w konfig/ najwyżej 90 dni (polityka prywatności)
+    try {
+        require_once __DIR__ . '/straznik.php';
+        $sprzatanie = bon_sprzatanie_dziennikow($k);
+        if ($sprzatanie) bon_zdarzenie($k, 'sprzatanie', ['usunieto' => $sprzatanie]);
+    } catch (Throwable $e) {
+        bon_zdarzenie($k, 'blad', ['plik' => 'cron (sprzątanie dzienników)'] + bon_opis_bledu($e));
+    }
     echo json_encode($raport, JSON_UNESCAPED_UNICODE), "\n";
 } catch (Throwable $e) {
     error_log('bony/cron: ' . $e->getMessage());
