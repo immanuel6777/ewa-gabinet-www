@@ -521,6 +521,56 @@ function bon_opis_bledu(Throwable $e): array {
     return ['wyjatek' => get_class($e), 'kod' => $e instanceof PDOException ? ($e->errorInfo[1] ?? $e->getCode()) : $e->getCode(), 'opis' => mb_substr($opis, 0, 300)];
 }
 
+// --- #256 (przegląd Backendu 27.11): błędy krytyczne PHP. Serwerowy error_log OVH jest dla nas nieczytelny (log.php: blad_php
+// niedostępny), więc fatal (np. wyjątek bez obsługi, brak funkcji, pamięć) zapisujemy sami: zdarzenie „blad_php” w dzienniku
+// (log.php → bledy_krytyczne), a przy webhooku i cronie – gdzie nikt nie patrzy na ekran – mail na alerty@ najwyżej raz na godzinę.
+
+/** Typ błędu, który kończy skrypt (ostrzeżenia i uwagi – nie). */
+function bon_blad_krytyczny_typ(int $typ): bool {
+    return in_array($typ, [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR, E_RECOVERABLE_ERROR], true);
+}
+
+/** Tekst błędu bez danych osobowych i ścieżek serwera: e-maile → ***, 'użytkownik'@'host' → '***'@'***', „…/api/bon/” → „api/bon/”. */
+function bon_blad_tekst(string $s): string {
+    $s = preg_replace("/'[^']*'@'[^']*'/", "'***'@'***'", $s) ?? '';
+    $s = preg_replace('/[^\s@"\'()<>]+@[^\s@"\'()<>]+\.[^\s@"\'()<>]+/', '***', $s) ?? '';
+    $s = preg_replace('#(?:[A-Za-z]:)?[\\\\/][^\s:\'"()]*?[\\\\/](api[\\\\/]bon[\\\\/])#', '$1', $s) ?? '';
+    $s = preg_replace('#/home[^/\s]*/[^/\s]+/#', '~/', $s) ?? ''; // katalog domowy OVH (z loginem konta) – np. ścieżka konfigu
+    return str_replace('\\', '/', $s);
+}
+
+/**
+ * Zapis błędu krytycznego ($blad jak z error_get_last()): zdarzenie „blad_php” {plik, linia, komunikat, adres (bez parametrów),
+ * metoda}; webhook albo CLI (cron) → alert mailem, najwyżej raz na godzinę (znacznik konfig/bony-blad-php-alert.txt).
+ * Nigdy nie rzuca wyjątku – działa w funkcji zamykającej skrypt, gdy reszta mogła już paść.
+ */
+function bon_blad_krytyczny(array $blad, ?array $k, string $metoda, string $adres): void {
+    try {
+        if (!$k || (string)($k['_katalog'] ?? '') === '') return;
+        $plik = bon_blad_tekst((string)($blad['file'] ?? ''));
+        $dane = ['plik' => $plik, 'linia' => (int)($blad['line'] ?? 0), 'komunikat' => mb_substr(bon_blad_tekst((string)($blad['message'] ?? '')), 0, 300),
+            'adres' => (string)(parse_url($adres, PHP_URL_PATH) ?? ''), 'metoda' => $metoda];
+        bon_zdarzenie($k, 'blad_php', $dane);
+        if ($metoda !== 'CLI' && !str_contains($dane['adres'], 'webhook.php')) return;
+        $znacznik = $k['_katalog'] . '/bony-blad-php-alert.txt';
+        if (is_file($znacznik) && (int)filemtime($znacznik) > time() - 3600) return;
+        @touch($znacznik);
+        bon_powiadom($k, "Bony: błąd krytyczny PHP – {$dane['plik']}:{$dane['linia']}", "Skrypt bonów przerwał się błędem krytycznym.\n"
+            . "Gdzie: {$dane['plik']}:{$dane['linia']}\nŻądanie: {$dane['metoda']} {$dane['adres']}\nBłąd: {$dane['komunikat']}\n\n"
+            . "Kolejne takie błędy w ciągu godziny są tylko w log.php (bledy_krytyczne), bez maila.");
+    } catch (Throwable) {}
+}
+
+/** Funkcja zamykająca każdy skrypt bonów (rejestracja niżej): fatal → bon_blad_krytyczny z konfiguracją wczytaną od nowa. */
+function bon_po_skrypcie(): void {
+    $e = error_get_last();
+    if (!$e || !bon_blad_krytyczny_typ((int)$e['type'])) return;
+    try { $k = bon_konfig(); } catch (Throwable) { $k = null; }
+    bon_blad_krytyczny($e, $k, PHP_SAPI === 'cli' ? 'CLI' : (string)($_SERVER['REQUEST_METHOD'] ?? ''),
+        PHP_SAPI === 'cli' ? bon_blad_tekst((string)($_SERVER['SCRIPT_NAME'] ?? '')) : (string)($_SERVER['REQUEST_URI'] ?? ''));
+}
+register_shutdown_function('bon_po_skrypcie');
+
 // kod bonu w dzienniku: EWA-****-AB12 (pełny numer pozwala sprawdzić saldo)
 function bon_kod_maska(string $kod): string {
     return $kod === '' ? '' : 'EWA-****-' . substr($kod, -4);

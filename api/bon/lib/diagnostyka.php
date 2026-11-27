@@ -161,6 +161,22 @@ function bon_log_zdarzenia(array $k, int $ile, int $dni): array {
     return $wynik;
 }
 
+/** #256: ostatnie błędy krytyczne PHP (zdarzenia „blad_php” z lib/bon.php → bon_blad_krytyczny) z $dni dni, najnowsze pierwsze. */
+function bon_log_bledy_krytyczne(array $k, int $ile = 10, int $dni = 7): array {
+    $pliki = glob(($k['_katalog'] ?? '') . '/bony-zdarzenia/*.log') ?: [];
+    rsort($pliki);
+    $wynik = [];
+    foreach (array_slice($pliki, 0, $dni) as $plik) {
+        foreach (array_reverse(bon_log_ogon($plik, 512 * 1024)) as $linia) {
+            if (count($wynik) >= $ile) break 2;
+            if (!str_contains($linia, '"blad_php"')) continue;
+            $w = json_decode($linia, true);
+            if (is_array($w) && ($w['typ'] ?? '') === 'blad_php') $wynik[] = bon_log_ukryj($w);
+        }
+    }
+    return $wynik;
+}
+
 /** Ostatnie realizacje w gabinecie: kwoty, kto (login), kod zamaskowany; bez pozycji i notatek (wolny tekst). */
 function bon_log_realizacje(array $k, PDO $pdo, int $ile): array {
     $st = $pdo->query('SELECT v.code, r.amount_pln, r.doplata_pln, r.typ, r.redeemed_at, r.redeemed_by FROM ' . bon_tabela($k, 'redemptions') . ' r JOIN '
@@ -229,6 +245,7 @@ function bon_diagnostyka(array $k, int $ile = 10, int $dni = 2, int $bony = 20, 
         $wynik['baza'] = ['ok' => false] + bon_opis_bledu($e);
     }
     $wynik['blad_php'] = bon_log_php();
+    $wynik['bledy_krytyczne'] = bon_log_bledy_krytyczne($k); // #256: własny zapis – serwerowy error_log OVH jest niedostępny
     return $wynik;
 }
 
