@@ -246,6 +246,16 @@ function bon_testy_kwoty_kasy(array $k, PDO $pdo): array {
     $t('karty admina: kwoty przy wszystkich, rabat przy bonie z kodem', !array_filter($skA['bony'] ?? [], static fn($c) => $c['saldo'] === null)
         && (bool)array_filter($skA['bony'] ?? [], static fn($c) => ($c['rabat']['kod'] ?? '') === 'KWOTY96'));
 
+    // #296: okna limitów liczone od bon_limit_czas – testy przypinają chwilę (bon_testy), więc granica okna :00/:15/:30/:45
+    // nie rozkłada prób na dwa okna; po przesunięciu chwili o długość okna licznik startuje od nowa
+    $kC = array_replace($k, ['_test_limit_czas' => 1_000_000_700]); // 100 s przed granicą okna 15 min (1_000_000_700 % 900 = 800)
+    $kluczC = 'z3-czas-' . random_int(1000, 9999);
+    $wC = [];
+    for ($i = 0; $i < 4; $i++) $wC[] = bon_limit_ok($pdo, $kC, $kluczC, 'test-czas', 3, 900);
+    $kC['_test_limit_czas'] += 900;
+    $wC[] = bon_limit_ok($pdo, $kC, $kluczC, 'test-czas', 3, 900);
+    $t('#296: limit liczy w oknie przypiętej chwili (3 tak, 4. nie), następne okno od nowa', $wC === [true, true, true, false, true], json_encode($wC));
+
     // --- Z3 (REVIEW-SECURITY F1/F5, REVIEW 13): limity logowania atomowe i na sam login ---
     // równoległe żądania: każde kolejne startuje, gdy poprzednie jest w trakcie sprawdzania hasła (porażka jeszcze niezapisana);
     // przez limit login+IP (5) może przejść najwyżej 5 z 30

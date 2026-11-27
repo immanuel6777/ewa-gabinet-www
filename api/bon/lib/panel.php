@@ -19,6 +19,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/bon.php';
 require_once __DIR__ . '/konta.php'; // konta panelu w bazie (wpis 13:20), za przełącznikiem konta_z_bazy
+require_once __DIR__ . '/numer-zamowienia.php'; // #219: szukanie po numerze zamówienia Easytools (#1604262)
 
 const BON_PANEL_CIASTKO = 'bon_panel';
 // hash nieistniejącego konta: przy nieznanym loginie password_verify i tak liczy (czas odpowiedzi nie zdradza, czy login jest)
@@ -320,6 +321,8 @@ function bon_panel_historia(array $k, PDO $pdo, array $sesja, string $wpisany, ?
     if ($admin || !empty($sesja['rezygnacje'])) {
         // P-15 (wpis 16:51): rabat – „Zapłacono 8 zł · rabat 192 zł · kod XXX”, gdy zapłacono mniej niż nominał (Karolina nie widzi)
         $odp['rabat'] = bon_panel_rabat($bon);
+        // #219: numer zamówienia z panelu Easytools („1604262”, bez „#”) albo null (bon bez webhooka, przed migracją) – admin i Gabinet
+        $odp['zamowienie_nr'] = ($bon['easytools_order_nr'] ?? null) !== null && $bon['easytools_order_nr'] !== '' ? (string)$bon['easytools_order_nr'] : null;
         // wpisy 17:33/17:35: czy i kiedy wyszło potwierdzenie rezygnacji; wpis 18:00: „przeliczone do zapłaconej ceny”
         if ($odp['rezygnacja']) {
             $odp['rezygnacja']['potwierdzenie'] = function_exists('bon_rezygnacja_stan_potwierdzenia')
@@ -584,6 +587,12 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
         // w trybie Bon 4 ostatnie znaki to dowód od pacjenta (P-10), więc tam szukania po nich nie ma
         $warunek = "(LOWER(buyer_email) LIKE ? ESCAPE '!' OR LOWER(easytools_order_id) LIKE ? ESCAPE '!' OR LOWER(code) LIKE ? ESCAPE '!')";
         $parametr = [$wzor, $wzor, $wzor];
+        // #219: w trybie Gabinet panel wysyła tu każdy wpis, więc „#1604262” / „1604262” = dokładny numer zamówienia Easytools
+        // (przed migracją kolumny – bez tego warunku, szukanie jak dotąd)
+        if (($nr = bon_numer_z_wpisu($q)) !== null && bon_numer_kolumna_jest($k, $pdo)) {
+            $warunek = '(' . $warunek . ' OR easytools_order_nr = ?)';
+            $parametr[] = $nr;
+        }
     } elseif (($kod = bon_normalizuj_kod($q, (string)$k['kod_prefix'])) !== null) {
         return [200, ['ok' => true, 'typ' => 'kod', 'kod' => $kod]];
     } elseif (str_contains($q, '@')) {
@@ -591,6 +600,30 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
         if (!filter_var($wartosc, FILTER_VALIDATE_EMAIL)) return [400, ['ok' => false, 'blad' => 'Wpisz cały adres e-mail kupującego.']];
         $typ = 'email';
         $kolumna = 'buyer_email';
+    } elseif (($nr = bon_numer_z_wpisu($q)) !== null) {
+        // #219: numer zamówienia z panelu Easytools („#1604262”) – dokładnie; typ „zamowienie”, więc panel pokazuje „Nie ma bonów
+        // z tego zamówienia” bez zmian we froncie. Także easytools_order_id: bony z dawnego trybu webhooka bez UUID mają tam samą
+        // liczbę (szukanie jak przed #219). Backend 27.11 ok. 01:35: TYLKO admin i Gabinet, pod limitem fragmentu na konto
+        // (numery idą po kolei – da się je zgadywać); tryb Bon dostaje komunikat jak przy nieznanym wpisie, bez listy.
+        if ($sesja !== null && $sesja['rola'] !== 'admin' && empty($sesja['rezygnacje'])) {
+            return [400, ['ok' => false, 'blad' => 'Wpisz numer bonu (EWA-XXXX-XXXX), e-mail kupującego albo numer zamówienia Easytools.']];
+        }
+        if ($sesja !== null) {
+            $k = bon_panel_konfig($k);
+            if (!bon_limit_ok($pdo, $k, 'login|' . $sesja['login'], 'panel-fragment', (int)$k['panel_limit_fragment'], (int)$k['panel_limit_okno_min'] * 60)) {
+                return [429, ['ok' => false, 'blad' => 'Za dużo wyszukiwań w krótkim czasie. Spróbuj za kwadrans.']];
+            }
+        }
+        $typ = 'zamowienie';
+        if (bon_numer_kolumna_jest($k, $pdo)) {
+            $wartosc = $nr;
+            $warunekNr = '(easytools_order_nr = ? OR LOWER(easytools_order_id) = ?)';
+        } elseif (preg_match('/^[0-9]{8,64}$/', $q)) {
+            $wartosc = $q; // przed migracją: jak dotąd, tylko id zamówienia
+            $kolumna = 'easytools_order_id';
+        } else {
+            return [400, ['ok' => false, 'blad' => 'Szukanie po numerze zamówienia (#…) zacznie działać po aktualizacji bazy. Wpisz e-mail kupującego.']];
+        }
     } elseif (preg_match('/^[A-Za-z0-9_-]{8,64}$/', $q)) {
         $wartosc = strtolower($q);
         $typ = 'zamowienie';
@@ -600,7 +633,10 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
     }
     // Gmail ignoruje kropki w nazwie skrzynki (bartosz.kalwinski = bartoszkalwinski) – szukamy bez kropek (2026-11-24)
     $gmail = $typ === 'email' && preg_match('/@(gmail|googlemail)\.com$/', $wartosc) === 1;
-    if (!$fragment) {
+    if (isset($warunekNr)) {
+        $warunek = $warunekNr;
+        $parametr = [$wartosc, $wartosc];
+    } elseif (!$fragment) {
         $warunek = $gmail ? "REPLACE(LOWER(buyer_email), '.', '') = ? AND (LOWER(buyer_email) LIKE '%@gmail.com' OR LOWER(buyer_email) LIKE '%@googlemail.com')"
             : "LOWER($kolumna) = ?";
         $parametr = [$gmail ? str_replace('.', '', $wartosc) : $wartosc];

@@ -22,6 +22,7 @@ require_once __DIR__ . '/testy-dostep.php'; // #218
 require_once __DIR__ . '/testy-bledy.php'; // #256
 require_once __DIR__ . '/testy-zwrot-szukaj.php'; // #227 (Backend 2)
 require_once __DIR__ . '/testy-maile-tresc.php';
+require_once __DIR__ . '/testy-numer-zamowienia.php'; // #219 (Backend 2)
 
 /** Payload jak w dokumentacji Easytools (single_product_bought), z nadpisaniami. */
 function bon_test_payload(array $nadpisz = []): array {
@@ -114,6 +115,7 @@ function bon_test_bony(array $k, PDO $pdo, $zamowienie): array {
 
 function bon_testy(array $kBaza, PDO $pdo): array {
     $k = bon_test_konfig($kBaza);
+    $k['_test_limit_czas'] ??= time(); // #296: wszystkie testy limitów w jednym oknie, niezależnie od zegara
     // na OVH w konfig/bony-mail-wysylki/ leżą prawdziwe wysyłki: test sprawdza, że testy nie DOPISAŁY nowych
     $wysylkiPrzed = glob($k['_katalog'] . '/bony-mail-wysylki/*.json') ?: [];
     $wyniki = [];
@@ -668,5 +670,5 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     foreach (glob($katW . '/*') ?: [] as $f) is_dir($f) ? @rmdir($f) : @unlink($f);
     @rmdir($katW);
 
-    return array_merge($wyniki, bon_testy_panel($k, $pdo), bon_testy_sync($k, $pdo), bon_testy_krok1($k, $pdo), bon_testy_krok4($k, $pdo), bon_testy_obsluga($k, $pdo), bon_testy_rezygnacja($k, $pdo), bon_testy_p10($k, $pdo), bon_testy_zwroty($k, $pdo), bon_testy_konta($k, $pdo), bon_testy_raport($k, $pdo), bon_testy_zwrot_szukaj($k, $pdo), bon_testy_dostep($k, $pdo), bon_testy_bledy($k, $pdo), bon_testy_maile_tresc($k, $pdo));
+    return array_merge($wyniki, bon_testy_panel($k, $pdo), bon_testy_sync($k, $pdo), bon_testy_krok1($k, $pdo), bon_testy_krok4($k, $pdo), bon_testy_obsluga($k, $pdo), bon_testy_rezygnacja($k, $pdo), bon_testy_p10($k, $pdo), bon_testy_zwroty($k, $pdo), bon_testy_konta($k, $pdo), bon_testy_raport($k, $pdo), bon_testy_zwrot_szukaj($k, $pdo), bon_testy_dostep($k, $pdo), bon_testy_bledy($k, $pdo), bon_testy_maile_tresc($k, $pdo), bon_testy_numer_zamowienia($k, $pdo));
 }

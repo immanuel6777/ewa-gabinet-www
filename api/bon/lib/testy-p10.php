@@ -24,7 +24,8 @@ function bon_testy_p10(array $k, PDO $pdo): array {
     $t('P-10 szukaj po e-mailu: kasa dostaje maskę i uchwyt, bez numeru; admin pełny numer',
         array_key_exists('kod', $w) && $w['kod'] === null && ($w['kod_maska'] ?? '') === 'EWA-••••-••••' && !empty($w['uchwyt'])
         && !str_contains(json_encode($sK), $kod) && ($sA['bony'][0]['kod'] ?? '') === $kod, json_encode($sK, JSON_UNESCAPED_UNICODE));
-    [, $sZ] = bon_panel_szukaj($k, $pdo, (string)$p['order_id'], null, $sKasa);
+    // #219 (Backend 27.11 01:35): numer zamówienia z cyfr tylko admin i Gabinet – maskę sprawdza konto Gabinetu (też nie-admin)
+    [, $sZ] = bon_panel_szukaj($k, $pdo, (string)$p['order_id'], null, ['login' => 'gabinet-p10', 'imie' => 'Ewa', 'rola' => 'realizacja', 'rezygnacje' => true, 'csrf' => 'x']);
     $t('P-10 szukaj po zamówieniu: też zamaskowany', array_key_exists('kod', $sZ['bony'][0] ?? []) && $sZ['bony'][0]['kod'] === null && !str_contains(json_encode($sZ), $kod));
     [, $sN] = bon_panel_szukaj($k, $pdo, $kod, null, $sKasa);
     $t('P-10 pełny numer wpisany (albo QR): bez zmian, pełny numer', ($sN['typ'] ?? '') === 'kod' && ($sN['kod'] ?? '') === $kod);

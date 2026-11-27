@@ -779,7 +779,10 @@ function bon_obsluz_webhook(array $k, string $raw, array $naglowki, ?callable $p
         $zdarzenie = is_array($d) ? (string)($d['event'] ?? '') : '';
         if ($zdarzenie !== 'single_product_bought' || ($d['success'] ?? null) !== true) return [200, $odp + ['pominieto' => $zdarzenie ?: 'zły JSON']];
         $zam = is_string($d['order_uuid'] ?? null) && preg_match('/^[0-9a-f-]{36}$/i', $d['order_uuid']) ? strtolower($d['order_uuid']) : null;
-        return [200, $odp + ['dzwonek' => true], static fn() => bon_webhook_dzwonek($k, $pdoFabryka, $zam)];
+        // #219: krótki numer zamówienia (order_id, liczba) – zapis po synchronizacji w bon_webhook_dzwonek; odpowiedź bez zmian
+        require_once __DIR__ . '/numer-zamowienia.php';
+        $nr = bon_numer_z_webhooka($d['order_id'] ?? null);
+        return [200, $odp + ['dzwonek' => true], static fn() => bon_webhook_dzwonek($k, $pdoFabryka, $zam, $nr)];
     }
     if ($tryb !== 'log+bon' && $tryb !== 'bon') return [500, ['ok' => false, 'blad' => 'nieznany webhook_tryb']];
 
@@ -831,12 +834,19 @@ function bon_obsluz_webhook(array $k, string $raw, array $naglowki, ?callable $p
  * wystarcza za ochronę). Zwraca podsumowanie do dziennika (zdarzenie „dzwonek”); maile loguje bon_synchronizuj_wyslij.
  * $zam: order_uuid z webhooka – tylko do sprawdzenia, czy po synchronizacji zamówienie ma bony (np. API jeszcze nie „completed”).
  */
-function bon_webhook_dzwonek(array $k, ?callable $pdoFabryka, ?string $zam): array {
+function bon_webhook_dzwonek(array $k, ?callable $pdoFabryka, ?string $zam, ?string $nr = null): array {
     require_once __DIR__ . '/easytools.php';
     $pdo = $pdoFabryka ? $pdoFabryka($k) : bon_pdo($k);
     [$raport, $zadania] = bon_synchronizuj($k, $pdo, 'webhook');
     bon_zdarzenie($k, 'synchronizacja', $raport);
     bon_synchronizuj_wyslij($k, $zadania, 'webhook');
+    // #219 (Backend 2): numer zamówienia Easytools przy bonach tego zamówienia – po synchronizacji i wysyłce, własny try/catch
+    // w bon_numer_po_dzwonku (błąd albo brak kolumny przed migracją → tylko informacja w zdarzeniu „dzwonek”)
+    $numer = null;
+    if ($zam !== null && $nr !== null) {
+        require_once __DIR__ . '/numer-zamowienia.php';
+        $numer = bon_numer_po_dzwonku($k, $pdo, $zam, $nr);
+    }
     $bonow = null;
     if ($zam !== null) {
         $st = $pdo->prepare('SELECT COUNT(*) FROM ' . bon_tabela($k, 'vouchers') . ' WHERE easytools_order_id = ?');
@@ -844,7 +854,7 @@ function bon_webhook_dzwonek(array $k, ?callable $pdoFabryka, ?string $zam): arr
         $bonow = (int)$st->fetchColumn();
     }
     return ['dzwonek' => true, 'zamowienie' => $zam, 'bonow_zamowienia' => $bonow, 'nowe' => count((array)($raport['nowe'] ?? [])),
-        'do_wysylki' => count($zadania), 'pominieto' => $raport['pominieto'] ?? null];
+        'do_wysylki' => count($zadania), 'pominieto' => $raport['pominieto'] ?? null, 'numer_zamowienia' => $numer];
 }
 
 /**
@@ -1074,12 +1084,18 @@ function bon_pozycja_wylicz(array $k, array $z, array $p): array {
 
 // --- verify (publiczny) ---
 
+/** #296: chwila dla okien limitów. Testy (bon_testy) przypinają ją w `_test_limit_czas`, żeby próby nie rozjeżdżały się
+ *  na granicy okna (:00, :15…) – wynik testu nie zależy od zegara. Stałe okna zostają: na granicy da się zrobić do 2 × limit. */
+function bon_limit_czas(array $k): int {
+    return isset($k['_test_limit_czas']) ? (int)$k['_test_limit_czas'] : time();
+}
+
 // limit zapytań na IP i minutę; true = można. $cel rozdziela liczniki (verify / adres na stronie podziękowania).
 /** Licznik w bieżącym oknie bez zwiększania (np. limit liczący tylko nieudane próby – bon_rezygnacja_ze_strony). */
 function bon_limit_licznik(PDO $pdo, array $k, string $ip, string $cel, int $oknoS = 60): int {
     $klucz = hash('sha256', $ip . '|' . ($k['easytools_webhook_sekret'] ?? '') . '|' . $cel);
     $st = $pdo->prepare('SELECT licznik FROM ' . bon_tabela($k, 'voucher_verify_limit') . ' WHERE klucz = ? AND okno = ?');
-    $st->execute([$klucz, intdiv(time(), $oknoS) * intdiv($oknoS, 60)]);
+    $st->execute([$klucz, intdiv(bon_limit_czas($k), $oknoS) * intdiv($oknoS, 60)]);
     return (int)$st->fetchColumn();
 }
 
@@ -1088,7 +1104,7 @@ function bon_limit_licznik(PDO $pdo, array $k, string $ip, string $cel, int $okn
 function bon_limit_ok(PDO $pdo, array $k, string $ip, string $cel = 'limit', ?int $max = null, int $oknoS = 60): bool {
     $tab = bon_tabela($k, 'voucher_verify_limit');
     $klucz = hash('sha256', $ip . '|' . ($k['easytools_webhook_sekret'] ?? '') . '|' . $cel);
-    $okno = intdiv(time(), $oknoS) * intdiv($oknoS, 60);
+    $okno = intdiv(bon_limit_czas($k), $oknoS) * intdiv($oknoS, 60);
     $up = $pdo->prepare("UPDATE $tab SET licznik = licznik + 1 WHERE klucz = ? AND okno = ?");
     $up->execute([$klucz, $okno]);
     if ($up->rowCount() === 0) {
@@ -1108,7 +1124,7 @@ function bon_limit_ok(PDO $pdo, array $k, string $ip, string $cel = 'limit', ?in
 /** Z3 (2026-11-24): oddanie zarezerwowanej próby (np. udane logowanie) – licznik okna −1, nie poniżej zera. */
 function bon_limit_oddaj(PDO $pdo, array $k, string $ip, string $cel, int $oknoS = 60, bool $wyzeruj = false): void {
     $klucz = hash('sha256', $ip . '|' . ($k['easytools_webhook_sekret'] ?? '') . '|' . $cel);
-    $okno = intdiv(time(), $oknoS) * intdiv($oknoS, 60);
+    $okno = intdiv(bon_limit_czas($k), $oknoS) * intdiv($oknoS, 60);
     $pdo->prepare('UPDATE ' . bon_tabela($k, 'voucher_verify_limit') . ' SET licznik = ' . ($wyzeruj ? '0' : 'licznik - 1') . ' WHERE klucz = ? AND okno = ? AND licznik > 0')
         ->execute([$klucz, $okno]);
 }

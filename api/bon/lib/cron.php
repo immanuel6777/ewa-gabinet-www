@@ -46,6 +46,15 @@ try {
     } catch (Throwable $e) {
         bon_zdarzenie($k, 'blad', ['plik' => 'cron (dostęp Easytools)'] + bon_opis_bledu($e));
     }
+    // #219 (Backend 2): numer zamówienia Easytools (#1604262) przy bonie – uzupełnienie z logu podpisanych webhooków (bon powstał
+    // po dzwonku albo przed tą zmianą); przed migracją kolumny po cichu nic (dzwonek i tak zgłasza brak kolumny w zdarzeniu)
+    try {
+        require_once __DIR__ . '/numer-zamowienia.php';
+        $numery = bon_numer_uzupelnij($k, $pdo);
+        if ($numery['uzupelniono'] > 0) bon_zdarzenie($k, 'numer-zamowienia', $numery);
+    } catch (Throwable $e) {
+        bon_zdarzenie($k, 'blad', ['plik' => 'cron (numer zamówienia)'] + bon_opis_bledu($e));
+    }
     echo json_encode($raport, JSON_UNESCAPED_UNICODE), "\n";
 } catch (Throwable $e) {
     error_log('bony/cron: ' . $e->getMessage());
