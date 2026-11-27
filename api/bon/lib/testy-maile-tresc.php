@@ -91,6 +91,26 @@ function bon_testy_maile_tresc(array $k, PDO $pdo): array {
         !str_contains($h5, '<!--POLA-->') && !str_contains($h5, '{{') && str_contains($h5, 'System bonów') && str_contains($h5, '>A</td>'), substr($h5, 0, 200));
     @unlink($tpl);
 
+    $dN = ['co' => 'x', 'pola' => [['Zamówienie Easytools', '309374864']], 'drobny' => [['Zamówienie Easytools', '309374864'], ['Transakcja', $uuid]]];
+    $tN = bon_powiadom_tekst($dN);
+    $t('#272 drobny druk: numer bez skrótu (nie UUID) nie powtarza się, pełne UUID zostaje',
+        substr_count($tN, '309374864') === 1 && str_contains($tN, "Szczegóły techniczne:\nTransakcja: $uuid"), $tN);
+
+    // #272: zamówienie w innej walucie – bon nie powstaje, alert w nowym układzie
+    $katW = sys_get_temp_dir() . '/bony-waluta-' . bin2hex(random_bytes(4));
+    @mkdir($katW, 0700, true);
+    $kW = array_replace($k, ['_katalog' => $katW, 'mail_tryb' => 'plik', 'mail_powiadomienie' => ['alerty@test']]);
+    $pW = bon_test_payload(['currency' => 'eur']);
+    [$hW, $oW] = bon_test_webhook($kW, $pdo, $pW);
+    $powW = (string)@file_get_contents($katW . '/bony-powiadomienia.txt');
+    $t('#272 inna waluta: bez bonu, alert: co się stało → waluta → zamówienie → co dalej',
+        $hW === 200 && ($oW['pominieto'] ?? '') === 'waluta' && !bon_test_bony($kW, $pdo, $pW['order_id'])
+        && bon_testy_kolejnosc($powW, ['== Bon: zamówienie w innej walucie', 'bon NIE powstał', 'Waluta: EUR', 'Zamówienie Easytools: ', 'Sprawdź zamówienie w Easytools']), $powW . json_encode($oW));
+    foreach (glob($katW . '/*/*') ?: [] as $f) @unlink($f);
+    foreach (glob($katW . '/*', GLOB_ONLYDIR) ?: [] as $f) @rmdir($f);
+    array_map('unlink', glob($katW . '/*') ?: []);
+    @rmdir($katW);
+
     // bon_powiadom z danymi: plik testowy w tym samym formacie co dotąd (== temat \n treść), HTML z danych
     $kat = sys_get_temp_dir() . '/bony-maile-tresc-' . bin2hex(random_bytes(4));
     @mkdir($kat, 0700, true);
@@ -99,6 +119,18 @@ function bon_testy_maile_tresc(array $k, PDO $pdo): array {
     $plik = (string)@file_get_contents($kat . '/bony-powiadomienia.txt');
     $t('bon_powiadom_dane: wpis „== temat” + tekst z danych, HTML z tabelką', str_starts_with($plik, "== Zlecono zwrot 5,80{$nb}zł – EWA-HTAH-4PPG\n")
         && str_contains($plik, 'Zlecił: Bartek') && str_contains((string)@file_get_contents($kat . '/bony-powiadomienie-ostatnie.html'), 'Zlecił'), $plik);
+    // #273: nieudane mail() OVH przy alercie gabinetu → zdarzenie „powiadomienie-blad” (temat z zamaskowanym numerem), wynik false
+    $kM = array_replace($kP, ['mail_tryb' => 'mailjet', '_test_mail' => static fn() => false]);
+    $ok = bon_powiadom_dane($kM, 'Bon: zlecono zwrot ' . bon_kwota_pl(580) . ' – EWA-HTAH-4PPG', $d);
+    $zd = implode('', array_map('file_get_contents', glob($kat . '/bony-zdarzenia/*') ?: []));
+    $t('#273 nieudane mail(): wynik false, zdarzenie „powiadomienie-blad” z tematem, numer bonu zamaskowany',
+        $ok === false && str_contains($zd, 'powiadomienie-blad') && str_contains($zd, 'zlecono zwrot') && !str_contains($zd, 'EWA-HTAH-4PPG') && str_contains($zd, '4PPG'), $zd);
+    $kM2 = array_replace($kM, ['_test_mail' => static fn() => true]);
+    $przed = strlen($zd);
+    $t('#273 udane mail(): wynik true, bez nowego zdarzenia', bon_powiadom_dane($kM2, 'Bon: test', ['co' => 'x']) === true
+        && strlen(implode('', array_map('file_get_contents', glob($kat . '/bony-zdarzenia/*') ?: []))) === $przed);
+    foreach (glob($kat . '/*/*') ?: [] as $f) @unlink($f);
+    foreach (glob($kat . '/*', GLOB_ONLYDIR) ?: [] as $f) @rmdir($f);
     array_map('unlink', glob($kat . '/*') ?: []);
     @rmdir($kat);
 

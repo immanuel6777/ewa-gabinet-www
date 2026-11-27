@@ -337,9 +337,13 @@ function bon_wyslij_zamowienie(array $k, PDO $pdo, string $zamowienie, bool $pon
                     bon_historia($k, $pdo, (int)$b['id'], 'mail', 'PDF wysłany zapasowo (SMTP OVH) – dostarczenie niepewne', 'system');
                 }
                 bon_zdarzenie($k, 'mail-niepewny', ['zamowienie' => $zamowienie, 'kody' => array_map('bon_kod_maska', array_column($paczka, 'code')), 'blad' => $blad]);
-                bon_powiadom($k, 'Bon: mail MOŻE nie dotrzeć – zamówienie ' . $zamowienie, "Zapasowa wysyłka (SMTP OVH) zerwała się po przesłaniu treści – serwer mógł mail przyjąć.\n"
-                    . 'Bony: ' . implode(', ', array_column($paczka, 'code')) . "\nBłąd: $blad\n"
-                    . "Wysyłka NIE będzie ponawiana automatycznie (żeby kupujący nie dostał dwóch maili). Sprawdź u kupującego; w razie potrzeby wyślij bon ponownie.");
+                bon_powiadom_dane($k, 'Bon: mail MOŻE nie dotrzeć – zamówienie ' . bon_id_krotko((string)$zamowienie), [ // #272
+                    'co' => 'Zapasowa wysyłka maila z bonem (SMTP OVH) zerwała się po przesłaniu treści – serwer mógł mail przyjąć.',
+                    'bony' => array_column($paczka, 'code'),
+                    'pola' => [['Błąd', (string)$blad], ['Zamówienie Easytools', bon_id_krotko((string)$zamowienie)]],
+                    'dalej' => 'Wysyłka NIE będzie ponawiana automatycznie (żeby kupujący nie dostał dwóch maili). Sprawdź u kupującego; w razie potrzeby wyślij bon ponownie z panelu.',
+                    'drobny' => [['Zamówienie Easytools', (string)$zamowienie]],
+                ]);
                 $blad = null;
                 $wyslane += count($paczka);
                 continue;
@@ -376,10 +380,19 @@ function bon_wyslij_zamowienie(array $k, PDO $pdo, string $zamowienie, bool $pon
         } else {
             bon_powiadomienie_bledu_czas($k, $zamowienie, false);
             $suma = array_sum(array_map(static fn($b) => (int)bon_grosze($b['initial_pln']), $bony));
-            bon_powiadom($k, 'Sprzedano bon – ' . bon_kwota_tekst($suma), "Zamówienie Easytools: $zamowienie\nBony: $kody\n"
-                . 'Kupujący dostał PDF mailem (' . (string)$bony[0]['buyer_email'] . ").\n"
-                . (in_array('smtp-ovh', array_column($mailjet, 'droga'), true) ? "Droga: zapasowa (SMTP OVH) – Mailjet był nieosiągalny.\n" : '')
-                . ($wczesniej ? "Dokończona wysyłka: $wczesniej bon(y) z tego zamówienia poszły we wcześniejszej próbie.\n" : ''));
+            bon_powiadom_dane($k, 'Sprzedano bon – ' . bon_kwota_pl($suma), [ // #272
+                'co' => 'Kupujący zapłacił i dostał PDF z bonem mailem.',
+                'kwota' => $suma,
+                'kwota_etykieta' => 'Wartość bonów',
+                'bony' => array_column($bony, 'code'),
+                'pola' => [
+                    ['Adres kupującego', (string)$bony[0]['buyer_email']],
+                    ['Zamówienie Easytools', bon_id_krotko((string)$zamowienie)],
+                    ...(in_array('smtp-ovh', array_column($mailjet, 'droga'), true) ? [['Droga', 'zapasowa (SMTP OVH) – Mailjet był nieosiągalny']] : []),
+                    ...($wczesniej ? [['Dokończona wysyłka', "$wczesniej bon(y) z tego zamówienia poszły we wcześniejszej próbie"]] : []),
+                ],
+                'drobny' => [['Zamówienie Easytools', (string)$zamowienie]],
+            ]);
         }
         return ['zamowienie' => $zamowienie, 'wyslane' => $wyslane, 'blad' => $blad, 'pominieto' => null, 'mailjet' => $mailjet];
     } finally {
@@ -528,7 +541,7 @@ function bon_mail_kontrola(array $k, int $teraz = 0, int $minWiekS = 600, ?PDO $
             if (!$w['powiadomiono']) {
                 // TA-11 (2026-11-24): kupujący i odbity adres z bazy (plik kontroli trzyma tylko kody i MessageID), wpis „mail-odbity”
                 // w historii każdego bonu = znacznik w panelu do udanej ponownej wysyłki. Powiadomienie idzie do gabinetu (mail_powiadomienie).
-                $kto = '';
+                $kto = []; // #272: pola [etykieta, wartość] – kupujący i odbity adres
                 if ($pdo && !empty($w['kody'])) {
                     try {
                         $kodyL = array_values((array)$w['kody']);
@@ -536,14 +549,18 @@ function bon_mail_kontrola(array $k, int $teraz = 0, int $minWiekS = 600, ?PDO $
                         $st->execute($kodyL);
                         $wiersze = $st->fetchAll();
                         foreach ($wiersze as $b) bon_historia($k, $pdo, (int)$b['id'], 'mail-odbity', 'Mailjet: ' . implode(', ', array_unique($zle)) . '; adres: ' . $b['buyer_email'], 'system');
-                        if ($wiersze) $kto = 'Kupujący: ' . ($wiersze[0]['buyer_name'] ?: '(bez imienia)') . "\nOdbity adres: " . $wiersze[0]['buyer_email'] . "\n";
+                        if ($wiersze) $kto = [['Kupujący', (string)($wiersze[0]['buyer_name'] ?: '(bez imienia)')], ['Odbity adres', (string)$wiersze[0]['buyer_email']]];
                     } catch (Throwable $e) {
                         bon_zdarzenie($k, 'blad', ['plik' => 'kontrola (odbicie)'] + bon_opis_bledu($e));
                     }
                 }
-                bon_powiadom($k, 'Bon: mail NIE dotarł – zamówienie ' . $w['zamowienie'], "Mailjet przyjął mail z bonem, ale go nie dostarczył.\n"
-                    . 'Status: ' . implode(', ', array_unique($zle)) . "\nBony: $kody\n" . $kto
-                    . "Panel bonów → otwórz bon → „Wyślij ponownie” (można poprawić adres po potwierdzeniu z kupującym).");
+                bon_powiadom_dane($k, 'Bon: mail NIE dotarł – zamówienie ' . bon_id_krotko((string)$w['zamowienie']), [ // #272
+                    'co' => 'Mailjet przyjął mail z bonem, ale go nie dostarczył.',
+                    'bony' => array_values((array)($w['kody'] ?? [])),
+                    'pola' => [['Status', implode(', ', array_unique($zle))], ...$kto, ['Zamówienie Easytools', bon_id_krotko((string)$w['zamowienie'])]],
+                    'dalej' => 'Panel bonów → otwórz bon → „Wyślij ponownie” (można poprawić adres po potwierdzeniu z kupującym).',
+                    'drobny' => [['Zamówienie Easytools', (string)$w['zamowienie']]],
+                ]);
                 $w['powiadomiono'] = true;
             }
         } elseif ($statusy && count(array_filter($statusy, static fn($s) => in_array($s, BON_MAIL_DOSTARCZONO, true))) === count($statusy)) {
@@ -558,17 +575,26 @@ function bon_mail_kontrola(array $k, int $teraz = 0, int $minWiekS = 600, ?PDO $
             if (!$odpowiedzial && $wiek >= 3 * 86400 && empty($w['powiadomiono_brak_odpowiedzi'])) {
                 bon_zdarzenie($k, 'mail-dostarczenie', ['zamowienie' => $w['zamowienie'], 'status' => 'nie da się sprawdzić (72 h)', 'id' => $w['id'],
                     'blad' => (string)($odpowiedzi[0]['blad'] ?? '')]);
-                bon_powiadom($k, 'Bon: nie da się sprawdzić dostarczenia – zamówienie ' . $w['zamowienie'], "Od 72 h serwer nie może zapytać Mailjeta o status maila z bonem.\n"
-                    . 'Ostatni błąd: ' . (string)($odpowiedzi[0]['blad'] ?? '?') . "\nBony: $kody\n"
-                    . "To nie znaczy, że mail nie doszedł. Sprawdź w Mailjecie (Statystyki → wiadomość) albo u kupującego.");
+                bon_powiadom_dane($k, 'Bon: nie da się sprawdzić dostarczenia – zamówienie ' . bon_id_krotko((string)$w['zamowienie']), [ // #272
+                    'co' => 'Od 72 h serwer nie może zapytać Mailjeta o status maila z bonem.',
+                    'bony' => array_values((array)($w['kody'] ?? [])),
+                    'pola' => [['Ostatni błąd', (string)($odpowiedzi[0]['blad'] ?? '?')], ['Zamówienie Easytools', bon_id_krotko((string)$w['zamowienie'])]],
+                    'dalej' => 'To nie znaczy, że mail nie doszedł. Sprawdź w Mailjecie (Statystyki → wiadomość) albo u kupującego.',
+                    'drobny' => [['Zamówienie Easytools', (string)$w['zamowienie']]],
+                ]);
                 $w['powiadomiono_brak_odpowiedzi'] = true;
             }
             if ($odpowiedzial && $wiek >= 86400) {
                 $w['status'] = 'niepotwierdzone: ' . implode(',', array_map(static fn($s) => $s ?? 'brak', $statusy));
                 bon_zdarzenie($k, 'mail-dostarczenie', ['zamowienie' => $w['zamowienie'], 'status' => $w['status'], 'id' => $w['id']]);
                 if (!$w['powiadomiono']) {
-                    bon_powiadom($k, 'Bon: brak potwierdzenia dostarczenia – zamówienie ' . $w['zamowienie'], "Po 24 h Mailjet nadal nie potwierdza dostarczenia maila z bonem.\n"
-                        . 'Status: ' . $w['status'] . "\nBony: $kody\nSprawdź w Mailjecie i u kupującego.");
+                    bon_powiadom_dane($k, 'Bon: brak potwierdzenia dostarczenia – zamówienie ' . bon_id_krotko((string)$w['zamowienie']), [ // #272
+                        'co' => 'Po 24 h Mailjet nadal nie potwierdza dostarczenia maila z bonem.',
+                        'bony' => array_values((array)($w['kody'] ?? [])),
+                        'pola' => [['Status', (string)$w['status']], ['Zamówienie Easytools', bon_id_krotko((string)$w['zamowienie'])]],
+                        'dalej' => 'Sprawdź w Mailjecie i u kupującego.',
+                        'drobny' => [['Zamówienie Easytools', (string)$w['zamowienie']]],
+                    ]);
                     $w['powiadomiono'] = true;
                 }
             }

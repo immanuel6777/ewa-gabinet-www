@@ -151,7 +151,7 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     $logPo = strlen(implode('', array_map('file_get_contents', glob($k['_katalog'] . '/bony-webhook-log/*') ?: [])));
     $t('log+bon: surowy webhook nadal trafia do logu', $logPo > $logPrzed);
     [$h2, $o2, $zad2] = bon_test_webhook($kLB, $pdo, array_replace($payloadLB, ['event' => 'product_assigned', 'amount_paid' => null]));
-    $t('log+bon: product_assigned pominięty (bez bonu i bez maila)', $h2 === 200 && ($o2['pominieto'] ?? '') === 'product_assigned' && !$zad2 && $ile($prawdziwy['id']) === 1);
+    $t('log+bon: product_assigned pominięty (bez bonu i bez maila)', $h2 === 200 && ($o2['pominieto'] ?? '') === 'product_assigned' && $zad2 === null && $ile($prawdziwy['id']) === 1);
     $w1 = $zad1();
     [, $zadS] = bon_synchronizuj($ksLB, $pdo, 'cron');
     $wS = array_map(static fn($z) => $z(), $zadS);
@@ -169,12 +169,12 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     unset($payloadD['custom_fields']);
     $mailiPrzed = is_file($jsonl) ? count(file($jsonl)) : 0;
     [$h, $o, $zad] = bon_test_webhook($kD, $pdo, $payloadD, 'zly-podpis');
-    $t('dzwonek: zły podpis → 200, podpis_ok false, bez synchronizacji i bez bonu', $h === 200 && ($o['podpis_ok'] ?? null) === false && !$zad && $ile($dz['id']) === 0, json_encode($o));
+    $t('dzwonek: zły podpis → 200, podpis_ok false, bez synchronizacji i bez bonu', $h === 200 && ($o['podpis_ok'] ?? null) === false && $zad === null && $ile($dz['id']) === 0, json_encode($o));
     $raw = json_encode($payloadD);
-    [$h, $o, $zad] = bon_obsluz_webhook($kD, $raw, [], static fn() => $pdo);
-    $t('dzwonek: bez podpisu → 200, bez synchronizacji i bez bonu', $h === 200 && ($o['podpis_ok'] ?? null) === false && !$zad && $ile($dz['id']) === 0, json_encode($o));
+    [$h, $o, $zad] = array_pad(bon_obsluz_webhook($kD, $raw, [], static fn() => $pdo), 3, null); // #276
+    $t('dzwonek: bez podpisu → 200, bez synchronizacji i bez bonu', $h === 200 && ($o['podpis_ok'] ?? null) === false && $zad === null && $ile($dz['id']) === 0, json_encode($o));
     [$h, $o, $zad] = bon_test_webhook($kD, $pdo, array_replace($payloadD, ['event' => 'product_assigned']));
-    $t('dzwonek: podpisany product_assigned → pominięty, bez synchronizacji', $h === 200 && ($o['pominieto'] ?? '') === 'product_assigned' && !$zad, json_encode($o));
+    $t('dzwonek: podpisany product_assigned → pominięty, bez synchronizacji', $h === 200 && ($o['pominieto'] ?? '') === 'product_assigned' && $zad === null, json_encode($o));
     $wywolania = [];
     [$h, $o, $zad] = bon_test_webhook($kD, $pdo, $payloadD);
     $t('dzwonek: podpisany zakup → 200 od razu, synchronizacja dopiero po odpowiedzi', $h === 200 && ($o['dzwonek'] ?? false) === true && $zad && $ile($dz['id']) === 0 && !$wywolania, json_encode($o));

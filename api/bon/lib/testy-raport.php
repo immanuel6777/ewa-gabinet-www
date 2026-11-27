@@ -233,8 +233,17 @@ function bon_testy_raport(array $k, PDO $pdo): array {
     $niez = bon_raport_niezgodnosci($k, $pdo, $moje);
     $t('saldo kontrola: wykrywa saldo bez realizacji, zwrot bez wpisu „zwrot” i rezygnację bez wpisu „rezygnacja”',
         array_column($niez, 'kod') === [$s2['code'], $s6['code'], $s9['code']] && count(array_filter(array_column($niez, 'problem'))) === 3, json_encode($niez, JSON_UNESCAPED_UNICODE));
+    // #274: kontrola dla log.php (?saldo=1) – tylko bony ruszane w ostatnich N dniach, najwyżej $maks, numery zamaskowane
+    $kontr = bon_raport_kontrola($k, $pdo, 30, 500);
+    $kodyK = array_column($kontr['bony'], 'kod');
+    $t('#274 kontrola: rozjechane saldo z ostatnich 30 dni w wyniku, numer zamaskowany (EWA-****-XXXX), pełnego numeru brak',
+        in_array(bon_kod_maska($s2['code']), $kodyK, true) && !str_contains(json_encode($kontr), $s2['code']) && $kontr['niezgodnych'] >= 3
+        && $kontr['dni'] === 30 && $kontr['sprawdzono'] >= count($moje), json_encode(array_diff_key($kontr, ['bony' => 1])));
+    $kontr1 = bon_raport_kontrola($k, $pdo, 30, 1);
+    $t('#274 kontrola: limit bonów – sprawdzono 1, obcieto = true', $kontr1['sprawdzono'] === 1 && $kontr1['obcieto'] === true, json_encode($kontr1));
     $pdo->prepare("UPDATE $tabB SET balance_pln = balance_pln + 1 WHERE id = ?")->execute([$s2['id']]);
     $pdo->prepare("UPDATE $tabB SET status = 'valid' WHERE id IN (?, ?)")->execute([$s6['id'], $s9['id']]);
+    $t('#274 kontrola: po naprawie saldo bonu poza wynikiem', !in_array(bon_kod_maska($s2['code']), array_column(bon_raport_kontrola($k, $pdo, 30, 500)['bony'], 'kod'), true));
 
     // W obie strony na PRAWDZIWYCH akcjach (opisy zdarzeń pisze kod Backendu – lib/panel.php, lib/bon.php): stan bonu przed akcją
     // = bon_raport_stan_na(stan po akcji, jej realizacje i zdarzenia, koniec = chwila akcji). Zmiana prefiksu opisu = test czerwony.

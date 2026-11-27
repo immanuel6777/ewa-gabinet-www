@@ -33,6 +33,8 @@ function bon_testy_obsluga(array $k, PDO $pdo): array {
     $t('odbicie: powiadomienie gabinetu z numerami bonów, imieniem kupującego i odbitym adresem', $r['problem'] === 1
         && str_contains($pow, 'mail NIE dotarł') && str_contains($pow, $kod) && str_contains($pow, 'Odbity adres: ' . $stary)
         && str_contains($pow, 'Kupujący: ') && str_contains($pow, 'Wyślij ponownie'), $pow);
+    $t('#272 NIE dotarł: co się stało → bon → status → odbity adres → co dalej → przycisk panelu',
+        bon_testy_kolejnosc($pow, ['Mailjet przyjął mail z bonem', $kod, 'Status: ', 'Odbity adres: ', 'Wyślij ponownie', 'Otwórz bon w panelu']), $pow);
     [, $h] = bon_panel_historia($k, $pdo, $sKasa, $kod);
     $t('odbicie: znacznik mail_odbity w panelu (każda rola), wpis w historii', ($h['mail_odbity'] ?? false) === true
         && in_array('mail-odbity', array_column($h['zdarzenia'] ?? [], 'akcja'), true));
@@ -158,6 +160,9 @@ function bon_testy_obsluga(array $k, PDO $pdo): array {
     $kod4 = (string)bon_test_bony($k4, $pdo, $p4['order_id'])[0]['code'];
     $w1 = $ponownie($k4, $kod4, $sKasa);
     $w2 = $ponownie($k4, $kod4, $sKasa);
+    $powS = (string)@file_get_contents($kat4 . '/bony-powiadomienia.txt');
+    $t('#272 Sprzedano bon: co się stało → kwota „200 zł” → bon → przycisk panelu',
+        bon_testy_kolejnosc($powS, ['== Sprzedano bon – 200', 'Kupujący zapłacił', "Wartość bonów: 200\u{00A0}zł", 'Bon: ' . $kod4, 'Otwórz bon w panelu']), $powS);
     $t('REVIEW R4: zakup + 2× „Wyślij ponownie” → jedno „Sprzedano bon”, obie wysyłki udane, w wyniku sprzedano_pominiete',
         $sprzedano() === 1 && ($w1['wyslane'] ?? 0) === 1 && ($w2['wyslane'] ?? 0) === 1 && ($w2['sprzedano_pominiete'] ?? false), json_encode([$sprzedano(), $w1, $w2]));
     // pierwsza wysyłka nieudana → pierwsza udana „Wyślij ponownie” to jedyne „Sprzedano” (gabinet musi się dowiedzieć o sprzedaży)

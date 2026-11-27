@@ -99,11 +99,11 @@ function bon_test_uslugi(string $katalog): string {
     return $plik;
 }
 
-/** Wysyła webhook przez bon_obsluz_webhook; $podpis null = poprawny podpis. */
+/** Wysyła webhook przez bon_obsluz_webhook; $podpis null = poprawny podpis. Zawsze [kod, odpowiedź, ?zadanie] (#276: pominięty webhook oddaje 2). */
 function bon_test_webhook(array $k, PDO $pdo, array $payload, ?string $podpis = null, ?string $raw = null): array {
     $raw ??= json_encode($payload, JSON_UNESCAPED_UNICODE);
     $podpis ??= hash_hmac('sha256', $raw, $k['easytools_webhook_sekret']);
-    return bon_obsluz_webhook($k, $raw, ['x-webhook-signature' => $podpis], static fn() => $pdo);
+    return array_pad(bon_obsluz_webhook($k, $raw, ['x-webhook-signature' => $podpis], static fn() => $pdo), 3, null);
 }
 
 function bon_test_bony(array $k, PDO $pdo, $zamowienie): array {
@@ -390,6 +390,10 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $ileNiepewny = static fn(): int => substr_count(is_file($katZ . '/bony-powiadomienia.txt') ? (string)file_get_contents($katZ . '/bony-powiadomienia.txt') : '', 'MOŻE nie dotrzeć – zamówienie ord_zapas_po_danych');
     [$w, $b] = $wyslijZ(array_replace($kZ, ['smtp_test_blad' => 'po_danych']), 'ord_zapas_po_danych', 3);
     [$w2] = $wyslijZ(array_replace($kZ, ['smtp_test_blad' => 'po_danych']), 'ord_zapas_po_danych', 3);
+    $powM = is_file($katZ . '/bony-powiadomienia.txt') ? (string)file_get_contents($katZ . '/bony-powiadomienia.txt') : '';
+    $powM = substr($powM, (int)strrpos($powM, '== Bon: mail MOŻE nie dotrzeć – zamówienie ord_zapas_po_danych'));
+    $t('#272 MOŻE nie dotrzeć: co się stało → bon → błąd → co dalej → przycisk panelu',
+        bon_testy_kolejnosc($powM, ['zerwała się po przesłaniu treści', 'Bon: ' . $b[0]['code'], 'Błąd: ', 'NIE będzie ponawiana', 'Otwórz bon w panelu']), $powM);
     $t('zapas: SMTP zerwany po treści → bez ponownej wysyłki (bez dubli), jedno powiadomienie', array_key_exists('blad', $w) && $w['blad'] === null && $b[0]['mail_wyslany_at'] !== null
         && ($w2['pominieto'] ?? '') === 'nic do wysłania' && $ileNiepewny() === 1, json_encode([$w, $w2, $ileNiepewny(), $b[0]['mail_wyslany_at']]));
     $waw = static fn(int $s): string => (new DateTimeImmutable('@' . (time() + $s)))->setTimezone(new DateTimeZone('Europe/Warsaw'))->format('Y-m-d H:i');
@@ -438,6 +442,10 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $r1 = bon_mail_kontrola($kKolejka, 0, 0);
     $r2 = bon_mail_kontrola($kKolejka, time() + 86400 + 60, 0);
     $niepotw = substr_count(is_file($plikPow) ? (string)file_get_contents($plikPow) : '', 'brak potwierdzenia dostarczenia – zamówienie ord_kontrola_kolejka');
+    $pow24 = is_file($plikPow) ? (string)file_get_contents($plikPow) : '';
+    $pow24 = substr($pow24, (int)strrpos($pow24, '== Bon: brak potwierdzenia dostarczenia – zamówienie ord_kontrola_kolejka'));
+    $t('#272 brak potwierdzenia 24 h: co się stało → bon → status → co dalej → przycisk panelu',
+        bon_testy_kolejnosc($pow24, ['Mailjet nadal nie potwierdza', 'EWA-TEST-0004', 'Status: ', 'Sprawdź w Mailjecie', 'Otwórz bon w panelu']), $pow24);
     $t('kontrola: queued czeka, po 24 h jedno powiadomienie „niepotwierdzone”', $r1['czeka'] === 1 && $r2['czeka'] === 1 && $niepotw === 1, json_encode([$r1, $r2, $niepotw]));
     $o = $r1['mailjet'][0]['odpowiedzi'][0] ?? [];
     $t('kontrola: w wyniku surowy status i HTTP Mailjeta', ($o['status'] ?? null) === 'queued' && ($o['http'] ?? 0) === 200 && ($o['id'] ?? 0) === 444, json_encode($r1));
@@ -476,6 +484,10 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $GLOBALS['bon_test_zerwania_status'] = 0;
     $t('status: 3 zerwania → zdarzenie z sondą (wszystkie próby)', ($zz[0]['wszystkie'] ?? false) === true && ($zz[0]['proby'] ?? 0) === 3 && isset($zz[0]['sonda']), json_encode($zz[0] ?? null));
     $t('kontrola: zerwania po 24 h → bez „niepotwierdzone”, dalej czeka', $r1['czeka'] === 1 && $ileNiepotw() === 0, json_encode($r1));
+    $pow72 = is_file($plikPow) ? (string)file_get_contents($plikPow) : '';
+    $pow72 = substr($pow72, (int)strrpos($pow72, '== Bon: nie da się sprawdzić dostarczenia – zamówienie ord_kontrola_zerw'));
+    $t('#272 nie da się sprawdzić (72 h): co się stało → bon → ostatni błąd → co dalej → przycisk panelu',
+        bon_testy_kolejnosc($pow72, ['nie może zapytać Mailjeta', 'EWA-TEST-0007', 'Ostatni błąd: ', 'To nie znaczy', 'Otwórz bon w panelu']), $pow72);
     $t('kontrola: zerwania po 72 h → jedno powiadomienie „nie da się sprawdzić”, kontrola trwa', $r2['czeka'] === 1 && $r3['sprawdzono'] === 1 && $ileBrakOdp() === 1, json_encode([$r2, $r3, $ileBrakOdp()]));
     array_map('unlink', glob($kat . '/*.json') ?: []);
     @rmdir($kat);

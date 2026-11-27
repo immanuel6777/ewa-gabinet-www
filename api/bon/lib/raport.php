@@ -174,7 +174,9 @@ function bon_raport_niezgodnosci(array $k, PDO $pdo, ?array $ids = null): array 
     if (!$bony) return [];
     $cofniete = bon_raport_cofniete($k, $pdo);
     $zdjeto = [];
-    foreach ($pdo->query('SELECT id, voucher_id, amount_pln FROM ' . bon_tabela($k, 'redemptions'))->fetchAll() as $r) {
+    // #274 (uwaga z przeglądu #234): przy liście bonów tylko ich realizacje, nie cała tabela
+    $gdzieR = $ids === null ? '' : ' WHERE voucher_id IN (' . implode(',', array_map('intval', $ids)) . ')';
+    foreach ($pdo->query('SELECT id, voucher_id, amount_pln FROM ' . bon_tabela($k, 'redemptions') . $gdzieR)->fetchAll() as $r) {
         if (!isset($cofniete[(int)$r['id']])) $zdjeto[(int)$r['voucher_id']] = ($zdjeto[(int)$r['voucher_id']] ?? 0) + (int)bon_grosze($r['amount_pln']);
     }
     $wynik = [];
@@ -187,6 +189,24 @@ function bon_raport_niezgodnosci(array $k, PDO $pdo, ?array $ids = null): array 
         if ($problemy) $wynik[] = ['kod' => (string)$b['code'], 'problem' => implode('; ', $problemy)];
     }
     return $wynik;
+}
+
+/**
+ * #274: kontrola zgodności dla log.php (?saldo=1): bony ruszane w ostatnich $dni dniach (utworzone, z realizacją albo wpisem
+ * w historii), najwyżej $maks (najnowsze), sprawdzone bon_raport_niezgodnosci. Numery zamaskowane (EWA-****-XXXX), bez danych kupującego.
+ */
+function bon_raport_kontrola(array $k, PDO $pdo, int $dni = 30, int $maks = 500): array {
+    $od = bon_teraz()->modify('-' . max(1, $dni) . ' days')->format('Y-m-d H:i:s');
+    $st = $pdo->prepare('SELECT id FROM ' . bon_tabela($k, 'vouchers') . ' WHERE created_at >= ?
+        UNION SELECT voucher_id FROM ' . bon_tabela($k, 'redemptions') . ' WHERE redeemed_at >= ?
+        UNION SELECT voucher_id FROM ' . bon_tabela($k, 'voucher_admin_log') . ' WHERE kiedy >= ? ORDER BY 1 DESC');
+    $st->execute([$od, $od, $od]);
+    $ids = array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+    $obcieto = count($ids) > $maks;
+    $ids = array_slice($ids, 0, max(1, $maks));
+    $niez = bon_raport_niezgodnosci($k, $pdo, $ids);
+    return ['dni' => $dni, 'sprawdzono' => count($ids), 'obcieto' => $obcieto, 'niezgodnych' => count($niez), 'na_chwile' => bon_teraz()->format('Y-m-d H:i:s'),
+        'bony' => array_map(static fn($n) => ['kod' => bon_kod_maska($n['kod']), 'problem' => $n['problem']], array_slice($niez, 0, 50))];
 }
 
 /**

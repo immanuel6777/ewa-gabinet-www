@@ -34,6 +34,16 @@ if (($_GET['siec'] ?? '') === '1') {
     exit;
 }
 
+// ?saldo=1[&dni=N] (#274, Backend 2): kontrola zgodności salda bonów ruszanych w ostatnich N dniach (domyślnie 30, maks. 366;
+// najwyżej 500 bonów) – saldo = wartość − realizacje bez cofniętych, zwrot i rezygnacja z wpisem w historii; numery zamaskowane
+if (($_GET['saldo'] ?? '') === '1') {
+    require_once __DIR__ . '/lib/raport.php';
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['saldo_kontrola' => bon_raport_kontrola($k, bon_pdo($k), max(1, min(366, (int)($_GET['dni'] ?? 30))), 500)],
+        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE);
+    exit;
+}
+
 // ?adres=1 (REVIEW nr 14): co serwer widzi jako adres WYWOŁUJĄCEGO (osoby z tokenem, nie klientów) – REMOTE_ADDR i nagłówki
 // pośrednika. Zapytanie z dwóch sieci: ten sam REMOTE_ADDR przy różnych publicznych IP = pośrednik, limity liczone wspólnie.
 if (($_GET['adres'] ?? '') === '1') {

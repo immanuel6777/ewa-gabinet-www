@@ -464,9 +464,15 @@ function bon_powiadom_tekst(array $d): string {
     if (trim((string)($d['dalej'] ?? '')) !== '') $czesci[] = trim((string)$d['dalej']);
     $przycisk = bon_powiadom_przycisk($d);
     if ($przycisk && empty($d['klient'])) $czesci[] = $przycisk[0] . ': ' . $przycisk[1];
-    $drobny = (array)($d['drobny'] ?? []);
+    $drobny = bon_powiadom_drobny($d);
     if ($drobny) $czesci[] = "Szczegóły techniczne:\n" . implode("\n", array_map(static fn($p) => "{$p[0]}: {$p[1]}", $drobny));
     return implode("\n\n", array_filter($czesci, static fn($c) => $c !== '')) . "\n";
+}
+
+/** Drobny druk bez wpisów, których wartość stoi już bez zmian w polach (np. numer zamówienia, który nie jest UUID – nieskrócony). */
+function bon_powiadom_drobny(array $d): array {
+    $wPolach = array_map(static fn($p) => (string)($p[1] ?? ''), (array)($d['pola'] ?? []));
+    return array_values(array_filter((array)($d['drobny'] ?? []), static fn($p) => !in_array((string)($p[1] ?? ''), $wPolach, true)));
 }
 
 /** Przycisk maila: podany w $d albo „Otwórz bon w panelu” dla pierwszego bonu (mail do gabinetu). */
@@ -482,7 +488,7 @@ function bon_powiadom_html_dane(array $k, string $temat, array $d): string {
     $kwota = isset($d['kwota']) ? bon_kwota_pl((int)$d['kwota']) : '';
     $bony = array_values((array)($d['bony'] ?? []));
     $pola = (array)($d['pola'] ?? []);
-    $drobny = (array)($d['drobny'] ?? []);
+    $drobny = bon_powiadom_drobny($d);
     $przycisk = bon_powiadom_przycisk($d);
     $klient = !empty($d['klient']);
     $plik = (string)($k['mail_powiadomienie_szablon_plik'] ?? (__DIR__ . '/mail-powiadomienie.tpl'));
@@ -553,8 +559,14 @@ function bon_powiadom(array $k, string $temat, string $tresc, ?array $dane = nul
     $cialo = "--$granica\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($tresc))
         . "--$granica\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n" . chunk_split(base64_encode($html))
         . "--$granica--\r\n";
-    $ok = @mail(implode(', ', $do), '=?UTF-8?B?' . base64_encode($temat) . '?=', $cialo, implode("\r\n", $naglowki));
-    if (!$ok) error_log('bony: mail() nie wysłał powiadomienia: ' . $temat);
+    $argumenty = [implode(', ', $do), '=?UTF-8?B?' . base64_encode($temat) . '?=', $cialo, implode("\r\n", $naglowki)];
+    // testy (#273): $k['_test_mail'] zamiast prawdziwego mail() – także w test-ovh.php nic nie wychodzi
+    $ok = is_callable($k['_test_mail'] ?? null) ? (bool)($k['_test_mail'])(...$argumenty) : @mail(...$argumenty);
+    if (!$ok) {
+        error_log('bony: mail() nie wysłał powiadomienia: ' . $temat);
+        // #273: error_log OVH jest dla nas nieczytelny – zdarzenie w dzienniku (log.php); numer bonu zamaskowany
+        bon_zdarzenie($k, 'powiadomienie-blad', ['temat' => preg_replace_callback('/\b[A-Z]{2,10}-[A-Z0-9]{4}-[A-Z0-9]{4}\b/', static fn($m) => bon_kod_maska($m[0]), $temat) ?? '', 'odbiorcow' => count($do)]);
+    }
     return $ok;
 }
 
@@ -852,7 +864,12 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
     $tab = bon_tabela($k, 'vouchers');
 
     if (strtolower((string)$z['waluta']) !== 'pln') {
-        bon_powiadom($k, 'Bon: zamówienie w innej walucie', "Zamówienie $zamowienie, waluta: " . ($z['waluta'] ?: '?') . ". Bon NIE powstał – sprawdź w Easytools.");
+        bon_powiadom_dane($k, 'Bon: zamówienie w innej walucie', [ // #272
+            'co' => 'Zamówienie zapłacono w innej walucie niż złoty – bon NIE powstał.',
+            'pola' => [['Waluta', mb_strtoupper((string)($z['waluta'] ?: '?'))], ['Zamówienie Easytools', bon_id_krotko((string)$zamowienie)]],
+            'dalej' => 'Sprawdź zamówienie w Easytools. Bon można dodać ręcznie albo zwrócić pieniądze w Easytools.',
+            'drobny' => [['Zamówienie Easytools', (string)$zamowienie]],
+        ]);
         return [200, ['ok' => true, 'pominieto' => 'waluta']];
     }
 
