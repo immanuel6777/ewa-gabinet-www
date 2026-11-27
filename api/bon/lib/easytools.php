@@ -298,16 +298,20 @@ function bon_synchronizuj_wyslij(array $k, array $zadania, string $zrodlo): void
     }
 }
 
-/** Raport dla panelu: liczby i krótkie wiersze, bez e-maili. */
-function bon_synchronizuj_dla_panelu(array $r): array {
+/** Raport dla panelu: liczby i krótkie wiersze, bez e-maili. #333 (przegląd UX 27.11): powód techniczny (nazwy pól konfigu,
+ *  tryb raportu, „dziennik”) tylko dla admina; Gabinet i Bon dostają zwykłe zdanie (`$admin = false`). */
+function bon_synchronizuj_dla_panelu(array $r, bool $admin = true): array {
+    $wylaczone = 'Pobieranie nowych zamówień jest chwilowo wyłączone.';
     if (($r['pominieto'] ?? '') === 'synchronizacja w toku') return ['tekst' => 'Pobieranie zamówień już trwa – sprawdź za chwilę.'];
-    if (isset($r['pominieto'])) return ['tekst' => 'Pobieranie zamówień z Easytools jest wyłączone w konfiguracji (' . $r['pominieto'] . ').'];
+    if (isset($r['pominieto'])) return ['tekst' => $admin ? 'Pobieranie zamówień z Easytools jest wyłączone w konfiguracji (' . $r['pominieto'] . ').' : $wylaczone];
     $nowe = array_values(array_filter((array)($r['nowe'] ?? []), static fn($w) => isset($w['wynik']['bonow']) || isset($w['blad']) || is_string($w['wynik'] ?? null)));
     $ile = 0;
     foreach ($nowe as $w) $ile += (int)($w['wynik']['bonow'] ?? 0);
     $tekst = $r['tryb'] === 'bon'
         ? ($ile ? "Nowe bony: $ile (z zamówień: " . count($nowe) . ').' : 'Brak nowych zamówień.')
-        : 'Tryb raportu: bony nie powstają (sync_tryb). Zamówień bez bonu: ' . count($nowe) . '.';
-    if (array_filter($nowe, static fn($w) => isset($w['blad']))) $tekst .= ' Część zamówień z błędem – szczegóły w dzienniku.';
+        : ($admin ? 'Tryb raportu: bony nie powstają (sync_tryb). Zamówień bez bonu: ' . count($nowe) . '.' : $wylaczone);
+    if (array_filter($nowe, static fn($w) => isset($w['blad']))) {
+        $tekst .= $admin ? ' Część zamówień z błędem – szczegóły w dzienniku.' : ' Części zamówień nie udało się pobrać – daj znać Bartkowi.';
+    }
     return ['tekst' => $tekst, 'zamowien' => (int)($r['zamowien'] ?? 0), 'nowych_bonow' => $ile];
 }

@@ -458,6 +458,26 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     [$r] = bon_synchronizuj(array_replace($ks, ['sync_tryb' => 'raport']), $pdo, 'panel');
     $p = bon_synchronizuj_dla_panelu($r);
     $t('raport panelu: tekst, bez e-maili', isset($p['tekst']) && !str_contains(json_encode($p, JSON_UNESCAPED_UNICODE), '@'), json_encode($p, JSON_UNESCAPED_UNICODE));
+    // #333: powody techniczne (nazwy pól konfigu, „dziennik”) tylko dla admina; Gabinet i Bon – ogólne zdanie
+    $techniczne = '/sync_tryb|easytools_|sync_od|konfigurac|dzienni|Tryb raportu/u';
+    $pp = [];
+    foreach (['sync_tryb = wylaczony', 'brak easytools_api_key', 'brak easytools_produkt_uuid', 'brak sync_od'] as $pow) {
+        $pp[$pow] = [bon_synchronizuj_dla_panelu(['pominieto' => $pow], true)['tekst'], bon_synchronizuj_dla_panelu(['pominieto' => $pow], false)['tekst']];
+    }
+    $pRaport = [bon_synchronizuj_dla_panelu($r, true)['tekst'], bon_synchronizuj_dla_panelu($r, false)['tekst']];
+    $zBledem = ['tryb' => 'bon', 'zamowien' => 2, 'nowe' => [['wynik' => ['bonow' => 1]], ['blad' => 'HTTP 500']]];
+    $pBlad = [bon_synchronizuj_dla_panelu($zBledem, true)['tekst'], bon_synchronizuj_dla_panelu($zBledem, false)['tekst']];
+    $okAdmin = $okInni = true;
+    foreach (array_merge(array_values($pp), [$pRaport, $pBlad]) as [$tA, $tG]) {
+        $okAdmin = $okAdmin && preg_match($techniczne, $tA) === 1;
+        $okInni = $okInni && $tG !== '' && preg_match($techniczne, $tG) !== 1;
+    }
+    $t('#333: raport panelu – admin widzi powód techniczny (konfig, tryb raportu, dziennik), Gabinet i Bon ogólne zdanie bez nazw pól',
+        $okAdmin && $okInni && str_contains($pBlad[1], 'Nowe bony: 1'), json_encode([$pp, $pRaport, $pBlad], JSON_UNESCAPED_UNICODE));
+    $t('#333: „pobieranie już trwa” i liczby nowych bonów takie same dla wszystkich ról',
+        bon_synchronizuj_dla_panelu(['pominieto' => 'synchronizacja w toku'], false) === bon_synchronizuj_dla_panelu(['pominieto' => 'synchronizacja w toku'], true)
+        && bon_synchronizuj_dla_panelu(['tryb' => 'bon', 'zamowien' => 1, 'nowe' => [['wynik' => ['bonow' => 2]]]], false)
+        === bon_synchronizuj_dla_panelu(['tryb' => 'bon', 'zamowien' => 1, 'nowe' => [['wynik' => ['bonow' => 2]]]], true));
     // stan zamówienia dla /bony/dziekujemy (TA-10): pełny adres do 60 min od zapłaty, potem maska; tylko UUID; osobny limit
     $ip = '203.0.113.' . random_int(1, 250);
     $s = bon_stan_zamowienia($k, $pdo, $a['id'], $ip);

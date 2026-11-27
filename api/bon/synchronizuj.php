@@ -20,7 +20,7 @@ try {
     if ($zrodlo === 'panel') $raport['kto'] = $sesja['login'];
     if (!isset($raport['pominieto']) || $zrodlo === 'panel') bon_zdarzenie($k, 'synchronizacja', $raport);
     if ($zrodlo === 'panel') {
-        bon_json(200, ['ok' => true, 'raport' => bon_synchronizuj_dla_panelu($raport)]);
+        bon_json(200, ['ok' => true, 'raport' => bon_synchronizuj_dla_panelu($raport, $sesja['rola'] === 'admin')]); // #333: powód techniczny tylko adminowi
     } else {
         // strona podziękowania (2026-11-24, TA-10): {"zamowienie": "<ec_order_id>"} → stan i adres, na który poszedł bon.
         // Także gdy synchronizacja była pominięta (odstęp). Adres tylko w odpowiedzi, nigdy w dzienniku.
