@@ -27,7 +27,7 @@ RewriteRule ^(.*)$ https://www.ewa-gabinet.pl/$1 [R=301,L,NE]
 RewriteCond %{HTTP_HOST} !^www\.ewa-gabinet\.pl$ [NC]
 RewriteRule ^robots\.txt$ robots-test.txt [L]
 
-# 3. przekierowania 301 ze starej strony WordPress (104 reguł)
+# 3. przekierowania 301 ze starej strony WordPress (111 reguł)
 RewriteRule ^zabiegi-pabianice/wrastajace-paznokcie-kostka-arkady-2/?$ https://%{HTTP_HOST}/zabiegi-pabianice/wrastajace-paznokcie-kostka-arkady [R=301,L,NE]
 RewriteRule ^img/zabiegi/manicure-hybrydowy/manicure-hybrydowy-rozowy-z-drobinkami\.jpg/?$ https://%{HTTP_HOST}/img/zabiegi/paznokcie-zelowe/paznokcie-zelowe-rozowe-z-drobinkami.jpg [R=301,L,NE]
 RewriteRule ^zabiegi-pabianice/liporadiologia-vinci/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
@@ -109,6 +109,13 @@ RewriteRule ^wp-content/themes/wp_ewa(/(.*))?$ https://%{HTTP_HOST}/img/$2 [R=30
 RewriteRule ^sitemap_index\.xml/?$ https://%{HTTP_HOST}/sitemap-index.xml [R=301,L,NE]
 RewriteRule ^sitemap\.xml/?$ https://%{HTTP_HOST}/sitemap-index.xml [R=301,L,NE]
 RewriteRule ^regulamin-bonow/?$ https://%{HTTP_HOST}/regulamin [R=301,L,NE]
+RewriteRule ^zabiegi-pabianice/oczyszczanie-wodorowe/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
+RewriteRule ^index\.php/?$ https://%{HTTP_HOST}/ [R=301,L,NE]
+RewriteRule ^page-sitemap\.xml/?$ https://%{HTTP_HOST}/sitemap-index.xml [R=301,L,NE]
+RewriteRule ^post-sitemap\.xml/?$ https://%{HTTP_HOST}/sitemap-index.xml [R=301,L,NE]
+RewriteRule ^szkolenia/?$ https://%{HTTP_HOST}/szkolenia-pabianice [R=301,L,NE]
+RewriteRule ^zabiegi-kategorie/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
+RewriteRule ^comments/feed/?$ https://%{HTTP_HOST}/rss.xml [R=301,L,NE]
 RewriteRule ^zabiegi-pabianice/oczyszczanie-wodorowe-pro-facial/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
 RewriteRule ^zabiegi-pabianice/dermapen/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
 RewriteRule ^zabiegi-pabianice/peeling-pq-age-evolution/?$ https://%{HTTP_HOST}/gabinet-podologiczny [R=301,L,NE]
