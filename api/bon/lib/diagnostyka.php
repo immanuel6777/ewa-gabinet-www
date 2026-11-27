@@ -161,6 +161,24 @@ function bon_log_zdarzenia(array $k, int $ile, int $dni): array {
     return $wynik;
 }
 
+/**
+ * #265 (przegląd Backendu 27.11): test_token w konfigu = działa api/bon/test-ovh.php (tabele test_* w prawdziwej bazie, PDF-y).
+ * Potrzebny przy migracjach (np. #238), potem do usunięcia. Pierwsze zauważenie (log.php albo cron) zapisuje znacznik
+ * konfig/bony-test-token-od.txt; po 24 h – ostrzeżenie w log.php. Bez tokenu znacznik znika. Samego tokenu nie wypisujemy.
+ * Ten sam warunek co w test-ovh.php: co najmniej 24 znaki.
+ */
+function bon_test_token_stan(array $k): array {
+    $znacznik = (string)($k['_katalog'] ?? '') . '/bony-test-token-od.txt';
+    if (strlen((string)($k['test_token'] ?? '')) < 24) {
+        if (($k['_katalog'] ?? '') !== '' && is_file($znacznik)) @unlink($znacznik);
+        return ['ustawiony' => false, 'od' => null, 'ostrzezenie' => null];
+    }
+    if (($k['_katalog'] ?? '') !== '' && !is_file($znacznik)) @touch($znacznik);
+    $od = is_file($znacznik) ? (int)filemtime($znacznik) : time();
+    return ['ustawiony' => true, 'od' => date('c', $od),
+        'ostrzezenie' => time() - $od > 86400 ? 'test_token wisi w konfigu ponad dobę – po teście usuń test_token z konfig/bony.php (test-ovh.php działa)' : null];
+}
+
 /** #256: ostatnie błędy krytyczne PHP (zdarzenia „blad_php” z lib/bon.php → bon_blad_krytyczny) z $dni dni, najnowsze pierwsze. */
 function bon_log_bledy_krytyczne(array $k, int $ile = 10, int $dni = 7): array {
     $pliki = glob(($k['_katalog'] ?? '') . '/bony-zdarzenia/*.log') ?: [];
@@ -246,6 +264,7 @@ function bon_diagnostyka(array $k, int $ile = 10, int $dni = 2, int $bony = 20, 
     }
     $wynik['blad_php'] = bon_log_php();
     $wynik['bledy_krytyczne'] = bon_log_bledy_krytyczne($k); // #256: własny zapis – serwerowy error_log OVH jest niedostępny
+    $wynik['test_token'] = bon_test_token_stan($k); // #265: test-ovh.php włączony? ostrzeżenie po dobie
     return $wynik;
 }
 

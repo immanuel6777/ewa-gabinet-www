@@ -37,6 +37,8 @@ try {
     } catch (Throwable $e) {
         bon_zdarzenie($k, 'blad', ['plik' => 'cron (A1)'] + bon_opis_bledu($e));
     }
+    // #265: znacznik „od kiedy wisi test_token” (ostrzeżenie w log.php po dobie) – także gdy nikt nie otwiera log.php
+    try { require_once __DIR__ . '/diagnostyka.php'; bon_test_token_stan($k); } catch (Throwable) {}
     // #218: zamówienie z samymi zwróconymi bonami → odebranie dostępu do produktu w Easytools (po potwierdzeniu zwrotów wyżej)
     try {
         $dostep = bon_zwroty_dostep($k, $pdo);

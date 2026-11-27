@@ -59,6 +59,19 @@ function bon_testy_bledy(array $k, PDO $pdo): array {
     $t('#256: ścieżka katalogu domowego OVH skrócona do ~/', bon_blad_tekst("require(): Failed opening '/homez.123/ewagab/konfig/bony.php'")
         === "require(): Failed opening '~/konfig/bony.php'", bon_blad_tekst("require(): Failed opening '/homez.123/ewagab/konfig/bony.php'"));
 
+    // #265: test_token w konfigu (test-ovh.php działa) – stan w log.php, ostrzeżenie po 24 h od pierwszego zauważenia
+    $kt = array_replace($kb, ['test_token' => str_repeat('t', 32)]);
+    $s1 = bon_test_token_stan($kt);
+    $t('#265: test_token ustawiony → ustawiony, od teraz, bez ostrzeżenia; token nie wypisany', $s1['ustawiony'] === true && $s1['ostrzezenie'] === null
+        && !str_contains(json_encode($s1), str_repeat('t', 32)) && is_file($kat . '/bony-test-token-od.txt'), json_encode($s1));
+    @touch($kat . '/bony-test-token-od.txt', time() - 25 * 3600);
+    $s2 = bon_test_token_stan($kt);
+    $t('#265: po 25 h → ostrzeżenie „usuń test_token”', $s2['ustawiony'] === true && str_contains((string)$s2['ostrzezenie'], 'usuń test_token'), json_encode($s2));
+    $s3 = bon_test_token_stan($kb);
+    $t('#265: bez test_token → nieustawiony, znacznik usunięty (następne ustawienie liczy od nowa)', $s3['ustawiony'] === false && $s3['ostrzezenie'] === null
+        && !is_file($kat . '/bony-test-token-od.txt'), json_encode($s3));
+    $t('#265: krótki test_token (test-ovh.php go nie przyjmuje) – nieustawiony', bon_test_token_stan(array_replace($kb, ['test_token' => 'krotki']))['ustawiony'] === false);
+
     // 6. brak konfiguracji (błąd przy wczytywaniu konfigu) – bez wyjątku, nic nie zapisuje
     $ok = true;
     try { bon_blad_krytyczny($blad, null, 'GET', '/api/bon/verify.php'); } catch (Throwable) { $ok = false; }
