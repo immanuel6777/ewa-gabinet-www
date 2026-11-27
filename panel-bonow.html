@@ -40,10 +40,10 @@
   
     <!-- klasa .js przed malowaniem: elementy z animacją wejścia startują ukryte tylko gdy JS działa -->
     <script>document.documentElement.classList.add('js')</script>
-  <link rel="stylesheet" href="/_astro/sciezka-bonow.B0WK5N8t.css">
+  <link rel="stylesheet" href="/_astro/logo.B0WK5N8t.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.BiVBqnYM.css">
+<link rel="stylesheet" href="/_astro/panel-bonow.Bp6EsVo5.css">
 <link rel="stylesheet" href="/_astro/Baza.Bz3LO1pZ.css">
 <link rel="stylesheet" href="/_astro/KartaBonu.G03djIBG.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
@@ -145,7 +145,7 @@
           <p class="n-menu-poz n-menu-pomoc" data-p-menu-poz="pomoc" data-n-pomoc="bez-instrukcji" hidden data-astro-cid-lkdlr2dg></p>
           <button class="n-menu-poz n-menu-wyloguj" type="button" data-p-menu-poz="wyloguj" data-astro-cid-lkdlr2dg>Wyloguj</button>
         </nav>
-        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu 405ad33 · 27.11.2026</p>
+        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu cbfb7e4 · 27.11.2026</p>
       </div>
     </dialog>
   </header>
@@ -310,8 +310,9 @@
 
       <!-- KASA: karta bonu – kamień, duże saldo, ważność; nieaktywny = jedno zdanie, bez przycisków; jedna linijka historii -->
       <section class="karta kasa-bon tylko-kasa" data-k-bon hidden>
-        <!-- Bartek 2026-11-25: kolor = stan bonu (pasek z lewej + pigułka); kamień tylko jako delikatny podpis -->
-        <p class="k-glowa"><span class="k-status" data-k-status></span><span class="k-nazwa" data-k-nazwa></span></p>
+        <!-- Bartek 2026-11-25: kolor = stan bonu (pasek z lewej + pigułka). Bartek 27.11 (wariant A): nagłówek jak w karcie Gabinetu
+             (#227) – kamień i „BON” z lewej, pigułka stanu z prawej (te same kolory co w Gabinecie) -->
+        <p class="k-glowa"><span class="k-tytul"><span class="k-nazwa" data-k-nazwa></span>Bon</span><span class="pigulka-stanu" data-k-status></span></p>
         <!-- wpis czatu 08:55 pkt 3: mała karta bonu jak na /bon (KartaBonu, kolor kamienia z API) obok salda; nieaktywny = szara -->
         <div class="k-gora">
           <div class="k-mini" aria-hidden="true" data-k-karty>
@@ -397,7 +398,10 @@
         
   </div></div>
           </div>
+          <!-- Bartek 27.11 (wariant A): obok miniatury zawsze liczba główna wg stanu, jak w Gabinecie (etykieta, liczba, dopisek);
+               ważny = saldo i „ważny do”, nieaktywny = np. „Zwrócono 300 zł” (Kasa bez kwot – sama data albo stan) -->
           <div class="k-saldo-blok">
+            <p class="k-etykieta" data-k-etykieta hidden></p>
             <p class="k-saldo" data-k-saldo></p>
             <p class="k-wazny" data-k-wazny></p>
           </div>
@@ -1221,7 +1225,7 @@
 
     <footer class="n-dol" data-astro-cid-lkdlr2dg>
     <span class="n-pomoc" data-n-pomoc hidden data-astro-cid-lkdlr2dg></span>
-    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu 405ad33 · 27.11.2026</span>
+    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu cbfb7e4 · 27.11.2026</span>
   </footer>
 
 
@@ -1236,4 +1240,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.D6RWhDcW.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.DLlzmvVD.js"></script>
