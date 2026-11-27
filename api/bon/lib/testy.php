@@ -18,6 +18,7 @@ require_once __DIR__ . '/testy-p10.php';
 require_once __DIR__ . '/testy-zwroty.php';
 require_once __DIR__ . '/testy-konta.php';
 require_once __DIR__ . '/testy-raport.php';
+require_once __DIR__ . '/testy-dostep.php'; // #218
 require_once __DIR__ . '/testy-zwrot-szukaj.php'; // #227 (Backend 2)
 
 /** Payload jak w dokumentacji Easytools (single_product_bought), z nadpisaniami. */
@@ -653,5 +654,5 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     foreach (glob($katW . '/*') ?: [] as $f) is_dir($f) ? @rmdir($f) : @unlink($f);
     @rmdir($katW);
 
-    return array_merge($wyniki, bon_testy_panel($k, $pdo), bon_testy_sync($k, $pdo), bon_testy_krok1($k, $pdo), bon_testy_krok4($k, $pdo), bon_testy_obsluga($k, $pdo), bon_testy_rezygnacja($k, $pdo), bon_testy_p10($k, $pdo), bon_testy_zwroty($k, $pdo), bon_testy_konta($k, $pdo), bon_testy_raport($k, $pdo), bon_testy_zwrot_szukaj($k, $pdo));
+    return array_merge($wyniki, bon_testy_panel($k, $pdo), bon_testy_sync($k, $pdo), bon_testy_krok1($k, $pdo), bon_testy_krok4($k, $pdo), bon_testy_obsluga($k, $pdo), bon_testy_rezygnacja($k, $pdo), bon_testy_p10($k, $pdo), bon_testy_zwroty($k, $pdo), bon_testy_konta($k, $pdo), bon_testy_raport($k, $pdo), bon_testy_zwrot_szukaj($k, $pdo), bon_testy_dostep($k, $pdo));
 }

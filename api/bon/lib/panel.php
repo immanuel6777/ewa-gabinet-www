@@ -400,6 +400,7 @@ const BON_PANEL_ZDARZENIA = [
     'zwrot-nieudany' => 'Zwrot nieudany',
     'mail-odbity' => 'Mail z bonem NIE dotarł', 'adres' => 'Zmieniony adres e-mail', 'mail-ponownie' => 'Wysyłka ponowna',
     'pdf' => 'PDF pobrany w panelu', 'realizacja-cofnieta' => 'Realizacja cofnięta', 'numer-potwierdzony' => 'Numer potwierdzony przez pacjenta', 'potwierdzenie' => 'Mail z potwierdzeniem rezygnacji',
+    'dostep-odebrany' => 'Dostęp w Easytools odebrany',
 ];
 
 // --- cofnięcie ostatniej realizacji (2026-11-24, wpisy 14:10 i 15:00) ---

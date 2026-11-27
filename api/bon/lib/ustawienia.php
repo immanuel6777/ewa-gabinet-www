@@ -22,6 +22,10 @@ return [
     //     'log' = tylko zapis, wycofanie bez zmiany kodu) ---
     'webhook_tryb' => 'dzwonek',
 
+    // --- #218 (27.11): cron odbiera dostęp do produktu w Easytools, gdy wszystkie bony zamówienia są zwrócone (lib/zwroty.php →
+    //     bon_zwroty_dostep); false = wyłączone bez zmiany kodu ---
+    'easytools_odbieraj_dostep' => true,
+
     // --- konta panelu (wpis 13:20): false = konta z panel_konta w konfigu; true = z tabeli voucher_accounts (po migracji konta.sql
     //     i przeniesieniu kont – plan/BONY-KONTA-WDROZENIE.md). Włączenie po starcie, na słowo Bartka; wycofanie = false + wrzuta ---
     'konta_z_bazy' => true, // WŁĄCZONE 25.11 na słowo Bartka – po migracji konta.sql i przeniesieniu kont (log.php: voucher_accounts > 0)

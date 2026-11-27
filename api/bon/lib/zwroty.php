@@ -304,3 +304,77 @@ function bon_zwroty_potwierdz(array $k, PDO $pdo, ?DateTimeImmutable $teraz = nu
     }
     return $wynik;
 }
+
+/**
+ * #218 (Bartek 26.11 ok. 20:00: „trzeba pamiętać, żeby też zabierać dostęp do produktu w Easytools”). Cron: zamówienie, którego
+ * WSZYSTKIE bony są zwrócone (status 'refunded' – zwrot potwierdzony przez cron albo „Oznacz zwrot”), traci dostęp do produktu
+ * w Easytools. Pełny zwrot w Easytools odbiera dostęp sam (sprawdzone 26.11), zwrot częściowy (np. po częściowej realizacji) – nie.
+ * Jeden bon z kilku zwrócony, a reszta działa albo jest wykorzystana → dostęp zostaje.
+ * API (developers.easy.tools, 27.11): GET /orders/{id}?include=line_items → line_items[].access[] typu „product” (bez order bumpów) →
+ * DELETE /product-access/{id}. Endpoint idempotentny: dostęp już wygasły = ten sam 200, bez drugiego maila do klienta (pierwsze
+ * odebranie wysyła klientowi mail Easytools o wygaśnięciu dostępu).
+ * Znacznik: wpis „dostep-odebrany” w historii pierwszego bonu zamówienia – zamówienie z takim wpisem jest pomijane. Easytools nie zna
+ * zamówienia (404) albo pozycja bez dostępu → wpis „nic do odebrania” (bez ponawiania). Błąd HTTP albo zerwanie → bez wpisu, ponowi
+ * następny cron; 3 zerwania z rzędu kończą przebieg. Wyłącznik: easytools_odbieraj_dostep = false (lib/ustawienia.php / konfig).
+ */
+function bon_zwroty_dostep(array $k, PDO $pdo, ?DateTimeImmutable $teraz = null, int $porcja = 20): array {
+    $wynik = ['zamowien' => 0, 'odebrano' => 0, 'nic_do_odebrania' => 0, 'bledy' => 0, 'przerwano' => false];
+    if (empty($k['easytools_odbieraj_dostep'])) return $wynik;
+    $teraz ??= bon_teraz();
+    $tabB = bon_tabela($k, 'vouchers');
+    $tabH = bon_tabela($k, 'voucher_admin_log');
+    $st = $pdo->query("SELECT b.easytools_order_id AS zam, MIN(b.id) AS pierwszy FROM $tabB b
+                       WHERE b.easytools_order_id IS NOT NULL AND b.easytools_order_id <> ''
+                         AND NOT EXISTS (SELECT 1 FROM $tabH h JOIN $tabB b2 ON b2.id = h.voucher_id
+                                         WHERE b2.easytools_order_id = b.easytools_order_id AND h.akcja = 'dostep-odebrany')
+                       GROUP BY b.easytools_order_id
+                       HAVING SUM(CASE WHEN b.status = 'refunded' THEN 0 ELSE 1 END) = 0
+                       ORDER BY MIN(b.id) LIMIT " . max(1, $porcja));
+    $zerwania = 0;
+    foreach ($st->fetchAll() as $r) {
+        $zam = (string)$r['zam'];
+        $pierwszy = (int)$r['pierwszy'];
+        $wynik['zamowien']++;
+        try {
+            [$kod, $dane] = bon_et_api($k, 'GET', '/orders/' . rawurlencode($zam), ['include' => 'line_items']);
+        } catch (Throwable) {
+            $wynik['bledy']++;
+            if (++$zerwania >= 3) { $wynik['przerwano'] = true; break; }
+            continue;
+        }
+        $zerwania = 0;
+        if ($kod === 404) {
+            bon_historia($k, $pdo, $pierwszy, 'dostep-odebrany', 'Easytools nie zna zamówienia – dostępu nie było co odebrać', 'system', $teraz);
+            $wynik['nic_do_odebrania']++;
+            continue;
+        }
+        if ($kod !== 200) { $wynik['bledy']++; continue; }
+        $dostepy = [];
+        foreach ((array)($dane['line_items'] ?? []) as $l) {
+            if (!is_array($l) || !empty($l['is_order_bump'])) continue; // order bump to inny produkt – nie nasz bon
+            foreach ((array)($l['access'] ?? []) as $a) {
+                if (is_array($a) && ($a['type'] ?? '') === 'product' && is_string($a['id'] ?? null) && $a['id'] !== '') $dostepy[$a['id']] = true;
+            }
+        }
+        if (!$dostepy) {
+            bon_historia($k, $pdo, $pierwszy, 'dostep-odebrany', 'zamówienie bez dostępu do produktu w Easytools – nic do odebrania', 'system', $teraz);
+            $wynik['nic_do_odebrania']++;
+            continue;
+        }
+        $ok = true;
+        foreach (array_keys($dostepy) as $id) {
+            try {
+                [$kodD] = bon_et_api($k, 'DELETE', '/product-access/' . rawurlencode($id));
+            } catch (Throwable) {
+                $kodD = 0;
+            }
+            if ($kodD !== 200 && $kodD !== 404) { $ok = false; break; } // 404 = dostępu już nie ma
+        }
+        if (!$ok) { $wynik['bledy']++; continue; }
+        bon_historia($k, $pdo, $pierwszy, 'dostep-odebrany', 'wszystkie bony zamówienia zwrócone – dostęp do produktu w Easytools odebrany ('
+            . count($dostepy) . ')', 'system', $teraz);
+        bon_zdarzenie($k, 'dostep-odebrany', ['zamowienie' => $zam, 'dostepow' => count($dostepy)]);
+        $wynik['odebrano']++;
+    }
+    return $wynik;
+}

@@ -37,6 +37,13 @@ try {
     } catch (Throwable $e) {
         bon_zdarzenie($k, 'blad', ['plik' => 'cron (A1)'] + bon_opis_bledu($e));
     }
+    // #218: zamówienie z samymi zwróconymi bonami → odebranie dostępu do produktu w Easytools (po potwierdzeniu zwrotów wyżej)
+    try {
+        $dostep = bon_zwroty_dostep($k, $pdo);
+        if ($dostep['zamowien'] > 0) bon_zdarzenie($k, 'dostep-kontrola', $dostep);
+    } catch (Throwable $e) {
+        bon_zdarzenie($k, 'blad', ['plik' => 'cron (dostęp Easytools)'] + bon_opis_bledu($e));
+    }
     echo json_encode($raport, JSON_UNESCAPED_UNICODE), "\n";
 } catch (Throwable $e) {
     error_log('bony/cron: ' . $e->getMessage());

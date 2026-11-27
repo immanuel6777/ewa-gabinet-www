@@ -81,6 +81,7 @@ const BON_USTAWIENIA_JAWNE = [
     'kod_prefix', 'verify_limit_na_minute', 'mail_nadawca', 'mail_odpowiedz', 'mail_powiadomienie',
     'telefon_pomoc_bony', 'telefon_pomoc_bony_godziny', 'mail_zapas', 'mail_smtp_host', 'mail_smtp_port', 'mail_smtp_user',
     'webhook_tryb', 'kwota_jednostka', 'easytools_tryb', 'easytools_produkt_uuid', 'bon_adres_pelny_min', 'adres_limit_na_minute',
+    'easytools_odbieraj_dostep', // #218
     'mail_zapas_test_do', // przełącznik testu zapasu – z repo zamiast FTP (wpis 11:35)
     'mail_obsluga',       // P-12: adres obsługi klientów (bony@)
     'mail_zdanie_rezygnacja', // wpis 17:47: zdanie o rezygnacji na /bon w mailu z bonem
@@ -533,7 +534,8 @@ const BON_HISTORIA_AKCJE = [
     'waznosc', 'zatwierdz', 'zwrot',                                 // admin w panelu (etap 3)
     'rezygnacja', 'rezygnacja-cofnieta', 'przedluzenie', 'przypomnienie', // krok 2, 5, 6 (cofnięcie: pomyłka albo klient się wycofał)
     'zwrot-zlecony', 'zwrot-potwierdzony', 'zwrot-nieudany',         // krok 3
-    'mail-odbity', 'adres', 'mail-ponownie', 'pdf', 'realizacja-cofnieta', 'numer-potwierdzony', 'potwierdzenie',                  // 2026-11-24 (TA-11): odbicie, zmiana adresu, ponowna wysyłka, PDF z panelu
+    'mail-odbity', 'adres', 'mail-ponownie', 'pdf', 'realizacja-cofnieta', 'numer-potwierdzony', 'potwierdzenie', 'dostep-odebrany', // #218: dostęp w Easytools po zwrocie całego zamówienia
+                     // 2026-11-24 (TA-11): odbicie, zmiana adresu, ponowna wysyłka, PDF z panelu
 ];
 
 function bon_historia(array $k, PDO $pdo, int $voucherId, string $akcja, string $szczegoly, string $kto, ?DateTimeImmutable $teraz = null): void {
