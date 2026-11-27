@@ -2,7 +2,7 @@
 <html lang="pl" xmlns="http://www.w3.org/1999/xhtml">
 <head>
 <meta charset="utf-8">
-<!-- OBRAZY_BONOW {"kamien:zloty":"https://www.ewa-gabinet.pl/img/bon-mail/bon-podarunkowy-topazowy.png","kamien:granat":"https://www.ewa-gabinet.pl/img/bon-mail/bon-podarunkowy-szafirowy.png","kamien:zielen":"https://www.ewa-gabinet.pl/img/bon-mail/bon-podarunkowy-szmaragdowy.png","kamien:czerwony":"https://www.ewa-gabinet.pl/img/bon-mail/bon-podarunkowy-rubinowy.png"} -->
+<!-- OBRAZY_BONOW {"kamien:zloty":"https://www.ewa-gabinet.pl/img/bon-mail/bon-podarunkowy-topazowy-gem.png","kamien:granat":"https://www.ewa-gabinet.pl/img/bon-mail/bon-podarunkowy-szafirowy-gem.png","kamien:zielen":"https://www.ewa-gabinet.pl/img/bon-mail/bon-podarunkowy-szmaragdowy-gem.png","kamien:czerwony":"https://www.ewa-gabinet.pl/img/bon-mail/bon-podarunkowy-rubinowy-gem.png"} -->
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="x-apple-disable-message-reformatting">
 <meta name="color-scheme" content="light">
