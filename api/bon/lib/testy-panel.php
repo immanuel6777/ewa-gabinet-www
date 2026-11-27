@@ -268,7 +268,8 @@ function bon_testy_kwoty_kasy(array $k, PDO $pdo): array {
     $pow = substr((string)@file_get_contents($plikPow), $powPrzed);
     $t('Z3: 10 pomyłek na jeden login z 10 różnych IP → kolejne 429 (każde z nowego IP), jeden alert z nazwą konta',
         array_slice($kody, 0, 10) === array_fill(0, 10, 401) && array_slice($kody, 10) === [429, 429, 429]
-        && substr_count($pow, 'zablokowane logowanie do panelu – konto ' . $loginL) === 1, json_encode($kody));
+        && substr_count($pow, 'zablokowane logowanie do panelu – konto ' . $loginL) === 1
+        && str_contains($pow, "Konto: „{$loginL}” – takiego konta w panelu nie ma"), json_encode($kody)); // #220
 
     // IPv6: adresy z jednej sieci /64 liczone razem (5 pomyłek na login+sieć → 429 z innego adresu tej sieci)
     $loginV = 'z3-ipv6-' . random_int(1000, 9999);

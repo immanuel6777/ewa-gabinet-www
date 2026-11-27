@@ -49,6 +49,10 @@ if ($poOdpowiedzi) {
     } catch (Throwable $e) {
         error_log('bony/webhook (wysyłka): ' . $e->getMessage());
         bon_zdarzenie($k, 'blad', ['plik' => 'webhook (wysyłka)'] + bon_opis_bledu($e));
-        try { bon_powiadom($k, 'Bon: błąd przy wysyłce PDF', 'Wyjątek: ' . $e->getMessage() . "\nPonowny webhook dokończy wysyłkę."); } catch (Throwable) {}
+        try { bon_powiadom_dane($k, 'Bon: błąd przy wysyłce PDF', [ // #220
+            'co' => 'Po zakupie (webhook) wysyłka PDF do kupującego przerwała się błędem.',
+            'pola' => [['Błąd', $e->getMessage()]],
+            'dalej' => 'Ponowny webhook albo synchronizacja (cron co godzinę) dokończy wysyłkę.',
+        ]); } catch (Throwable) {}
     }
 }

@@ -74,9 +74,15 @@ function bon_panel_zaloguj(array $k, PDO $pdo, string $login, string $haslo, boo
     if ($przekroczony !== null) {
         // alert raz na okno: dokładnie jedno żądanie widzi licznik loginu = limit + 1 (zwiększanie atomowe)
         if (bon_limit_licznik($pdo, $k, 'login|' . $login, 'panel-login', $okno) === (int)$k['panel_limit_login'] + 1) {
-            bon_powiadom($k, 'Bony: zablokowane logowanie do panelu – konto ' . $login, 'Ponad ' . (int)$k['panel_limit_login'] . ' nieudanych prób logowania na konto '
-                . "„{$login}” w ciągu " . (int)$k['panel_limit_okno_min'] . " minut (z różnych adresów). Logowanie hasłem na to konto jest wstrzymane do końca okna.\n"
-                . 'Zalogowane urządzenia („zapamiętaj”) działają dalej. Jeśli to nie pracownik – zmień hasło konta w konfigu.');
+            // #220: imię właściciela konta obok loginu (login może być wpisany przez obcego – wtedy „takiego konta nie ma”)
+            $kontoL = bon_panel_konto($k, $pdo, $login);
+            $imieL = trim((string)($kontoL['imie'] ?? ''));
+            bon_powiadom_dane($k, 'Bony: zablokowane logowanie do panelu – konto ' . $login, [
+                'co' => 'Ponad ' . (int)$k['panel_limit_login'] . ' nieudanych prób logowania w ciągu ' . (int)$k['panel_limit_okno_min']
+                    . ' minut (z różnych adresów). Logowanie hasłem na to konto jest wstrzymane do końca okna.',
+                'pola' => [['Konto', $kontoL ? ($imieL !== '' && $imieL !== $login ? "$imieL (login: $login)" : $login) : "„{$login}” – takiego konta w panelu nie ma"]],
+                'dalej' => 'Zalogowane urządzenia („zapamiętaj”) działają dalej. Jeśli to nie pracownik – zmień hasło konta w konfigu.',
+            ]);
             bon_zdarzenie($k, 'logowanie-limit-konta', ['login' => $login, 'limit' => (int)$k['panel_limit_login']]);
         }
         return [429, ['ok' => false, 'blad' => 'Za dużo nieudanych prób. Spróbuj ponownie za ' . (int)$k['panel_limit_okno_min'] . ' minut.']];

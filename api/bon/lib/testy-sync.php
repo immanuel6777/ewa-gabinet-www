@@ -275,7 +275,8 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     $t('koszyk z nieznanym wariantem: znany ważny i wysłany (1 PDF), nieznany wstrzymany; alert z listą pozycji',
         count($bc) === 2 && $bc[0]['status'] === 'valid' && $bc[1]['status'] === 'held' && str_contains((string)$bc[1]['status_uwagi'], 'zamówienie z 2 pozycji')
         && count($mc) === 1 && count($mc[0]['Attachments'] ?? []) === 1
-        && str_contains($powNowe, 'Część bonów') && str_contains($powNowe, '• Bon Diamentowy: 1 szt.'), $powNowe);
+        && str_contains($powNowe, 'Część bonów') && str_contains($powNowe, 'Bon Diamentowy: 1 szt.') // #220: tabelka zamiast „•”
+        && str_contains($powNowe, 'panel-bonow?nr=' . $bc[1]['code']), $powNowe); // #220: przycisk = wstrzymany bon, nie ważny
 
     // REVIEW nr 10 (R9): suma pozycji ≠ kwota zamówienia (rabat na koszyk, którego pozycje nie pokazują) → wszystkie bony held + alert
     $rozjazd = $dodaj(['amount' => 45000, 'quantity' => 2, 'line_items' => [$linia('Bon Topazowy', 1, 20000), $linia('Bon Szafirowy', 1, 30000)]]);
@@ -287,7 +288,7 @@ function bon_testy_sync(array $k, PDO $pdo): array {
     $powNowe = substr((string)@file_get_contents($plikPowM), strlen($powPrzed));
     $t('REVIEW nr 10: koszyk 200+300, zamówienie 450 zł → oba bony wstrzymane z uwagą o sumie, alert, bez maila z bonami',
         count($br) === 2 && array_unique(array_column($br, 'status')) === ['held'] && str_contains((string)$br[0]['status_uwagi'], 'suma pozycji 500.00 zł')
-        && str_contains($powNowe, 'Bon WSTRZYMANY') && str_contains($powNowe, 'kwota zamówienia 450.00 zł') && !$zBonami(array_column($br, 'code')),
+        && str_contains($powNowe, 'Bon WSTRZYMANY') && str_contains($powNowe, "kwota zamówienia 450\u{00A0}zł") && !str_contains($powNowe, '450.00') && !$zBonami(array_column($br, 'code')),
         json_encode([$br, $powNowe], JSON_UNESCAPED_UNICODE));
     // kontrola: zgodna suma z order bumpem (125000 = 20000 + 100000 + 5000 bump) nie wstrzymuje – test „koszyk mieszany” wyżej
 

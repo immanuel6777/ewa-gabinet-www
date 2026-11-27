@@ -95,6 +95,13 @@ function bon_zwrot_ocena(array $k, PDO $pdo, array $bon, array $w, array $p): ar
     return $odp;
 }
 
+/** #220: kto zlecił – imię z sesji (albo z konta), nie login. */
+function bon_zwrot_kto(array $k, array $sesja): string {
+    $imie = trim((string)($sesja['imie'] ?? ''));
+    if ($imie !== '') return $imie;
+    return function_exists('bon_panel_imie') ? bon_panel_imie($k, (string)($sesja['login'] ?? '')) : (string)($sesja['login'] ?? '');
+}
+
 /**
  * „Zwróć pieniądze”: [kod HTTP, odpowiedź]. Tylko bon z rezygnacją, stan zwrotu oczekuje (albo nieudany po sprawdzeniu
  * w Easytools – $dane['sprawdzone'] = true). Kwota i blokady z bon_zwrot_ocena (REVIEW nr 1–2). Stan „zlecony” zapisany
@@ -174,9 +181,15 @@ function bon_panel_zwroc(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
     $opis = bon_zl($kwota) . ' zł, transakcja ' . $tr;
     if ($http === 202 || $http === 200) {
         bon_historia($k, $pdo, (int)$bon['id'], 'zwrot-zlecony', "z panelu przez Easytools: $opis", $sesja['login'], $teraz);
-        bon_powiadom($k, 'Bon: zlecono zwrot ' . bon_zl($kwota) . ' zł – ' . $bon['code'], "Zwrot zlecony z panelu przez {$sesja['login']}.\n"
-            . "Bon: {$bon['code']}\nKwota: " . bon_zl($kwota) . " zł\nZamówienie Easytools: {$bon['easytools_order_id']}\nTransakcja: $tr\n"
-            . "Easytools zaksięguje zwrot po potwierdzeniu przez operatora płatności (BLIK nawet kilka dni). Panel pokaże „Zwrot potwierdzony”.");
+        // #220: kwota po polsku, imię zamiast loginu, UUID skrócone (pełne w drobnym druku)
+        bon_powiadom_dane($k, 'Bon: zlecono zwrot ' . bon_kwota_pl($kwota) . ' – ' . $bon['code'], [
+            'co' => 'Zwrot pieniędzy zlecony z panelu w Easytools.',
+            'kwota' => $kwota,
+            'bony' => [$bon['code']],
+            'pola' => [['Zlecił(a)', bon_zwrot_kto($k, $sesja)], ['Zamówienie Easytools', bon_id_krotko((string)$bon['easytools_order_id'])], ['Transakcja', bon_id_krotko($tr)]],
+            'dalej' => 'Easytools zaksięguje zwrot po potwierdzeniu przez operatora płatności (BLIK nawet kilka dni). Panel pokaże wtedy „Zwrot potwierdzony”.',
+            'drobny' => [['Zamówienie Easytools', (string)$bon['easytools_order_id']], ['Transakcja', $tr]],
+        ]);
         return [200, ['ok' => true, 'kwota' => bon_zl($kwota), 'opis' => 'zwrot ' . bon_zl($kwota) . ' zł zlecony w Easytools']];
     }
     $komunikat = mb_substr((string)($odp['message'] ?? ('HTTP ' . $http)), 0, 200);
@@ -187,9 +200,14 @@ function bon_panel_zwroc(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
     }
     $pdo->prepare("UPDATE $tabW SET zwrot_stan = 'nieudany', zwrot_blad = ? WHERE voucher_id = ?")->execute(["HTTP $http: $komunikat", $bon['id']]);
     bon_historia($k, $pdo, (int)$bon['id'], 'zwrot-nieudany', "Easytools odmówił albo nie odpowiedział (HTTP $http: $komunikat); $opis", $sesja['login'], $teraz);
-    bon_powiadom($k, 'Bon: zwrot NIE został zlecony – ' . $bon['code'], "Zlecenie zwrotu z panelu się nie udało (HTTP $http: $komunikat).\n"
-        . "Bon: {$bon['code']}\nZamówienie Easytools: {$bon['easytools_order_id']}\n"
-        . ($http === 0 ? "Brak odpowiedzi – zwrot MÓGŁ pójść. Sprawdź w Easytools, zanim zlecisz ponownie.\n" : "Sprawdź w Easytools i zleć ponownie albo zwróć ręcznie.\n"));
+    bon_powiadom_dane($k, 'Bon: zwrot NIE został zlecony – ' . $bon['code'], [
+        'co' => $http === 0 ? 'Easytools nie odpowiedział na zlecenie zwrotu z panelu – zwrot MÓGŁ pójść.' : 'Easytools nie przyjął zlecenia zwrotu z panelu.',
+        'kwota' => $kwota,
+        'bony' => [$bon['code']],
+        'pola' => [['Zlecał(a)', bon_zwrot_kto($k, $sesja)], ['Odpowiedź Easytools', "HTTP $http: $komunikat"], ['Zamówienie Easytools', bon_id_krotko((string)$bon['easytools_order_id'])]],
+        'dalej' => $http === 0 ? 'Sprawdź w Easytools, zanim zlecisz ponownie.' : 'Sprawdź w Easytools i zleć ponownie albo zwróć ręcznie i kliknij w panelu „Oznacz zwrot”.',
+        'drobny' => [['Zamówienie Easytools', (string)$bon['easytools_order_id']], ['Transakcja', $tr]],
+    ]);
     return [502, ['ok' => false, 'blad' => $http === 0
         ? 'Easytools nie odpowiedział – zwrot mógł pójść. Sprawdź w Easytools, zanim spróbujesz ponownie.'
         : "Easytools nie przyjął zwrotu ($komunikat). Sprawdź w Easytools; możesz ponowić albo zwrócić ręcznie i kliknąć „Oznacz zwrot”."]];
@@ -250,13 +268,24 @@ function bon_zwroty_a1(array $k, PDO $pdo, ?DateTimeImmutable $teraz = null, int
         if ($plik !== '' && is_file($plik) && (int)@file_get_contents($plik) >= $spoza) continue;
         // bon z rezygnacją czekającą na zwrot pierwszy (temat i przycisk w mailu otwierają pierwszy numer) – „Oznacz zwrot” na
         // działającym bonie zablokowałby bon, za który pieniądze nie wróciły
-        bon_powiadom($k, 'Bon: zwrot w Easytools spoza panelu – ' . ($czekaja[0] ?? $dzialaja[0]), "W Easytools oddano pieniądze za zamówienie, a panel tego zwrotu nie zlecił ani nie oznaczył.\n"
-            . ($czekaja ? 'Czeka na zwrot (rezygnacja): ' . implode(', ', $czekaja) . " – najpewniej to za ten bon; oznacz zwrot przy nim.\n" : '')
-            . 'Bony, które nadal działają: ' . implode(', ', $dzialaja) . "\n"
-            . 'Zapłacono: ' . bon_zl($p['zaplacono']) . ' zł, zwrócono: ' . bon_zl($p['zwrocono']) . ' zł, w toku: ' . bon_zl($p['w_toku']) . " zł\n"
-            . 'Znane panelowi: ' . bon_zl($znane) . ' zł, spoza panelu: ' . bon_zl($spoza) . " zł\n"
-            . "Zamówienie Easytools: $zamowienie\nTransakcja: $tr\n"
-            . "Sprawdź w Easytools, za który bon to zwrot, i kliknij przy nim „Oznacz zwrot”. Do tego czasu bon można zrealizować przy kasie.");
+        // #220: kwoty po polsku, UUID skrócone; bony w kolejności: czekające na zwrot, potem działające (przycisk = pierwszy)
+        bon_powiadom_dane($k, 'Bon: zwrot w Easytools spoza panelu – ' . ($czekaja[0] ?? $dzialaja[0]), [
+            'co' => 'W Easytools oddano pieniądze za zamówienie, a panel tego zwrotu nie zlecił ani nie oznaczył.',
+            'kwota' => $spoza,
+            'kwota_etykieta' => 'Spoza panelu',
+            'bony' => array_values(array_unique([...$czekaja, ...$dzialaja])),
+            'pola' => [
+                ...($czekaja ? [['Czeka na zwrot (rezygnacja)', implode(', ', $czekaja) . ' – najpewniej to za ten bon; oznacz zwrot przy nim']] : []),
+                ['Bony, które nadal działają', implode(', ', $dzialaja)],
+                ['Zapłacono', bon_kwota_pl($p['zaplacono'])],
+                ['Zwrócono', bon_kwota_pl($p['zwrocono'])],
+                ['W toku', bon_kwota_pl($p['w_toku'])],
+                ['Znane panelowi', bon_kwota_pl($znane)],
+                ['Zamówienie Easytools', bon_id_krotko($zamowienie)],
+            ],
+            'dalej' => 'Sprawdź w Easytools, za który bon to zwrot, i kliknij przy nim „Oznacz zwrot”. Do tego czasu bon można zrealizować przy kasie.',
+            'drobny' => [['Zamówienie Easytools', $zamowienie], ['Transakcja', (string)$tr]],
+        ]);
         bon_zdarzenie($k, 'a1-zwrot-spoza-panelu', ['transakcja' => (string)$tr, 'bony' => array_map('bon_kod_maska', $dzialaja), 'spoza_gr' => $spoza, 'znane_gr' => $znane]);
         if ($plik !== '' && (is_dir(dirname($plik)) || @mkdir(dirname($plik), 0700, true))) @file_put_contents($plik, (string)$spoza, LOCK_EX);
         $wynik['alerty']++;

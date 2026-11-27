@@ -361,9 +361,14 @@ function bon_wyslij_zamowienie(array $k, PDO $pdo, string $zamowienie, bool $pon
             error_log("bony: wysyłka zamówienia $zamowienie nieudana: $blad");
             // cron ponawia wysyłkę co godzinę – powiadomienie przy pierwszej nieudanej próbie, potem najwyżej raz na dobę (2026-11-23)
             if (bon_powiadomienie_bledu_czas($k, $zamowienie, true)) {
-                bon_powiadom($k, 'Bon: NIE wysłano maila – zamówienie ' . $zamowienie, "Kupujący nie dostał PDF-a z bonem.\nBłąd: $blad\n"
-                    . "Bony: {$kody}\nWysłane w tej próbie: $wyslane\n"
-                    . "Synchronizacja (cron co godzinę) sama ponawia wysyłkę. Kolejne przypomnienie o tym zamówieniu najwcześniej za 24 h.");
+                // #220: temat bez zmian (testy i filtry poczty liczą „NIE wysłano maila – zamówienie …”), treść z danych
+                bon_powiadom_dane($k, 'Bon: NIE wysłano maila – zamówienie ' . $zamowienie, [
+                    'co' => 'Kupujący nie dostał maila z PDF-em bonu.',
+                    'bony' => array_column($bony, 'code'),
+                    'pola' => [['Błąd', (string)$blad], ['Wysłane w tej próbie', (string)$wyslane], ['Zamówienie Easytools', bon_id_krotko((string)$zamowienie)]],
+                    'dalej' => 'Synchronizacja (cron co godzinę) sama ponawia wysyłkę. Kolejne przypomnienie o tym zamówieniu najwcześniej za 24 h.',
+                    'drobny' => [['Zamówienie Easytools', (string)$zamowienie]],
+                ]);
             }
         } elseif ($juzSprzedano) {
             bon_powiadomienie_bledu_czas($k, $zamowienie, false);

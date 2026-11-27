@@ -289,7 +289,11 @@ function bon_synchronizuj_wyslij(array $k, array $zadania, string $zrodlo): void
         } catch (Throwable $e) {
             error_log('bony/synchronizacja (wysyłka): ' . $e->getMessage());
             bon_zdarzenie($k, 'blad', ['plik' => 'synchronizacja (wysyłka)'] + bon_opis_bledu($e));
-            try { bon_powiadom($k, 'Bon: błąd przy wysyłce PDF', 'Wyjątek: ' . $e->getMessage() . "\nKolejna synchronizacja (cron co godzinę) dokończy wysyłkę."); } catch (Throwable) {}
+            try { bon_powiadom_dane($k, 'Bon: błąd przy wysyłce PDF', [ // #220
+                'co' => 'Po pobraniu zamówienia z Easytools wysyłka PDF do kupującego przerwała się błędem.',
+                'pola' => [['Błąd', $e->getMessage()], ['Źródło', $zrodlo]],
+                'dalej' => 'Kolejna synchronizacja (cron co godzinę) dokończy wysyłkę.',
+            ]); } catch (Throwable) {}
         }
     }
 }

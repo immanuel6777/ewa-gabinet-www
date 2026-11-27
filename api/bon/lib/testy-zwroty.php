@@ -71,6 +71,12 @@ function bon_testy_zwroty(array $k, PDO $pdo): array {
         $h === 200 && ($o['kwota'] ?? '') === '300.00' && $s['zwrot_stan'] === 'zlecony' && (float)$s['zwrot_kwota_pln'] === 300.0 && $s['status'] === 'withdrawn'
         && count($posty) === 1 && ($posty[0]['body']['amount'] ?? 0) === 30000, json_encode([$o, $s, $posty]));
     [$h, $o] = bon_panel_zwroc($kz, $pdo, $sAdmin, ['kod' => $b['code']]);
+    $powZ = (string)@file_get_contents($kz['_katalog'] . '/bony-powiadomienia.txt');
+    $powZ = substr($powZ, (int)strrpos($powZ, '== Bon: zlecono zwrot'));
+    $t('#220 zlecono zwrot: temat „300 zł”, „Zlecił(a): Ewa” (nie login), transakcja skrócona, pełna raz w drobnym druku, kolejność',
+        str_starts_with($powZ, "== Bon: zlecono zwrot 300\u{00A0}zł – " . $b['code']) && str_contains($powZ, 'Zlecił(a): Ewa') && !str_contains($powZ, 'przez ewa')
+        && str_contains($powZ, 'Transakcja: ' . substr($b['tr'], 0, 8) . '…') && substr_count($powZ, $b['tr']) === 1
+        && bon_testy_kolejnosc($powZ, ['Zwrot pieniędzy zlecony', "Kwota: 300\u{00A0}zł", 'Bon: ' . $b['code'], 'Zlecił(a)', 'Easytools zaksięguje', 'Szczegóły techniczne']), $powZ);
     $t('zwrot: drugi klik / drugie konto → 409 „Zwrot już zlecony”, bez drugiego POST', $h === 409 && str_contains((string)($o['blad'] ?? ''), 'już zlecony') && count($posty) === 1);
 
     // potwierdzenie w cronie: zwrot na liście refunds[] po zleceniu
@@ -313,6 +319,10 @@ function bon_testy_zwroty(array $k, PDO $pdo): array {
     $nowe = substr($powiadomienia(), $przed);
     $t('REVIEW R3 (A1): transakcja zwrócona w Easytools, bon ważny → alert z numerem bonu i linkiem; bon bez zwrotu bez alertu',
         str_contains($nowe, 'spoza panelu') && str_contains($nowe, $kodA1) && !str_contains($nowe, $zA1['bony'][0]['code']), json_encode([$r1, $nowe], JSON_UNESCAPED_UNICODE));
+    $t('#220 A1: „Spoza panelu: 300 zł”, „Zapłacono: 300 zł” (bez „300.00”), transakcja skrócona w treści, pełna w drobnym druku',
+        str_contains($nowe, "Spoza panelu: 300\u{00A0}zł") && str_contains($nowe, "Zapłacono: 300\u{00A0}zł") && !str_contains($nowe, '300.00')
+        && str_contains($nowe, 'Transakcja: ' . $z['tr']) && substr_count($nowe, $z['tr']) === 1
+        && bon_testy_kolejnosc($nowe, ['oddano pieniądze', 'Spoza panelu', 'Bon: ', 'Zapłacono', 'Sprawdź w Easytools', 'Szczegóły techniczne']), $nowe);
     // 2026-11-25: w dzienniku zdarzeń numer zamaskowany (pełny tylko w powiadomieniu do gabinetu)
     $dziennikA1 = implode('', array_map('file_get_contents', glob($kA1['_katalog'] . '/bony-zdarzenia/*.log') ?: []));
     $t('REVIEW R3 (A1): w dzienniku zdarzeń numer bonu zamaskowany', str_contains($dziennikA1, bon_kod_maska($kodA1)) && !str_contains($dziennikA1, $kodA1), $dziennikA1);

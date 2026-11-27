@@ -72,6 +72,11 @@ if ($doMaila) {
     } catch (Throwable $e) {
         error_log('bony/admin (wysyłka): ' . $e->getMessage());
         bon_zdarzenie($k, 'blad', ['plik' => 'admin (wysyłka)'] + bon_opis_bledu($e));
-        try { bon_powiadom($k, 'Bon: błąd wysyłki PDF po zatwierdzeniu', 'Zamówienie ' . $doMaila . ': ' . $e->getMessage()); } catch (Throwable) {}
+        try { bon_powiadom_dane($k, 'Bon: błąd wysyłki PDF po zatwierdzeniu – zamówienie ' . bon_id_krotko((string)$doMaila), [ // #220
+            'co' => 'Bon został zatwierdzony, ale wysyłka PDF do kupującego przerwała się błędem.',
+            'pola' => [['Zamówienie Easytools', bon_id_krotko((string)$doMaila)], ['Błąd', $e->getMessage()]],
+            'dalej' => 'Synchronizacja (cron co godzinę) dokończy wysyłkę. Jeśli błąd się powtarza, wyślij bon ponownie z panelu.',
+            'drobny' => [['Zamówienie Easytools', (string)$doMaila]],
+        ]); } catch (Throwable) {}
     }
 }

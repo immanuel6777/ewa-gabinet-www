@@ -224,10 +224,11 @@ function bon_testy_zwrot_proporcjonalny(array $k, PDO $pdo): array {
     bon_rezygnacja_maile($k, $ctx, $pdo);
     $nowe = is_file($jsonl) ? array_map(static fn($l) => json_decode($l, true), array_slice(file($jsonl, FILE_IGNORE_NEW_LINES), $przed)) : [];
     $doK = array_values(array_filter($nowe, static fn($m) => ($m['To'][0]['Email'] ?? '') === $b['buyer_email']))[0] ?? [];
-    $t('proporcjonalnie (/bon): sprawdz i zglos → 90.00, zapis saldo 100 / kwota 90, mail: „90 zł (saldo bonu przeliczone do zapłaconej ceny)”',
+    $t('proporcjonalnie (/bon): sprawdz i zglos → 90.00, zapis saldo 100 / kwota 90, mail: „Kwota do zwrotu: 90 zł” + „saldo bonu przeliczone do zapłaconej ceny” (#220)',
         $h1 === 200 && ($o1['kwota'] ?? '') === '90.00' && $h2 === 200 && ($o2['kwota'] ?? '') === '90.00'
         && (float)$w['saldo_pln'] === 100.0 && (float)$w['kwota_pln'] === 90.0
-        && str_contains((string)($doK['TextPart'] ?? ''), "90\u{00A0}zł (saldo bonu przeliczone do zapłaconej ceny)"),
+        && str_contains((string)($doK['TextPart'] ?? ''), "Kwota do zwrotu: 90\u{00A0}zł") && str_contains((string)$doK['TextPart'], 'Wyliczenie: saldo bonu przeliczone do zapłaconej ceny')
+        && bon_testy_kolejnosc((string)$doK['TextPart'], ['przyjęliśmy rezygnację', 'Kwota do zwrotu', 'Bon: ', 'w ciągu 14 dni', 'Zmieniasz zdanie', 'Pozdrawiamy serdecznie']),
         json_encode([$o1, $o2, $w, $doK['TextPart'] ?? null], JSON_UNESCAPED_UNICODE));
 
     // koszyk mieszany z rabatem 10%: 200 + 2×500, zapłacono 180 + 900 → bony 180/450/450; wykorzystane 100 z 500 → zwrot 360

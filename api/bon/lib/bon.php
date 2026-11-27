@@ -428,11 +428,117 @@ function bon_powiadom_html(string $temat, string $tresc): string {
     return bon_mail_szablon($temat, bon_mail_tekst_na_html($tresc), $przyciski, true);
 }
 
+// --- #220 (2026-11-27): treść maili powiadomień z danych – kwoty po polsku, imię zamiast loginu, UUID skrócone ---
+// Kolejność: co się stało → kwota → bon → pola → co dalej → drobny druk (pełne identyfikatory). Wygląd: szablon frontu
+// api/bon/lib/mail-powiadomienie.tpl (Front 2, pola {{…}} jak niżej); bez szablonu – HTML zapasowy w bon_mail_szablon.
+
+/** Kwota do maili: 580 → „5,80 zł”, 25000 → „250 zł”, 120050 → „1 200,50 zł” (twarde spacje). Jak bon_kwota_tekst w pdf.php. */
+function bon_kwota_pl(int $grosze): string {
+    $zl = number_format(intdiv($grosze, 100), 0, ',', "\u{00A0}");
+    $gr = $grosze % 100;
+    return $zl . ($gr ? ',' . str_pad((string)$gr, 2, '0', STR_PAD_LEFT) : '') . "\u{00A0}zł";
+}
+
+/** Gotowy tekst (np. powód wstrzymania z bazy): „450.00 zł” → „450 zł”, „5.80 zł” → „5,80 zł”. Liczby bez „zł” bez zmian. */
+function bon_kwoty_pl_w_tekscie(string $s): string {
+    return preg_replace_callback('/\b(\d+)\.(\d{2})\s?zł/u', static fn($m) => bon_kwota_pl((int)$m[1] * 100 + (int)$m[2]), $s) ?? $s;
+}
+
+/** UUID → pierwsze 8 znaków + „…” (pełny w drobnym druku); inne identyfikatory bez zmian. */
+function bon_id_krotko(string $id): string {
+    return preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id) ? substr($id, 0, 8) . '…' : $id;
+}
+
+/**
+ * Wersja tekstowa (text/plain i plik testowy) z danych $d: co (zdanie), kwota (grosze|null), bony [kody], pola [[etykieta, wartość]],
+ * kwota_etykieta (domyślnie „Kwota”), dalej (akapit), drobny [[etykieta, wartość]] (pełne UUID), przycisk [tekst, adres] (domyślnie panel pierwszego bonu), klient (bool).
+ */
+function bon_powiadom_tekst(array $d): string {
+    $linie = [];
+    if (isset($d['kwota'])) $linie[] = ($d['kwota_etykieta'] ?? 'Kwota') . ': ' . bon_kwota_pl((int)$d['kwota']);
+    $bony = array_values((array)($d['bony'] ?? []));
+    if ($bony) $linie[] = (count($bony) > 1 ? 'Bony: ' : 'Bon: ') . implode(', ', $bony);
+    foreach ((array)($d['pola'] ?? []) as [$e, $w]) $linie[] = "$e: $w";
+    $czesci = [trim((string)($d['co'] ?? ''))];
+    if ($linie) $czesci[] = implode("\n", $linie);
+    if (trim((string)($d['dalej'] ?? '')) !== '') $czesci[] = trim((string)$d['dalej']);
+    $przycisk = bon_powiadom_przycisk($d);
+    if ($przycisk && empty($d['klient'])) $czesci[] = $przycisk[0] . ': ' . $przycisk[1];
+    $drobny = (array)($d['drobny'] ?? []);
+    if ($drobny) $czesci[] = "Szczegóły techniczne:\n" . implode("\n", array_map(static fn($p) => "{$p[0]}: {$p[1]}", $drobny));
+    return implode("\n\n", array_filter($czesci, static fn($c) => $c !== '')) . "\n";
+}
+
+/** Przycisk maila: podany w $d albo „Otwórz bon w panelu” dla pierwszego bonu (mail do gabinetu). */
+function bon_powiadom_przycisk(array $d): ?array {
+    if (array_key_exists('przycisk', $d)) return $d['przycisk'] ?: null;
+    $bon = (string)(array_values((array)($d['bony'] ?? []))[0] ?? '');
+    return $bon !== '' && empty($d['klient']) ? ['Otwórz bon w panelu', 'https://www.ewa-gabinet.pl/panel-bonow?nr=' . rawurlencode($bon)] : null;
+}
+
+/** HTML z danych: szablon frontu (mail_powiadomienie_szablon_plik, domyślnie mail-powiadomienie.tpl obok) albo zapasowy. */
+function bon_powiadom_html_dane(array $k, string $temat, array $d): string {
+    $e = static fn(string $x) => htmlspecialchars($x, ENT_QUOTES, 'UTF-8');
+    $kwota = isset($d['kwota']) ? bon_kwota_pl((int)$d['kwota']) : '';
+    $bony = array_values((array)($d['bony'] ?? []));
+    $pola = (array)($d['pola'] ?? []);
+    $drobny = (array)($d['drobny'] ?? []);
+    $przycisk = bon_powiadom_przycisk($d);
+    $klient = !empty($d['klient']);
+    $plik = (string)($k['mail_powiadomienie_szablon_plik'] ?? (__DIR__ . '/mail-powiadomienie.tpl'));
+    $tpl = is_file($plik) ? (string)file_get_contents($plik) : '';
+    if ($tpl !== '') {
+        $blok = static function (string $h, string $nazwa, array $wpisy, callable $wypelnij): string {
+            return preg_replace_callback('/<!--' . $nazwa . '-->(.*?)<!--\/' . $nazwa . '-->/s',
+                static fn($m) => implode('', array_map(static fn($w) => $wypelnij($m[1], $w), $wpisy)), $h) ?? $h;
+        };
+        $para = static fn(string $h, array $p) => strtr($h, ['{{ETYKIETA}}' => $e((string)$p[0]), '{{WARTOSC}}' => $e((string)$p[1])]);
+        // Front 2 (27.11): {{KWOTA_ETYKIETA}} – podpis kwoty („Zapłacono razem”, „Kwota do zwrotu”), jak w wersji tekstowej
+        $etykietaKwoty = (string)($d['kwota_etykieta'] ?? 'Kwota');
+        $h = $blok($tpl, 'KWOTA', $kwota !== '' ? [$kwota] : [], static fn($h, $w) => strtr($h, ['{{KWOTA}}' => $e($w), '{{KWOTA_ETYKIETA}}' => $e($etykietaKwoty)]));
+        $h = $blok($h, 'BON', $bony, static fn($h, $w) => str_replace('{{BON}}', $e((string)$w), $h));
+        $h = $blok($h, 'POLE', $pola, $para);
+        $h = $blok($h, 'DROBNY', $drobny, $para);
+        $h = $blok($h, 'PRZYCISK', $przycisk ? [$przycisk] : [], static fn($h, $p) => strtr($h, ['{{PRZYCISK_TEKST}}' => $e((string)$p[0]), '{{PRZYCISK_ADRES}}' => $e((string)$p[1])]));
+        $h = $blok($h, $klient ? 'GABINET' : 'KLIENT', [], static fn($h) => '');
+        $h = str_replace($klient ? ['<!--KLIENT-->', '<!--/KLIENT-->'] : ['<!--GABINET-->', '<!--/GABINET-->'], '', $h);
+        // Front 2 (27.11, pkt 4): w CO i DALEJ twarda spacja po jednoliterowych słowach jak twarde() w mail-bon.tpl.ts; nowe linie → <br>
+        $akapit = static fn(string $s) => nl2br(preg_replace('/(^|[\s(„])([aiouwzAIOUWZ]) /u', '$1$2&nbsp;', $e($s)) ?? $e($s), false);
+        $h = strtr($h, ['{{TEMAT}}' => $e($temat), '{{PREHEADER}}' => $e((string)($d['preheader'] ?? $d['co'] ?? '')),
+            '{{CO}}' => $akapit((string)($d['co'] ?? '')), '{{DALEJ}}' => $akapit((string)($d['dalej'] ?? ''))]);
+        // Front 2 pkt 5: zostało pole {{…}} albo znacznik bloku (np. literówka w nazwie) → HTML zapasowy + zdarzenie
+        if (!str_contains($h, '{{') && !preg_match('/<!--\/?[A-Z_]+-->/', $h)) return $h;
+        bon_zdarzenie($k, 'mail-powiadomienie-szablon', ['blad' => 'zostały pola {{…}} albo znaczniki bloków']);
+    }
+    // zapasowy: ten sam szablon co dotąd, kwota wyróżniona, tabelka „etykieta – wartość”, drobny druk mniejszą czcionką
+    $f = $e(BON_MAIL_FONT);
+    $tresc = '<p style="' . BON_MAIL_AKAPIT . '">' . nl2br($e((string)($d['co'] ?? '')), false) . '</p>';
+    if ($kwota !== '') $tresc .= '<p style="margin:0 0 2px;font-size:14px;line-height:1.4;color:#3E6863">' . $e((string)($d['kwota_etykieta'] ?? 'Kwota')) . '</p>'
+        . '<p style="margin:0 0 14px;font-size:28px;line-height:1.2;font-weight:700;color:#17504B">' . $e($kwota) . '</p>';
+    $wiersze = '';
+    if ($bony) $wiersze .= '<tr><td style="padding:6px 16px 6px 0;color:#3E6863;vertical-align:top">' . (count($bony) > 1 ? 'Bony' : 'Bon') . '</td><td style="padding:6px 0;font-weight:700">'
+        . implode('<br>', array_map(static fn($b) => '<span style="white-space:nowrap">' . $e((string)$b) . '</span>', $bony)) . '</td></tr>';
+    foreach ($pola as [$et, $w]) $wiersze .= '<tr><td style="padding:6px 16px 6px 0;color:#3E6863;vertical-align:top">' . $e((string)$et) . '</td><td style="padding:6px 0">' . nl2br($e((string)$w), false) . '</td></tr>';
+    if ($wiersze !== '') $tresc .= '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px;font-family:' . $f . ';font-size:17px;line-height:1.5;color:#17504B">' . $wiersze . '</table>';
+    if (trim((string)($d['dalej'] ?? '')) !== '') $tresc .= '<p style="' . BON_MAIL_AKAPIT . '">' . nl2br($e((string)$d['dalej']), false) . '</p>';
+    $html = bon_mail_szablon($temat, $tresc, $przycisk ? [$przycisk] : [], !$klient);
+    if ($drobny) {
+        $druk = '<p style="margin:18px 0 0;font-size:13px;line-height:1.5;color:#3E6863">' . implode('<br>', array_map(static fn($p) => $e((string)$p[0]) . ': ' . $e((string)$p[1]), $drobny)) . '</p>';
+        $html = preg_replace('/(<p style="margin:2[2]px 0 0;font-size:14px|<p style="margin:8px 0 0;font-size:17px)/', $druk . '$1', $html, 1) ?? $html;
+    }
+    return $html;
+}
+
+/** Powiadomienie gabinetu (albo, z 'klient', tekst do klienta) z danych – tekst i HTML z tych samych pól. */
+function bon_powiadom_dane(array $k, string $temat, array $d): bool {
+    return bon_powiadom($k, $temat, bon_powiadom_tekst($d), $d);
+}
+
 // --- powiadomienia (etap 1: mail() z OVH; etap 2: Mailjet) ---
-function bon_powiadom(array $k, string $temat, string $tresc): bool {
+function bon_powiadom(array $k, string $temat, string $tresc, ?array $dane = null): bool {
     $do = (array)($k['mail_powiadomienie'] ?? []);
     if (!$do) return false;
-    $html = bon_powiadom_html($temat, $tresc);
+    $html = $dane !== null ? bon_powiadom_html_dane($k, $temat, $dane) : bon_powiadom_html($temat, $tresc);
     if ($k['mail_tryb'] === 'plik') { // testy: zamiast wysyłki dopisanie do pliku obok konfiguracji (+ ostatni HTML do podglądu)
         @file_put_contents($k['_katalog'] . '/bony-powiadomienie-ostatnie.html', $html);
         return (bool)file_put_contents($k['_katalog'] . '/bony-powiadomienia.txt', "== $temat\n$tresc\n\n", FILE_APPEND);
@@ -804,6 +910,7 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
     // idempotencja: UNIQUE (easytools_order_id, nr_w_zamowieniu); powtórka (webhook, synchronizacja) → 23000 → nic nowego nie powstaje
     for ($proba = 1; $proba <= 3; $proba++) {
         $kody = [];
+        $kodyHeld = []; // #220: wstrzymane pierwsze w alercie (przycisk panelu otwiera pierwszy numer)
         try {
             $pdo->beginTransaction();
             $st = $pdo->prepare($sql);
@@ -825,6 +932,7 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
                     $st->bindValue(':nr', $nr, PDO::PARAM_INT);
                     $st->execute();
                     $kody[] = $kod;
+                    if ($p['status'] === 'held') $kodyHeld[] = $kod;
                     bon_historia($k, $pdo, (int)$pdo->lastInsertId(), 'utworzenie', 'źródło: ' . $z['zrodlo'] . ', status: ' . $p['status']
                         . ', zapłacono ' . bon_zl($zaplacono) . ' zł' . ($nr > 1 || $ilosc > 1 ? ", sztuka $nr z $ilosc" : '')
                         . (count($wyliczone) > 1 ? ', pozycja: ' . ($p['wariantId'] ?: '?') : ''), 'system', $teraz);
@@ -864,16 +972,26 @@ function bon_utworz_bony(array $k, PDO $pdo, array $z): array {
 
     if ($status !== 'valid') {
         $dowolnaRabat = (bool)array_filter($uwagi, static fn($u) => str_starts_with((string)$u, BON_DOWOLNA_RABAT));
-        bon_powiadom($k, 'Bon WSTRZYMANY' . ($dowolnaRabat ? ' – ' . BON_DOWOLNA_RABAT . ', sprawdź' : '') . ' – zamówienie ' . $zamowienie, implode("\n", [
-            $status === 'czesciowo' ? 'Część bonów z tego zamówienia czeka na ręczne zatwierdzenie (status held); pozostałe poszły mailem.'
-                : 'Bon(y) czekają na ręczne zatwierdzenie (status held).',
-            'Powód: ' . implode('; ', array_unique($uwagi)),
-            'Kody: ' . implode(', ', $kody),
-            'Zamówienie Easytools: ' . $zamowienie . ', wariant: ' . ($wariantId ?: 'brak') . ', kod rabatowy: ' . ($promo ?: ($z['zrodlo'] === 'api' ? 'nieznany (API go nie podaje)' : 'brak')),
-            'Zapłacono razem: ' . bon_zl($zaplaconoRazem) . ' zł, sztuk: ' . $ilosc . ', źródło: ' . $z['zrodlo'],
-            ...(count($wyliczone) > 1 ? array_map(static fn($p) => '• ' . ($p['wariantId'] ?: '?') . ': ' . $p['ilosc'] . ' szt., '
-                . bon_zl($p['zaplaconoRazem']) . ' zł, ' . ($p['status'] === 'valid' ? 'ważne' : 'wstrzymane'), $wyliczone) : []),
-        ]));
+        // #220: co się stało → kwota → bony → powód i szczegóły → co dalej; kwoty po polsku (też w powodzie), UUID skrócone
+        bon_powiadom_dane($k, 'Bon WSTRZYMANY' . ($dowolnaRabat ? ' – ' . BON_DOWOLNA_RABAT . ', sprawdź' : '') . ' – zamówienie ' . bon_id_krotko((string)$zamowienie), [
+            'co' => $status === 'czesciowo' ? 'Część bonów z tego zamówienia czeka na ręczne zatwierdzenie (status held); pozostałe poszły mailem.'
+                : (count($kody) > 1 ? 'Bony z tego zamówienia czekają' : 'Bon czeka') . ' na ręczne zatwierdzenie (status held).',
+            'kwota' => $zaplaconoRazem,
+            'kwota_etykieta' => 'Zapłacono razem',
+            'bony' => array_values(array_unique([...$kodyHeld, ...$kody])),
+            'pola' => [
+                ['Powód', bon_kwoty_pl_w_tekscie(implode('; ', array_unique($uwagi)))],
+                ['Zamówienie Easytools', bon_id_krotko((string)$zamowienie)],
+                ['Wariant', $wariantId ?: 'brak'],
+                ['Kod rabatowy', $promo ?: ($z['zrodlo'] === 'api' ? 'nieznany (API go nie podaje)' : 'brak')],
+                ['Sztuk', (string)$ilosc],
+                ['Źródło', (string)$z['zrodlo']],
+                ...(count($wyliczone) > 1 ? array_map(static fn($p) => [$p['wariantId'] ?: '?', $p['ilosc'] . ' szt., '
+                    . bon_kwota_pl((int)$p['zaplaconoRazem']) . ', ' . ($p['status'] === 'valid' ? 'ważne' : 'wstrzymane')], $wyliczone) : []),
+            ],
+            'dalej' => 'Sprawdź zamówienie w Easytools. Gdy wszystko się zgadza, zatwierdź bon w panelu (konto admina) – kupujący dostanie wtedy PDF. Do tego czasu bonu nie realizujemy.',
+            'drobny' => [['Zamówienie Easytools', (string)$zamowienie]],
+        ]);
     }
     // trzeci element: zadanie PO odpowiedzi (PDF + mail) – woła je po fastcgi_finish_request; mail idzie tylko z bonami ważnymi
     $poOdpowiedzi = $status !== 'held' ? static fn() => bon_wyslij_zamowienie($k, $pdo, $zamowienie) : null;
