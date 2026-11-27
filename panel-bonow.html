@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="/_astro/sciezka-bonow.B0WK5N8t.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.Bt-qQk4Y.css">
+<link rel="stylesheet" href="/_astro/panel-bonow.Dst1t4nx.css">
 <link rel="stylesheet" href="/_astro/Baza.Dti-Z3p2.css">
 <link rel="stylesheet" href="/_astro/KartaBonu.G03djIBG.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
@@ -145,7 +145,7 @@
           <p class="n-menu-poz n-menu-pomoc" data-p-menu-poz="pomoc" data-n-pomoc="bez-instrukcji" hidden data-astro-cid-lkdlr2dg></p>
           <button class="n-menu-poz n-menu-wyloguj" type="button" data-p-menu-poz="wyloguj" data-astro-cid-lkdlr2dg>Wyloguj</button>
         </nav>
-        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu 45aaefc · 27.11.2026</p>
+        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu 9d3a633 · 27.11.2026</p>
       </div>
     </dialog>
   </header>
@@ -278,7 +278,14 @@
         <h2 data-p-wyniki-tytul>Znalezione bony</h2>
         <ul class="wyniki" data-p-wyniki-lista></ul>
         <p class="podpowiedz" data-p-wyniki-info hidden></p>
+        <!-- #193 (test T4 Bartka 26.11 23:10): wyjście z listy – nowe wyszukiwanie po e-mailu (pole wyczyszczone) -->
+        <button class="przycisk obrys" type="button" data-p-szukaj-ponownie>Szukaj ponownie</button>
       </section>
+
+      <!-- #193: bon otwarty z listy wyników = własny widok (lista schowana); powrót odświeża stany bonów i wraca w to samo miejsce listy -->
+      <p class="wroc-wyniki" data-p-wroc-wyniki hidden><button type="button" class="link-przycisk">← Wróć do wyników</button></p>
+      <!-- #239 (Bartek 27.11): bon ze skanu albo numeru w Gabinecie – wyjście do szukania (gest wstecz robi to samo); w Kasie jest „Skanuj inny / Wpisz numer” -->
+      <p class="wroc-wyniki tylko-biuro" data-p-wroc-szukaj hidden><button type="button" class="link-przycisk">← Wróć do szukania</button></p>
 
       <!-- wpis czatu 10:40: przy otwartej karcie w Kasie start i pole numeru zwijają się w jeden wiersz: numer · „Skanuj inny” ·
            „Wpisz numer” (rozwija pole numeru); bon z e-maila (maska) – „Bon z e-maila” zamiast numeru. Biuro bez zmian. -->
@@ -575,12 +582,28 @@
 
       <!-- iteracja 2 (projekt 4C, 26.11): szczegóły bonu w Gabinecie = osobne białe karty z nadtytułem (h2) w kolejności
            BON → REALIZACJA → HISTORIA → REZYGNACJA I ZWROT → MAIL Z BONEM → WAŻNOŚĆ → ADMINISTRACJA; [data-p-sekcja] = umowa z Frontem 1.
-           Karta bez widocznej treści jest schowana (panel-bonow.ts → pokazKarty). -->
+           Karta bez widocznej treści jest schowana (panel-bonow.ts → pokazKarty).
+           #194 (Bartek 26.11 19:25): karty 2–7 zwijane – <details data-p-zwin> bez name (każda niezależnie), w nagłówku jednolinijkowe
+           podsumowanie [data-p-podsum]; Bon zawsze otwarta, otwarta też jedna karta właściwa dla stanu (panel-bonow.ts → pokazZwijanie). -->
       <section class="karta bon tylko-biuro" data-p-bon data-p-sekcja="bon" hidden>
-        <h2>Bon</h2>
-        <!-- wpis 19:33: jeden pasek stanu (kolor stanu, zdanie główne + „kto, kiedy, skąd”) zamiast powtórzeń w trzech miejscach -->
-        <div class="stan" data-p-stan>
-          <p class="stan-glowne"><span class="status" data-p-status></span> <span data-p-stan-zdanie></span></p>
+        <!-- #227 (przegląd UX 26.11 22:00): stan RAZ – pigułka w nagłówku karty; jedna liczba główna zależna od stanu
+             (etykieta + wartość + dopisek, słownik opisStanu() w panel-bonow.ts, ten sam na liście wyników); zdanie „co dalej” tylko,
+             gdy ktoś musi coś zrobić -->
+        <div class="bon-glowa">
+          <h2>Bon</h2>
+          <span class="pigulka-stanu" data-p-status></span>
+        </div>
+        <div class="liczba-glowna">
+          <p class="liczba-etykieta" data-p-liczba-etykieta hidden></p>
+          <p class="saldo" data-p-saldo></p>
+          <div class="pasek-salda" data-pasek-salda hidden data-astro-cid-5cigxnkc>
+  <div class="tor" role="meter" aria-label="Saldo bonu" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-astro-cid-5cigxnkc><span class="wypelnienie" data-astro-cid-5cigxnkc></span></div>
+  <p class="podpis" data-pasek-tekst data-astro-cid-5cigxnkc></p>
+</div>
+          <p class="liczba-dopisek" data-p-liczba-dopisek hidden></p>
+        </div>
+        <div class="stan" data-p-stan hidden>
+          <p class="stan-glowne"><span data-p-stan-zdanie></span></p>
           <p class="stan-drobne" data-p-stan-drobne hidden></p>
         </div>
         <!-- jeden przycisk główny zależny od stanu i roli: ważny → „Zrealizuj”, rezygnacja (Bartek, Ewa) → „Zwróć pieniądze”,
@@ -599,11 +622,6 @@
           <button class="przycisk obrys" type="button" data-p-zwrot-oznacz hidden>Oznacz zwrot</button>
           <p class="blad" data-p-blad-zwrot hidden></p>
         </div>
-        <p class="saldo" data-p-saldo></p>
-        <div class="pasek-salda" data-pasek-salda hidden data-astro-cid-5cigxnkc>
-  <div class="tor" role="meter" aria-label="Saldo bonu" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" data-astro-cid-5cigxnkc><span class="wypelnienie" data-astro-cid-5cigxnkc></span></div>
-  <p class="podpis" data-pasek-tekst data-astro-cid-5cigxnkc></p>
-</div>
         <dl class="dane">
           <div><dt>Numer</dt><dd data-p-kod></dd></div>
           <div><dt>Ważny do</dt><dd data-p-wazny></dd></div>
@@ -618,491 +636,519 @@
 
       <!-- realizacja -->
       <form class="karta realizacja formularz tylko-biuro" data-p-realizacja data-p-sekcja="realizacja" hidden>
-        <h2>Realizacja</h2>
-        <p class="podpowiedz">Zaznacz zabiegi albo wpisz kwotę ręcznie.</p>
-        <div class="grupy">
-          <details class="grupa">
-              
-              <summary>
-                <span class="g-nazwa">Pedicure podologiczny<span class="g-licznik" data-p-licznik hidden></span></span>
-                <span class="g-od">od 50 zł</span>
-                <span class="plus" aria-hidden="true"><span></span></span>
-              </summary>
-              <ul>
-                <li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="pedicure-podologiczny~pedicure-podologiczny-podstawowy" data-cena="180" data-cena-do data-od>
-                      <span class="nazwa">Pedicure podologiczny podstawowy</span>
-                      <span class="cena">180 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="pedicure-podologiczny~pedicure-podologiczny-rozszerzony" data-cena="250" data-cena-do data-od>
-                      <span class="nazwa">Pedicure podologiczny rozszerzony</span>
-                      <span class="cena">250 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="pedicure-podologiczny~pedicure-podologiczny-z-malowaniem-paznokci" data-cena="200" data-cena-do data-od>
-                      <span class="nazwa">Pedicure podologiczny z malowaniem paznokci</span>
-                      <span class="cena">200 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="pedicure-podologiczny~pedicure-podologiczny-rozszerzony-z-malowaniem-paznokci" data-cena="220" data-cena-do data-od>
-                      <span class="nazwa">Pedicure podologiczny rozszerzony z malowaniem paznokci</span>
-                      <span class="cena">220 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="pedicure-podologiczny~opracowanie-paznokci-zrogowacialych-onychogryfoza" data-cena="180" data-cena-do data-od>
-                      <span class="nazwa">Opracowanie paznokci zrogowaciałych (onychogryfoza)</span>
-                      <span class="cena">180 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="pedicure-podologiczny~rekonstrukcja-zniszczonej-plytki-palucha" data-cena="150" data-cena-do data-od>
-                      <span class="nazwa">Rekonstrukcja zniszczonej płytki palucha</span>
-                      <span class="cena">150 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="pedicure-podologiczny~zabieg-podologiczny-sos-nagla-pomoc" data-cena="300" data-cena-do data-od>
-                      <span class="nazwa">Zabieg podologiczny SOS – nagła pomoc</span>
-                      <span class="cena">300 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="pedicure-podologiczny~konsultacja-telefoniczna-porada" data-cena="50" data-cena-do data-od>
-                      <span class="nazwa">Konsultacja telefoniczna, porada</span>
-                      <span class="cena">50 zł</span>
-                    </label>
-                    
-                  </li>
-              </ul>
-            </details><details class="grupa">
-              
-              <summary>
-                <span class="g-nazwa">Wrastające paznokcie (Kostka Arkady)<span class="g-licznik" data-p-licznik hidden></span></span>
-                <span class="g-od">od 50 zł</span>
-                <span class="plus" aria-hidden="true"><span></span></span>
-              </summary>
-              <ul>
-                <li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="wrastajace-paznokcie-kostka-arkady~podstawowy-zabieg-podologiczny-pierwsza-wizyta" data-cena="180" data-cena-do data-od>
-                      <span class="nazwa">Podstawowy zabieg podologiczny (pierwsza wizyta)</span>
-                      <span class="cena">180 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="wrastajace-paznokcie-kostka-arkady~korekta-wrastajacego-paznokcia-kostka-arkady" data-cena="200" data-cena-do data-od>
-                      <span class="nazwa">Korekta wrastającego paznokcia Kostką Arkady</span>
-                      <span class="cena">200 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="wrastajace-paznokcie-kostka-arkady~klamra-podologiczna" data-cena="180" data-cena-do data-od="1">
-                      <span class="nazwa">Klamra podologiczna</span>
-                      <span class="cena">od 180 zł</span>
-                    </label>
-                    <label class="pole cena-pole" hidden>
-                        <span class="etykieta">Cena tego zabiegu (od 180 zł)</span>
-                        <input type="text" inputmode="decimal" data-p-cena-dla="wrastajace-paznokcie-kostka-arkady~klamra-podologiczna" value="180">
-                      </label>
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="wrastajace-paznokcie-kostka-arkady~wrastajacy-paznokiec-ze-stanem-zapalnym" data-cena="200" data-cena-do data-od>
-                      <span class="nazwa">Wrastający paznokieć ze stanem zapalnym</span>
-                      <span class="cena">200 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="wrastajace-paznokcie-kostka-arkady~tamponada-opatrunek" data-cena="50" data-cena-do data-od>
-                      <span class="nazwa">Tamponada, opatrunek</span>
-                      <span class="cena">50 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="wrastajace-paznokcie-kostka-arkady~kontrola-z-przestawieniem-klamry" data-cena="100" data-cena-do data-od>
-                      <span class="nazwa">Kontrola z przestawieniem klamry</span>
-                      <span class="cena">100 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="wrastajace-paznokcie-kostka-arkady~kontrola-klamry" data-cena="50" data-cena-do data-od>
-                      <span class="nazwa">Kontrola klamry</span>
-                      <span class="cena">50 zł</span>
-                    </label>
-                    
-                  </li>
-              </ul>
-            </details><details class="grupa">
-              
-              <summary>
-                <span class="g-nazwa">Grzybica paznokci<span class="g-licznik" data-p-licznik hidden></span></span>
-                <span class="g-od">od 50 zł</span>
-                <span class="plus" aria-hidden="true"><span></span></span>
-              </summary>
-              <ul>
-                <li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="grzybica-paznokci~zabieg-grzybicy-paznokci-pierwsza-wizyta" data-cena="250" data-cena-do data-od>
-                      <span class="nazwa">Zabieg grzybicy paznokci, pierwsza wizyta</span>
-                      <span class="cena">250 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="grzybica-paznokci~mycosis-terapia-przeciwgrzybicza-paznokci-ok-30-min" data-cena="180" data-cena-do data-od>
-                      <span class="nazwa">MYCOSIS – terapia przeciwgrzybicza paznokci, ok. 30 min</span>
-                      <span class="cena">180 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="grzybica-paznokci~mycosis-terapia-przeciwgrzybicza-paznokci-ok-45-min" data-cena="250" data-cena-do data-od>
-                      <span class="nazwa">MYCOSIS – terapia przeciwgrzybicza paznokci, ok. 45 min</span>
-                      <span class="cena">250 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="grzybica-paznokci~kuracja-przeciwgrzybicza-acidum-4-kolejne-zabiegi" data-cena="100" data-cena-do data-od="1">
-                      <span class="nazwa">Kuracja przeciwgrzybicza ACIDUM (4 kolejne zabiegi)</span>
-                      <span class="cena">od 100 zł</span>
-                    </label>
-                    <label class="pole cena-pole" hidden>
-                        <span class="etykieta">Cena tego zabiegu (od 100 zł)</span>
-                        <input type="text" inputmode="decimal" data-p-cena-dla="grzybica-paznokci~kuracja-przeciwgrzybicza-acidum-4-kolejne-zabiegi" value="100">
-                      </label>
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="grzybica-paznokci~badanie-mykologiczne-z-pobraniem-materialu-wysylka-do-laboratorium" data-cena="50" data-cena-do data-od>
-                      <span class="nazwa">Badanie mykologiczne z pobraniem materiału (wysyłka do laboratorium)</span>
-                      <span class="cena">50 zł</span>
-                    </label>
-                    
-                  </li>
-              </ul>
-            </details><details class="grupa">
-              
-              <summary>
-                <span class="g-nazwa">Usuwanie odcisków<span class="g-licznik" data-p-licznik hidden></span></span>
-                <span class="g-od">od 100 zł</span>
-                <span class="plus" aria-hidden="true"><span></span></span>
-              </summary>
-              <ul>
-                <li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="usuwanie-odciskow~usuwanie-odcisku-1-zmiana-z-orteza-zabezpieczajaca" data-cena="100" data-cena-do data-od>
-                      <span class="nazwa">Usuwanie odcisku (1 zmiana) z ortezą zabezpieczającą</span>
-                      <span class="cena">100 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="usuwanie-odciskow~opracowanie-modzeli-i-odciskow-na-calej-stopie" data-cena="180" data-cena-do data-od>
-                      <span class="nazwa">Opracowanie modzeli i odcisków na całej stopie</span>
-                      <span class="cena">180 zł</span>
-                    </label>
-                    
-                  </li>
-              </ul>
-            </details><details class="grupa">
-              
-              <summary>
-                <span class="g-nazwa">Usuwanie modzeli<span class="g-licznik" data-p-licznik hidden></span></span>
-                <span class="g-od">od 20 zł</span>
-                <span class="plus" aria-hidden="true"><span></span></span>
-              </summary>
-              <ul>
-                <li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="modzele~opracowanie-modzeli-i-odciskow-na-calej-stopie" data-cena="180" data-cena-do data-od>
-                      <span class="nazwa">Opracowanie modzeli i odcisków na całej stopie</span>
-                      <span class="cena">180 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="modzele~opatrunek-z-preparatem-cena-zalezna-od-ilosci-materialu" data-cena="20" data-cena-do="30" data-od>
-                      <span class="nazwa">Opatrunek z preparatem (cena zależna od ilości materiału)</span>
-                      <span class="cena">20–30 zł</span>
-                    </label>
-                    <label class="pole cena-pole" hidden>
-                        <span class="etykieta">Cena tego zabiegu (20–30 zł)</span>
-                        <input type="text" inputmode="decimal" data-p-cena-dla="modzele~opatrunek-z-preparatem-cena-zalezna-od-ilosci-materialu" value="20">
-                      </label>
-                  </li>
-              </ul>
-            </details><details class="grupa">
-              
-              <summary>
-                <span class="g-nazwa">Pękające pięty<span class="g-licznik" data-p-licznik hidden></span></span>
-                <span class="g-od">od 180 zł</span>
-                <span class="plus" aria-hidden="true"><span></span></span>
-              </summary>
-              <ul>
-                <li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="pekajace-piety~podstawowy-zabieg-podologiczny-pierwsza-wizyta" data-cena="180" data-cena-do data-od>
-                      <span class="nazwa">Podstawowy zabieg podologiczny (pierwsza wizyta)</span>
-                      <span class="cena">180 zł</span>
-                    </label>
-                    
-                  </li>
-              </ul>
-            </details><details class="grupa">
-              
-              <summary>
-                <span class="g-nazwa">Stopa cukrzycowa<span class="g-licznik" data-p-licznik hidden></span></span>
-                <span class="g-od">od 40 zł</span>
-                <span class="plus" aria-hidden="true"><span></span></span>
-              </summary>
-              <ul>
-                <li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="stopa-cukrzycowa~podstawowy-zabieg-podologiczny-pierwsza-wizyta" data-cena="180" data-cena-do data-od>
-                      <span class="nazwa">Podstawowy zabieg podologiczny (pierwsza wizyta)</span>
-                      <span class="cena">180 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="stopa-cukrzycowa~kolejny-zabieg" data-cena="40" data-cena-do data-od="1">
-                      <span class="nazwa">Kolejny zabieg</span>
-                      <span class="cena">od 40 zł</span>
-                    </label>
-                    <label class="pole cena-pole" hidden>
-                        <span class="etykieta">Cena tego zabiegu (od 40 zł)</span>
-                        <input type="text" inputmode="decimal" data-p-cena-dla="stopa-cukrzycowa~kolejny-zabieg" value="40">
-                      </label>
-                  </li>
-              </ul>
-            </details><details class="grupa">
-              
-              <summary>
-                <span class="g-nazwa">Kurzajki (brodawki wirusowe)<span class="g-licznik" data-p-licznik hidden></span></span>
-                <span class="g-od">od 100 zł</span>
-                <span class="plus" aria-hidden="true"><span></span></span>
-              </summary>
-              <ul>
-                <li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="brodawki-wirusowe-hpv~terapia-brodawek-wirusowych-pierwsza-wizyta" data-cena="180" data-cena-do data-od>
-                      <span class="nazwa">Terapia brodawek wirusowych, pierwsza wizyta</span>
-                      <span class="cena">180 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="brodawki-wirusowe-hpv~terapia-brodawek-kolejna-wizyta" data-cena="100" data-cena-do data-od>
-                      <span class="nazwa">Terapia brodawek, kolejna wizyta</span>
-                      <span class="cena">100 zł</span>
-                    </label>
-                    
-                  </li>
-              </ul>
-            </details><details class="grupa">
-              
-              <summary>
-                <span class="g-nazwa">Ozonowanie i dezynfekcja obuwia<span class="g-licznik" data-p-licznik hidden></span></span>
-                <span class="g-od">od 40 zł</span>
-                <span class="plus" aria-hidden="true"><span></span></span>
-              </summary>
-              <ul>
-                <li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="ozonowanie-obuwia~ozonowanie-i-dezynfekcja-jednej-pary-butow" data-cena="40" data-cena-do data-od>
-                      <span class="nazwa">Ozonowanie i dezynfekcja jednej pary butów</span>
-                      <span class="cena">40 zł</span>
-                    </label>
-                    
-                  </li>
-              </ul>
-            </details><details class="grupa">
-              
-              <summary>
-                <span class="g-nazwa">Badanie stóp i wkładki PWO 15<span class="g-licznik" data-p-licznik hidden></span></span>
-                <span class="g-od">od 180 zł</span>
-                <span class="plus" aria-hidden="true"><span></span></span>
-              </summary>
-              <ul>
-                <li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="badanie-stop-wkladki-pwo~badanie-stop-i-indywidualna-wkladka-pwo-15-odbior-w-trakcie-wizyty" data-cena="180" data-cena-do="250" data-od>
-                      <span class="nazwa">Badanie stóp i indywidualna wkładka PWO 15 (odbiór w trakcie wizyty)</span>
-                      <span class="cena">180–250 zł</span>
-                    </label>
-                    <label class="pole cena-pole" hidden>
-                        <span class="etykieta">Cena tego zabiegu (180–250 zł)</span>
-                        <input type="text" inputmode="decimal" data-p-cena-dla="badanie-stop-wkladki-pwo~badanie-stop-i-indywidualna-wkladka-pwo-15-odbior-w-trakcie-wizyty" value="180">
-                      </label>
-                  </li>
-              </ul>
-            </details><details class="grupa">
-              
-              <summary>
-                <span class="g-nazwa">Zdrowy manicure<span class="g-licznik" data-p-licznik hidden></span></span>
-                <span class="g-od">od 20 zł</span>
-                <span class="plus" aria-hidden="true"><span></span></span>
-              </summary>
-              <ul>
-                <li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="zdrowy-manicure~zdrowy-manicure" data-cena="100" data-cena-do data-od>
-                      <span class="nazwa">Zdrowy manicure</span>
-                      <span class="cena">100 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="zdrowy-manicure~problem-z-plytka-paznokciowa-u-rak" data-cena="180" data-cena-do data-od>
-                      <span class="nazwa">Problem z płytką paznokciową u rąk</span>
-                      <span class="cena">180 zł</span>
-                    </label>
-                    
-                  </li><li>
-                    <label class="zaznacz poz-zabiegu">
-                      <input type="checkbox" data-p-pozycja="zdrowy-manicure~malowanie-paznokci-lakierem-hybrydowym-lub-zwyklym-dodatek" data-cena="20" data-cena-do data-od>
-                      <span class="nazwa">Malowanie paznokci lakierem hybrydowym lub zwykłym (dodatek)</span>
-                      <span class="cena">20 zł</span>
-                    </label>
-                    
-                  </li>
-              </ul>
-            </details>
-        </div>
-        <div class="dwa">
+        <details class="karta-zwin" data-p-zwin="realizacja">
+          <summary class="karta-naglowek"><h2>Realizacja</h2><span class="karta-podsum" data-p-podsum></span><span class="plus" aria-hidden="true"><span></span></span></summary>
+          <div class="karta-tresc">
+          <p class="podpowiedz">Wpisz kwotę albo wybierz zabiegi z cennika.</p>
+          <!-- Bartek 26.11 ok. 23:40 („karta Realizacja jest baaaardzo długa”, wariant A): zabiegi z cennika zwinięte pod jednym
+               nagłówkiem z licznikiem zaznaczonych, notatka pod „+ Dodaj notatkę”, podsumowanie dopiero przy kwocie > 0 -->
+          <details class="zabiegi-cennik" data-p-zabiegi>
+            <summary><span class="zc-nazwa">Zabiegi z cennika<span class="g-licznik" data-p-zabiegi-licznik hidden></span></span><span class="plus" aria-hidden="true"><span></span></span></summary>
+            <div class="grupy">
+              <details class="grupa">
+                  
+                  <summary>
+                    <span class="g-nazwa">Pedicure podologiczny<span class="g-licznik" data-p-licznik hidden></span></span>
+                    <span class="g-od">od 50 zł</span>
+                    <span class="plus" aria-hidden="true"><span></span></span>
+                  </summary>
+                  <ul>
+                    <li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="pedicure-podologiczny~pedicure-podologiczny-podstawowy" data-cena="180" data-cena-do data-od>
+                          <span class="nazwa">Pedicure podologiczny podstawowy</span>
+                          <span class="cena">180 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="pedicure-podologiczny~pedicure-podologiczny-rozszerzony" data-cena="250" data-cena-do data-od>
+                          <span class="nazwa">Pedicure podologiczny rozszerzony</span>
+                          <span class="cena">250 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="pedicure-podologiczny~pedicure-podologiczny-z-malowaniem-paznokci" data-cena="200" data-cena-do data-od>
+                          <span class="nazwa">Pedicure podologiczny z malowaniem paznokci</span>
+                          <span class="cena">200 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="pedicure-podologiczny~pedicure-podologiczny-rozszerzony-z-malowaniem-paznokci" data-cena="220" data-cena-do data-od>
+                          <span class="nazwa">Pedicure podologiczny rozszerzony z malowaniem paznokci</span>
+                          <span class="cena">220 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="pedicure-podologiczny~opracowanie-paznokci-zrogowacialych-onychogryfoza" data-cena="180" data-cena-do data-od>
+                          <span class="nazwa">Opracowanie paznokci zrogowaciałych (onychogryfoza)</span>
+                          <span class="cena">180 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="pedicure-podologiczny~rekonstrukcja-zniszczonej-plytki-palucha" data-cena="150" data-cena-do data-od>
+                          <span class="nazwa">Rekonstrukcja zniszczonej płytki palucha</span>
+                          <span class="cena">150 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="pedicure-podologiczny~zabieg-podologiczny-sos-nagla-pomoc" data-cena="300" data-cena-do data-od>
+                          <span class="nazwa">Zabieg podologiczny SOS – nagła pomoc</span>
+                          <span class="cena">300 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="pedicure-podologiczny~konsultacja-telefoniczna-porada" data-cena="50" data-cena-do data-od>
+                          <span class="nazwa">Konsultacja telefoniczna, porada</span>
+                          <span class="cena">50 zł</span>
+                        </label>
+                        
+                      </li>
+                  </ul>
+                </details><details class="grupa">
+                  
+                  <summary>
+                    <span class="g-nazwa">Wrastające paznokcie (Kostka Arkady)<span class="g-licznik" data-p-licznik hidden></span></span>
+                    <span class="g-od">od 50 zł</span>
+                    <span class="plus" aria-hidden="true"><span></span></span>
+                  </summary>
+                  <ul>
+                    <li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="wrastajace-paznokcie-kostka-arkady~podstawowy-zabieg-podologiczny-pierwsza-wizyta" data-cena="180" data-cena-do data-od>
+                          <span class="nazwa">Podstawowy zabieg podologiczny (pierwsza wizyta)</span>
+                          <span class="cena">180 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="wrastajace-paznokcie-kostka-arkady~korekta-wrastajacego-paznokcia-kostka-arkady" data-cena="200" data-cena-do data-od>
+                          <span class="nazwa">Korekta wrastającego paznokcia Kostką Arkady</span>
+                          <span class="cena">200 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="wrastajace-paznokcie-kostka-arkady~klamra-podologiczna" data-cena="180" data-cena-do data-od="1">
+                          <span class="nazwa">Klamra podologiczna</span>
+                          <span class="cena">od 180 zł</span>
+                        </label>
+                        <label class="pole cena-pole" hidden>
+                            <span class="etykieta">Cena tego zabiegu (od 180 zł)</span>
+                            <input type="text" inputmode="decimal" data-p-cena-dla="wrastajace-paznokcie-kostka-arkady~klamra-podologiczna" value="180">
+                          </label>
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="wrastajace-paznokcie-kostka-arkady~wrastajacy-paznokiec-ze-stanem-zapalnym" data-cena="200" data-cena-do data-od>
+                          <span class="nazwa">Wrastający paznokieć ze stanem zapalnym</span>
+                          <span class="cena">200 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="wrastajace-paznokcie-kostka-arkady~tamponada-opatrunek" data-cena="50" data-cena-do data-od>
+                          <span class="nazwa">Tamponada, opatrunek</span>
+                          <span class="cena">50 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="wrastajace-paznokcie-kostka-arkady~kontrola-z-przestawieniem-klamry" data-cena="100" data-cena-do data-od>
+                          <span class="nazwa">Kontrola z przestawieniem klamry</span>
+                          <span class="cena">100 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="wrastajace-paznokcie-kostka-arkady~kontrola-klamry" data-cena="50" data-cena-do data-od>
+                          <span class="nazwa">Kontrola klamry</span>
+                          <span class="cena">50 zł</span>
+                        </label>
+                        
+                      </li>
+                  </ul>
+                </details><details class="grupa">
+                  
+                  <summary>
+                    <span class="g-nazwa">Grzybica paznokci<span class="g-licznik" data-p-licznik hidden></span></span>
+                    <span class="g-od">od 50 zł</span>
+                    <span class="plus" aria-hidden="true"><span></span></span>
+                  </summary>
+                  <ul>
+                    <li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="grzybica-paznokci~zabieg-grzybicy-paznokci-pierwsza-wizyta" data-cena="250" data-cena-do data-od>
+                          <span class="nazwa">Zabieg grzybicy paznokci, pierwsza wizyta</span>
+                          <span class="cena">250 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="grzybica-paznokci~mycosis-terapia-przeciwgrzybicza-paznokci-ok-30-min" data-cena="180" data-cena-do data-od>
+                          <span class="nazwa">MYCOSIS – terapia przeciwgrzybicza paznokci, ok. 30 min</span>
+                          <span class="cena">180 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="grzybica-paznokci~mycosis-terapia-przeciwgrzybicza-paznokci-ok-45-min" data-cena="250" data-cena-do data-od>
+                          <span class="nazwa">MYCOSIS – terapia przeciwgrzybicza paznokci, ok. 45 min</span>
+                          <span class="cena">250 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="grzybica-paznokci~kuracja-przeciwgrzybicza-acidum-4-kolejne-zabiegi" data-cena="100" data-cena-do data-od="1">
+                          <span class="nazwa">Kuracja przeciwgrzybicza ACIDUM (4 kolejne zabiegi)</span>
+                          <span class="cena">od 100 zł</span>
+                        </label>
+                        <label class="pole cena-pole" hidden>
+                            <span class="etykieta">Cena tego zabiegu (od 100 zł)</span>
+                            <input type="text" inputmode="decimal" data-p-cena-dla="grzybica-paznokci~kuracja-przeciwgrzybicza-acidum-4-kolejne-zabiegi" value="100">
+                          </label>
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="grzybica-paznokci~badanie-mykologiczne-z-pobraniem-materialu-wysylka-do-laboratorium" data-cena="50" data-cena-do data-od>
+                          <span class="nazwa">Badanie mykologiczne z pobraniem materiału (wysyłka do laboratorium)</span>
+                          <span class="cena">50 zł</span>
+                        </label>
+                        
+                      </li>
+                  </ul>
+                </details><details class="grupa">
+                  
+                  <summary>
+                    <span class="g-nazwa">Usuwanie odcisków<span class="g-licznik" data-p-licznik hidden></span></span>
+                    <span class="g-od">od 100 zł</span>
+                    <span class="plus" aria-hidden="true"><span></span></span>
+                  </summary>
+                  <ul>
+                    <li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="usuwanie-odciskow~usuwanie-odcisku-1-zmiana-z-orteza-zabezpieczajaca" data-cena="100" data-cena-do data-od>
+                          <span class="nazwa">Usuwanie odcisku (1 zmiana) z ortezą zabezpieczającą</span>
+                          <span class="cena">100 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="usuwanie-odciskow~opracowanie-modzeli-i-odciskow-na-calej-stopie" data-cena="180" data-cena-do data-od>
+                          <span class="nazwa">Opracowanie modzeli i odcisków na całej stopie</span>
+                          <span class="cena">180 zł</span>
+                        </label>
+                        
+                      </li>
+                  </ul>
+                </details><details class="grupa">
+                  
+                  <summary>
+                    <span class="g-nazwa">Usuwanie modzeli<span class="g-licznik" data-p-licznik hidden></span></span>
+                    <span class="g-od">od 20 zł</span>
+                    <span class="plus" aria-hidden="true"><span></span></span>
+                  </summary>
+                  <ul>
+                    <li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="modzele~opracowanie-modzeli-i-odciskow-na-calej-stopie" data-cena="180" data-cena-do data-od>
+                          <span class="nazwa">Opracowanie modzeli i odcisków na całej stopie</span>
+                          <span class="cena">180 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="modzele~opatrunek-z-preparatem-cena-zalezna-od-ilosci-materialu" data-cena="20" data-cena-do="30" data-od>
+                          <span class="nazwa">Opatrunek z preparatem (cena zależna od ilości materiału)</span>
+                          <span class="cena">20–30 zł</span>
+                        </label>
+                        <label class="pole cena-pole" hidden>
+                            <span class="etykieta">Cena tego zabiegu (20–30 zł)</span>
+                            <input type="text" inputmode="decimal" data-p-cena-dla="modzele~opatrunek-z-preparatem-cena-zalezna-od-ilosci-materialu" value="20">
+                          </label>
+                      </li>
+                  </ul>
+                </details><details class="grupa">
+                  
+                  <summary>
+                    <span class="g-nazwa">Pękające pięty<span class="g-licznik" data-p-licznik hidden></span></span>
+                    <span class="g-od">od 180 zł</span>
+                    <span class="plus" aria-hidden="true"><span></span></span>
+                  </summary>
+                  <ul>
+                    <li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="pekajace-piety~podstawowy-zabieg-podologiczny-pierwsza-wizyta" data-cena="180" data-cena-do data-od>
+                          <span class="nazwa">Podstawowy zabieg podologiczny (pierwsza wizyta)</span>
+                          <span class="cena">180 zł</span>
+                        </label>
+                        
+                      </li>
+                  </ul>
+                </details><details class="grupa">
+                  
+                  <summary>
+                    <span class="g-nazwa">Stopa cukrzycowa<span class="g-licznik" data-p-licznik hidden></span></span>
+                    <span class="g-od">od 40 zł</span>
+                    <span class="plus" aria-hidden="true"><span></span></span>
+                  </summary>
+                  <ul>
+                    <li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="stopa-cukrzycowa~podstawowy-zabieg-podologiczny-pierwsza-wizyta" data-cena="180" data-cena-do data-od>
+                          <span class="nazwa">Podstawowy zabieg podologiczny (pierwsza wizyta)</span>
+                          <span class="cena">180 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="stopa-cukrzycowa~kolejny-zabieg" data-cena="40" data-cena-do data-od="1">
+                          <span class="nazwa">Kolejny zabieg</span>
+                          <span class="cena">od 40 zł</span>
+                        </label>
+                        <label class="pole cena-pole" hidden>
+                            <span class="etykieta">Cena tego zabiegu (od 40 zł)</span>
+                            <input type="text" inputmode="decimal" data-p-cena-dla="stopa-cukrzycowa~kolejny-zabieg" value="40">
+                          </label>
+                      </li>
+                  </ul>
+                </details><details class="grupa">
+                  
+                  <summary>
+                    <span class="g-nazwa">Kurzajki (brodawki wirusowe)<span class="g-licznik" data-p-licznik hidden></span></span>
+                    <span class="g-od">od 100 zł</span>
+                    <span class="plus" aria-hidden="true"><span></span></span>
+                  </summary>
+                  <ul>
+                    <li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="brodawki-wirusowe-hpv~terapia-brodawek-wirusowych-pierwsza-wizyta" data-cena="180" data-cena-do data-od>
+                          <span class="nazwa">Terapia brodawek wirusowych, pierwsza wizyta</span>
+                          <span class="cena">180 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="brodawki-wirusowe-hpv~terapia-brodawek-kolejna-wizyta" data-cena="100" data-cena-do data-od>
+                          <span class="nazwa">Terapia brodawek, kolejna wizyta</span>
+                          <span class="cena">100 zł</span>
+                        </label>
+                        
+                      </li>
+                  </ul>
+                </details><details class="grupa">
+                  
+                  <summary>
+                    <span class="g-nazwa">Ozonowanie i dezynfekcja obuwia<span class="g-licznik" data-p-licznik hidden></span></span>
+                    <span class="g-od">od 40 zł</span>
+                    <span class="plus" aria-hidden="true"><span></span></span>
+                  </summary>
+                  <ul>
+                    <li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="ozonowanie-obuwia~ozonowanie-i-dezynfekcja-jednej-pary-butow" data-cena="40" data-cena-do data-od>
+                          <span class="nazwa">Ozonowanie i dezynfekcja jednej pary butów</span>
+                          <span class="cena">40 zł</span>
+                        </label>
+                        
+                      </li>
+                  </ul>
+                </details><details class="grupa">
+                  
+                  <summary>
+                    <span class="g-nazwa">Badanie stóp i wkładki PWO 15<span class="g-licznik" data-p-licznik hidden></span></span>
+                    <span class="g-od">od 180 zł</span>
+                    <span class="plus" aria-hidden="true"><span></span></span>
+                  </summary>
+                  <ul>
+                    <li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="badanie-stop-wkladki-pwo~badanie-stop-i-indywidualna-wkladka-pwo-15-odbior-w-trakcie-wizyty" data-cena="180" data-cena-do="250" data-od>
+                          <span class="nazwa">Badanie stóp i indywidualna wkładka PWO 15 (odbiór w trakcie wizyty)</span>
+                          <span class="cena">180–250 zł</span>
+                        </label>
+                        <label class="pole cena-pole" hidden>
+                            <span class="etykieta">Cena tego zabiegu (180–250 zł)</span>
+                            <input type="text" inputmode="decimal" data-p-cena-dla="badanie-stop-wkladki-pwo~badanie-stop-i-indywidualna-wkladka-pwo-15-odbior-w-trakcie-wizyty" value="180">
+                          </label>
+                      </li>
+                  </ul>
+                </details><details class="grupa">
+                  
+                  <summary>
+                    <span class="g-nazwa">Zdrowy manicure<span class="g-licznik" data-p-licznik hidden></span></span>
+                    <span class="g-od">od 20 zł</span>
+                    <span class="plus" aria-hidden="true"><span></span></span>
+                  </summary>
+                  <ul>
+                    <li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="zdrowy-manicure~zdrowy-manicure" data-cena="100" data-cena-do data-od>
+                          <span class="nazwa">Zdrowy manicure</span>
+                          <span class="cena">100 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="zdrowy-manicure~problem-z-plytka-paznokciowa-u-rak" data-cena="180" data-cena-do data-od>
+                          <span class="nazwa">Problem z płytką paznokciową u rąk</span>
+                          <span class="cena">180 zł</span>
+                        </label>
+                        
+                      </li><li>
+                        <label class="zaznacz poz-zabiegu">
+                          <input type="checkbox" data-p-pozycja="zdrowy-manicure~malowanie-paznokci-lakierem-hybrydowym-lub-zwyklym-dodatek" data-cena="20" data-cena-do data-od>
+                          <span class="nazwa">Malowanie paznokci lakierem hybrydowym lub zwykłym (dodatek)</span>
+                          <span class="cena">20 zł</span>
+                        </label>
+                        
+                      </li>
+                  </ul>
+                </details>
+            </div>
+          </details>
           <label class="pole"><span class="etykieta">Kwota ręczna (zł)</span>
             <input type="text" inputmode="decimal" data-p-reczna placeholder="np. 120 albo 120,50">
           </label>
-          <label class="pole"><span class="etykieta">Notatka (opcjonalnie)</span>
-            <input type="text" maxlength="255" data-p-notatka>
-          </label>
-        </div>
-
-        <dl class="podsumowanie" aria-live="polite">
-          <div><dt>Wartość zabiegów</dt><dd data-p-suma>0 zł</dd></div>
-          <div><dt>Z bonu</dt><dd data-p-zbonu>0 zł</dd></div>
-          <div><dt>Dopłata na miejscu</dt><dd data-p-doplata>0 zł</dd></div>
-          <div><dt>Saldo po realizacji</dt><dd data-p-po>–</dd></div>
-        </dl>
-        <p class="kasa">Na kasę fiskalną nabij: <strong data-p-kasa>0 zł</strong></p>
-        <button class="przycisk" type="submit" data-p-zatwierdz disabled>Zatwierdź realizację</button>
-        <p class="blad" data-p-blad-realizacji hidden></p>
+          <details class="notatka-zwin" data-p-notatka-zwin>
+            <summary>+ Dodaj notatkę</summary>
+            <label class="pole"><span class="etykieta">Notatka (opcjonalnie)</span>
+              <input type="text" maxlength="255" data-p-notatka>
+            </label>
+          </details>
+          <div class="podsumowanie-blok" data-p-podsumowanie hidden>
+            <dl class="podsumowanie" aria-live="polite">
+              <div><dt>Wartość zabiegów</dt><dd data-p-suma>0 zł</dd></div>
+              <div><dt>Z bonu</dt><dd data-p-zbonu>0 zł</dd></div>
+              <div><dt>Dopłata na miejscu</dt><dd data-p-doplata>0 zł</dd></div>
+              <div><dt>Saldo po realizacji</dt><dd data-p-po>–</dd></div>
+            </dl>
+            <p class="kasa">Na kasę fiskalną nabij: <strong data-p-kasa>0 zł</strong></p>
+          </div>
+          <button class="przycisk" type="submit" data-p-zatwierdz disabled>Zatwierdź realizację</button>
+          <p class="blad" data-p-blad-realizacji hidden></p>
+          </div>
+        </details>
       </form>
 
       <p class="komunikat-panelu tylko-biuro" data-p-sukces hidden aria-live="polite"></p>
 
       <section class="karta tylko-biuro" data-p-historia-sekcja data-p-sekcja="historia" hidden>
-        <h2>Historia</h2>
-        <!-- wpis 20:22: jedna oś czasu (realizacje + zdarzenia), najnowsze na górze; domyślnie 2, „Pokaż całą historię (N)” rozwija w miejscu.
-             Wzorzec: timeline / activity feed z shadcn przez 21st.dev – tylko układ, na naszych tokenach -->
-        <ol class="os zwinieta" data-p-os aria-live="polite"></ol>
-        <button class="przycisk obrys maly" type="button" data-p-os-wiecej aria-expanded="false" hidden></button>
-        <p class="podpowiedz" data-p-historia-pusta hidden>Bon nie był jeszcze realizowany.</p>
-        <!-- cofnięcie ostatniej realizacji (2026-11-24): Ewa i Bartek, do 24 h; serwer daje „cofnij_realizacje” tylko im -->
-        <div class="cofnij" data-p-cofnij-real-sekcja hidden>
-          <p class="podpowiedz" data-p-cofnij-real-tekst></p>
-          <button class="przycisk obrys" type="button" data-p-cofnij-real>Cofnij ostatnią realizację</button>
-          <p class="blad" data-p-blad-cofnij hidden></p>
-        </div>
+        <details class="karta-zwin" data-p-zwin="historia">
+          <summary class="karta-naglowek"><h2>Historia</h2><span class="karta-podsum" data-p-podsum></span><span class="plus" aria-hidden="true"><span></span></span></summary>
+          <div class="karta-tresc">
+          <!-- wpis 20:22: jedna oś czasu (realizacje + zdarzenia), najnowsze na górze; domyślnie 2, „Pokaż całą historię (N)” rozwija w miejscu.
+               Wzorzec: timeline / activity feed z shadcn przez 21st.dev – tylko układ, na naszych tokenach -->
+          <ol class="os zwinieta" data-p-os aria-live="polite"></ol>
+          <button class="przycisk obrys maly" type="button" data-p-os-wiecej aria-expanded="false" hidden></button>
+          <p class="podpowiedz" data-p-historia-pusta hidden>Bon nie był jeszcze realizowany.</p>
+          <!-- cofnięcie ostatniej realizacji (2026-11-24): Ewa i Bartek, do 24 h; serwer daje „cofnij_realizacje” tylko im -->
+          <div class="cofnij" data-p-cofnij-real-sekcja hidden>
+            <p class="podpowiedz" data-p-cofnij-real-tekst></p>
+            <button class="przycisk obrys" type="button" data-p-cofnij-real>Cofnij ostatnią realizację</button>
+            <p class="blad" data-p-blad-cofnij hidden></p>
+          </div>
+          </div>
+        </details>
       </section>
 
       <!-- 4C pkt 4: REZYGNACJA I ZWROT – fakty rezygnacji i płatności, ponowne potwierdzenie, „Sprawdź płatność”, „Zarejestruj rezygnację”
            (przyciski zwrotu pieniędzy zostają w karcie Bon jako akcja główna) -->
       <section class="karta tylko-biuro" data-p-rez-karta data-p-sekcja="rezygnacja" hidden>
-        <h2>Rezygnacja i zwrot</h2>
-        <!-- wpis 20:17: wiersze „etykieta – wartość”: rezygnacja, do zwrotu, termin, potwierdzenie, Easytools -->
-        <dl class="dane fakty-bonu" data-p-fakty-rez hidden></dl>
-        <!-- wpisy 17:33/17:35: ponowna wysyłka potwierdzenia rezygnacji (Bartek i Ewa) – mniejszy przycisk w drugim rzędzie -->
-        <div class="rez-potw" data-p-rez-potw hidden>
-          <button class="przycisk obrys maly" type="button" data-p-rez-potw-wyslij>Wyślij potwierdzenie ponownie</button>
-          <p class="blad" data-p-blad-rez-potw hidden></p>
-        </div>
-        <p class="blad" data-p-platnosc-ostrzezenie hidden></p>
-        <!-- REVIEW nr 5: stan płatności w Easytools na kliknięcie (otwarcie bonu przy kasie nie czeka na Easytools) -->
-        <button class="przycisk obrys maly" type="button" data-p-platnosc-sprawdz hidden>Sprawdź płatność w Easytools</button>
-        <!-- rezygnacja, która przyszła mailem albo na papierze (krok 4): admin i konto z 'rezygnacje' => true (Ewa) -->
-        <div data-p-rez-sekcja hidden>
-          <form class="admin-forma formularz" data-p-rez-forma>
-            <h3>Zarejestruj rezygnację</h3>
-            <fieldset class="kanal">
-              <legend class="etykieta">Jak przyszło oświadczenie</legend>
-              <label class="zaznacz"><input type="radio" name="kanal" value="mail" required><span>Mailem</span></label>
-              <label class="zaznacz"><input type="radio" name="kanal" value="gabinet"><span>Na papierze w gabinecie</span></label>
-            </fieldset>
-            <label class="pole"><span class="etykieta">Data wysłania maila lub listu (albo złożenia w gabinecie)</span><input type="date" name="data" required></label>
-            <label class="pole"><span class="etykieta">Data otrzymania przez gabinet</span><input type="date" name="otrzymano" required></label>
-            <p class="podpowiedz" data-p-rez-termin></p>
-            <label class="pole"><span class="etykieta">Powód (wymagany po terminie)</span><input type="text" name="powod" maxlength="150"></label>
-            <button class="przycisk obrys" type="submit">Zarejestruj rezygnację</button>
-          </form>
-          <p class="blad" data-p-blad-rez hidden></p>
-        </div>
+        <details class="karta-zwin" data-p-zwin="rezygnacja">
+          <summary class="karta-naglowek"><h2>Rezygnacja i zwrot</h2><span class="karta-podsum" data-p-podsum></span><span class="plus" aria-hidden="true"><span></span></span></summary>
+          <div class="karta-tresc">
+          <!-- wpis 20:17: wiersze „etykieta – wartość”: rezygnacja, do zwrotu, termin, potwierdzenie, Easytools -->
+          <dl class="dane fakty-bonu" data-p-fakty-rez hidden></dl>
+          <!-- wpisy 17:33/17:35: ponowna wysyłka potwierdzenia rezygnacji (Bartek i Ewa) – mniejszy przycisk w drugim rzędzie -->
+          <div class="rez-potw" data-p-rez-potw hidden>
+            <button class="przycisk obrys maly" type="button" data-p-rez-potw-wyslij>Wyślij potwierdzenie ponownie</button>
+            <p class="blad" data-p-blad-rez-potw hidden></p>
+          </div>
+          <p class="blad" data-p-platnosc-ostrzezenie hidden></p>
+          <!-- REVIEW nr 5: stan płatności w Easytools na kliknięcie (otwarcie bonu przy kasie nie czeka na Easytools) -->
+          <button class="przycisk obrys maly" type="button" data-p-platnosc-sprawdz hidden>Sprawdź płatność w Easytools</button>
+          <!-- rezygnacja, która przyszła mailem albo na papierze (krok 4): admin i konto z 'rezygnacje' => true (Ewa) -->
+          <div data-p-rez-sekcja hidden>
+            <form class="admin-forma formularz" data-p-rez-forma>
+              <h3>Zarejestruj rezygnację</h3>
+              <fieldset class="kanal">
+                <legend class="etykieta">Jak przyszło oświadczenie</legend>
+                <label class="zaznacz"><input type="radio" name="kanal" value="mail" required><span>Mailem</span></label>
+                <label class="zaznacz"><input type="radio" name="kanal" value="gabinet"><span>Na papierze w gabinecie</span></label>
+              </fieldset>
+              <label class="pole"><span class="etykieta">Data wysłania maila lub listu (albo złożenia w gabinecie)</span><input type="date" name="data" required></label>
+              <label class="pole"><span class="etykieta">Data otrzymania przez gabinet</span><input type="date" name="otrzymano" required></label>
+              <p class="podpowiedz" data-p-rez-termin></p>
+              <label class="pole"><span class="etykieta">Powód (wymagany po terminie)</span><input type="text" name="powod" maxlength="150"></label>
+              <button class="przycisk obrys" type="submit">Zarejestruj rezygnację</button>
+            </form>
+            <p class="blad" data-p-blad-rez hidden></p>
+          </div>
+          </div>
+        </details>
       </section>
 
       <!-- obsługa kupującego (2026-11-24, TA-11): admin i konto z uprawnieniem rezygnacji (Bartek, Ewa) – serwer daje „obsluga” tylko im -->
       <section class="karta tylko-biuro" data-p-obsluga data-p-sekcja="mail" hidden>
-        <h2>Mail z bonem</h2>
-        <form class="admin-forma formularz" data-p-wyslij-forma>
-          <label class="pole"><span class="etykieta">Adres e-mail kupującego</span><input type="email" name="email" required maxlength="190" autocomplete="off"></label>
-          <label class="pole" data-p-potwierdzenie hidden><span class="etykieta">Jak potwierdzono kupującego (wymagane przy zmianie adresu)</span>
-            <input type="text" name="potwierdzenie" maxlength="120" placeholder="np. telefon, podała numer zamówienia"></label>
-          <p class="podpowiedz">Zmiana adresu: wpisz nowy adres i kliknij „Zmień adres”, potem „Wyślij ponownie”. Wysyłka obejmuje wszystkie ważne bony z tego zamówienia.</p>
-          <div class="admin-akcje">
-            <button class="przycisk obrys" type="submit" data-p-wyslij-przycisk>Wyślij ponownie</button>
-            <a class="przycisk obrys" data-p-pdf href="#" download>Pobierz PDF</a>
+        <details class="karta-zwin" data-p-zwin="mail">
+          <summary class="karta-naglowek"><h2>Mail z bonem</h2><span class="karta-podsum" data-p-podsum></span><span class="plus" aria-hidden="true"><span></span></span></summary>
+          <div class="karta-tresc">
+          <form class="admin-forma formularz" data-p-wyslij-forma>
+            <label class="pole"><span class="etykieta">Adres e-mail kupującego</span><input type="email" name="email" required maxlength="190" autocomplete="off"></label>
+            <label class="pole" data-p-potwierdzenie hidden><span class="etykieta">Jak potwierdzono kupującego (wymagane przy zmianie adresu)</span>
+              <input type="text" name="potwierdzenie" maxlength="120" placeholder="np. telefon, podała numer zamówienia"></label>
+            <p class="podpowiedz">Zmiana adresu: wpisz nowy adres i kliknij „Zmień adres”, potem „Wyślij ponownie”. Wysyłka obejmuje wszystkie ważne bony z tego zamówienia.</p>
+            <div class="admin-akcje">
+              <button class="przycisk obrys" type="submit" data-p-wyslij-przycisk>Wyślij ponownie</button>
+              <a class="przycisk obrys" data-p-pdf href="#" download>Pobierz PDF</a>
+            </div>
+            <!-- Bartek 2026-11-24: potwierdzenie przy przycisku (komunikat na górze strony bywa poza ekranem) -->
+          </form>
+          <p class="blad" data-p-blad-wyslij hidden></p>
           </div>
-          <!-- Bartek 2026-11-24: potwierdzenie przy przycisku (komunikat na górze strony bywa poza ekranem) -->
-        </form>
-        <p class="blad" data-p-blad-wyslij hidden></p>
+        </details>
       </section>
 
       <!-- 4C pkt 6: WAŻNOŚĆ – jedno bezpłatne przedłużenie o 3 mies. (regulamin; przycisk Ewa i Bartek, Karolina widzi informację)
            i dowolna data (tylko admin) -->
       <section class="karta tylko-biuro" data-p-waznosc-karta data-p-sekcja="waznosc" hidden>
-        <h2>Ważność</h2>
-        <div class="przedluz" data-p-przedluz hidden>
-          <p data-p-przedluz-tekst></p>
-          <button class="przycisk obrys" type="button" data-p-przedluz-przycisk>Przedłuż o 3 miesiące</button>
-        </div>
-        <form class="admin-forma formularz" data-p-waznosc hidden>
-          <h3>Zmień datę ważności</h3>
-          <label class="pole"><span class="etykieta">Nowa data ważności</span><input type="date" name="data" required></label>
-          <label class="pole"><span class="etykieta">Powód (np. zgoda Ewy)</span><input type="text" name="powod" maxlength="150"></label>
-          <button class="przycisk obrys" type="submit">Zmień datę</button>
-        </form>
-        <p class="blad" data-p-blad-waznosc hidden></p>
+        <details class="karta-zwin" data-p-zwin="waznosc">
+          <summary class="karta-naglowek"><h2>Ważność</h2><span class="karta-podsum" data-p-podsum></span><span class="plus" aria-hidden="true"><span></span></span></summary>
+          <div class="karta-tresc">
+          <div class="przedluz" data-p-przedluz hidden>
+            <p data-p-przedluz-tekst></p>
+            <button class="przycisk obrys" type="button" data-p-przedluz-przycisk>Przedłuż o 3 miesiące</button>
+          </div>
+          <form class="admin-forma formularz" data-p-waznosc hidden>
+            <h3>Zmień datę ważności</h3>
+            <label class="pole"><span class="etykieta">Nowa data ważności</span><input type="date" name="data" required></label>
+            <label class="pole"><span class="etykieta">Powód (np. zgoda Ewy)</span><input type="text" name="powod" maxlength="150"></label>
+            <button class="przycisk obrys" type="submit">Zmień datę</button>
+          </form>
+          <p class="blad" data-p-blad-waznosc hidden></p>
+          </div>
+        </details>
       </section>
 
       <!-- 4C pkt 7: ADMINISTRACJA – tylko admin, zwinięta (zamówienie i kupujący, akcje rzadkie i awaryjne) -->
       <section class="karta admin tylko-biuro" data-p-admin data-p-sekcja="admin" hidden>
-        <h2>Administracja</h2>
-        <details class="zwijane" data-p-admin-zwin>
-          <summary>Zamówienie, kupujący i akcje administratora</summary>
-          <dl class="dane" data-p-admin-dane></dl>
-          <div class="admin-akcje">
-            <button class="przycisk obrys" type="button" data-p-cofnij-rez hidden>Cofnij rezygnację</button>
-            <button class="przycisk obrys" type="button" data-p-zwrot>Oznacz zwrot (pieniądze zwraca się w Easytools)</button>
-            <p class="podpowiedz" data-p-zwrot-podpowiedz hidden>Zwykła droga: najpierw zarejestruj rezygnację, potem „Zwróć pieniądze”. „Oznacz zwrot” bez rezygnacji tylko awaryjnie, gdy pieniądze oddano już w Easytools.</p>
+        <details class="karta-zwin" data-p-zwin="admin" data-p-admin-zwin>
+          <summary class="karta-naglowek"><h2>Administracja</h2><span class="karta-podsum" data-p-podsum>zamówienie i akcje awaryjne</span><span class="plus" aria-hidden="true"><span></span></span></summary>
+          <div class="karta-tresc">
+            <dl class="dane" data-p-admin-dane></dl>
+            <div class="admin-akcje">
+              <button class="przycisk obrys" type="button" data-p-cofnij-rez hidden>Cofnij rezygnację</button>
+              <button class="przycisk obrys" type="button" data-p-zwrot>Oznacz zwrot (pieniądze zwraca się w Easytools)</button>
+              <p class="podpowiedz" data-p-zwrot-podpowiedz hidden>Zwykła droga: najpierw zarejestruj rezygnację, potem „Zwróć pieniądze”. „Oznacz zwrot” bez rezygnacji tylko awaryjnie, gdy pieniądze oddano już w Easytools.</p>
+            </div>
+            <p class="blad" data-p-blad-admin hidden></p>
           </div>
         </details>
-        <p class="blad" data-p-blad-admin hidden></p>
       </section>
     </div>
 
@@ -1162,7 +1208,7 @@
 
     <footer class="n-dol" data-astro-cid-lkdlr2dg>
     <span class="n-pomoc" data-n-pomoc hidden data-astro-cid-lkdlr2dg></span>
-    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu 45aaefc · 27.11.2026</span>
+    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu 9d3a633 · 27.11.2026</span>
   </footer>
 
 
@@ -1177,4 +1223,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.BxLWRXWK.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.B2I20Qgv.js"></script>
