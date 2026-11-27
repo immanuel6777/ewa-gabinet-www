@@ -43,7 +43,7 @@
   <link rel="stylesheet" href="/_astro/sciezka-bonow.B0WK5N8t.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
-<link rel="stylesheet" href="/_astro/panel-bonow.Dst1t4nx.css">
+<link rel="stylesheet" href="/_astro/panel-bonow.BiVBqnYM.css">
 <link rel="stylesheet" href="/_astro/Baza.Dti-Z3p2.css">
 <link rel="stylesheet" href="/_astro/KartaBonu.G03djIBG.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
@@ -145,7 +145,7 @@
           <p class="n-menu-poz n-menu-pomoc" data-p-menu-poz="pomoc" data-n-pomoc="bez-instrukcji" hidden data-astro-cid-lkdlr2dg></p>
           <button class="n-menu-poz n-menu-wyloguj" type="button" data-p-menu-poz="wyloguj" data-astro-cid-lkdlr2dg>Wyloguj</button>
         </nav>
-        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu 9d3a633 · 27.11.2026</p>
+        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu 7dc8294 · 27.11.2026</p>
       </div>
     </dialog>
   </header>
@@ -202,6 +202,19 @@
       <div class="tryby" role="group" aria-label="Widok panelu" data-p-tryby hidden>
         <button type="button" data-p-tryb="kasa" aria-pressed="false">Bon</button>
         <button type="button" data-p-tryb="biuro" aria-pressed="false">Gabinet</button>
+      </div>
+      <!-- karta #239 (umowa z Backendem 27.11 ok. 02:10): w Gabinecie, gdy karta Bon zniknie u góry ekranu, przełącznik przykrywa cienki
+           pasek bonu: „←” (klika widoczne „Wróć do wyników” / „Wróć do szukania” – jedna historia), końcówka numeru, pigułka stanu,
+           liczba główna; stuknięcie w resztę paska = do góry karty Bon. Kotwica ma wysokość 0 – pasek nie przesuwa treści. -->
+      <div class="pasek-bonu-kotwica tylko-biuro">
+        <div class="pasek-bonu" data-p-pasek-bonu hidden>
+          <button type="button" class="pb-wroc" data-p-pasek-wroc><span aria-hidden="true">←</span></button>
+          <button type="button" class="pb-bon" data-p-pasek-gora>
+            <span class="pb-kod" data-p-pasek-kod></span>
+            <span class="pigulka-stanu" data-p-pasek-status></span>
+            <span class="pb-kwota" data-p-pasek-kwota></span>
+          </button>
+        </div>
       </div>
       <!-- projekt pkt 2 (wpis 18:14): „Zalogowano…”, Instrukcja, Zmień hasło, Wyloguj i „Pobierz nowe zamówienia” są w menu ☰ ramki
            (NarzedzieRamka.astro, [data-p-menu-poz]); tu zostaje tylko wynik automatycznego pobrania zamówień przy wejściu (Gabinet) -->
@@ -1208,7 +1221,7 @@
 
     <footer class="n-dol" data-astro-cid-lkdlr2dg>
     <span class="n-pomoc" data-n-pomoc hidden data-astro-cid-lkdlr2dg></span>
-    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu 9d3a633 · 27.11.2026</span>
+    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu 7dc8294 · 27.11.2026</span>
   </footer>
 
 
@@ -1223,4 +1236,4 @@
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.B2I20Qgv.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.qWtcrFYt.js"></script>
