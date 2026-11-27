@@ -21,7 +21,7 @@
 
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px"><tr>
         <td style="padding:0 12px 0 0;vertical-align:middle"><img src="https://www.ewa-gabinet.pl/img/gabinet/logo.png" width="44" height="44" alt="EWA" style="display:block;width:44px;height:44px;border:0"></td>
-        <td style="vertical-align:middle;font-family:Lato, 'Segoe UI', Helvetica, Arial, sans-serif;color:#17504B"><span style="font-size:19px;font-weight:700;letter-spacing:.04em">EWA</span><br><span style="font-size:14px;color:#3E6863">Gabinet podologiczny</span></td>
+        <td style="vertical-align:middle;font-family:Lato, 'Segoe UI', Helvetica, Arial, sans-serif;color:#17504B"><span style="font-size:19px;font-weight:700;letter-spacing:.04em">EWA</span><br><span style="font-size:14px;color:#3E6863">Gabinet Podologiczny</span></td>
       </tr></table>
 
       <h1 class="tytul" style="margin:0 0 14px;font-family:Lato, 'Segoe UI', Helvetica, Arial, sans-serif;font-size:28px;line-height:1.25;font-weight:300;color:#17504B">{{TEMAT}}</h1>

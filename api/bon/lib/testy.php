@@ -24,6 +24,7 @@ require_once __DIR__ . '/testy-zwrot-szukaj.php'; // #227 (Backend 2)
 require_once __DIR__ . '/testy-maile-tresc.php';
 require_once __DIR__ . '/testy-numer-zamowienia.php'; // #219 (Backend 2)
 require_once __DIR__ . '/testy-straznik.php'; // #259
+require_once __DIR__ . '/testy-segment.php'; // szukanie po segmencie numeru (Backend 2, 27.11)
 
 /** Payload jak w dokumentacji Easytools (single_product_bought), z nadpisaniami. */
 function bon_test_payload(array $nadpisz = []): array {
@@ -69,7 +70,7 @@ function bon_test_konfig(array $k): array {
         'mail_powiadomienie' => ['powiadomienia-test@example.invalid'],
         'mail_zapas' => false,
         'mail_zapas_test_do' => '',
-        'mail_nadawca' => 'Gabinet EWA <powiadomienia@ewa-gabinet.pl>',
+        'mail_nadawca' => 'Gabinet Podologiczny EWA <powiadomienia@ewa-gabinet.pl>',
         'mailjet_test_blad' => false,
         'mail_ponow_przerwy_s' => [0, 0], // testy: ponawianie bez czekania
         // etap 3: konta panelu (hasła tylko testowe, hash liczony przy starcie) i lista usług z pliku obok konfigu
@@ -381,9 +382,10 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     $t('zapas: wiadomość MIME – nadawca z nazwą, Reply-To, temat, PDF, multipart', str_contains($nagl, '<powiadomienia@ewa-gabinet.pl>') && str_contains($nagl, '=?UTF-8?B?')
         && str_contains($nagl, 'Reply-To: <kontakt@ewa-gabinet.pl>') && str_contains($nagl, 'multipart/mixed') && str_contains($nagl, 'Message-ID: <')
         && count($smtp['zalaczniki'] ?? []) === 1 && str_ends_with((string)$smtp['zalaczniki'][0], '.pdf'), $nagl);
-    $mime = bon_mail_mime(bon_mail_wiadomosc($kZ, 'jan@example.com', 'Twój bon podarunkowy – Gabinet EWA', ".kropka\nlinia", '<p>x</p>', [['nazwa' => 'bon-A.pdf', 'dane' => '%PDF-1.4 test']]));
+    $mime = bon_mail_mime(bon_mail_wiadomosc($kZ, 'jan@example.com', 'Twój bon podarunkowy – Gabinet Podologiczny EWA', ".kropka\nlinia", '<p>x</p>', [['nazwa' => 'bon-A.pdf', 'dane' => '%PDF-1.4 test']]));
     $t('zapas: MIME z CRLF, tekst i HTML w multipart/alternative, temat w UTF-8 do odczytania', !preg_match("/[^\r]\n/", $mime) && str_contains($mime, 'multipart/alternative')
-        && str_contains($mime, 'filename="bon-A.pdf"') && mb_decode_mimeheader(preg_match('/^Subject: (.*(?:\r\n[ \t].*)*)/m', $mime, $m) ? $m[1] : '') === 'Twój bon podarunkowy – Gabinet EWA');
+        && str_contains($mime, 'filename="bon-A.pdf"') && mb_decode_mimeheader(preg_match('/^Subject: ([^\r\n]*(?:\r\n[ \t][^\r\n]*)*)/m', $mime, $m) ? $m[1] : '') === 'Twój bon podarunkowy – Gabinet Podologiczny EWA');
+    // 27.11 (marka): dłuższy temat jest zawijany na 2 linie (RFC 2047) – wcześniej „.*” zjadało \r i test czytał tylko 1. linię
     [$w, $b] = $wyslijZ(array_replace($kZ, ['mailjet_test_blad' => true]), 'ord_zapas_http', 0);
     $t('zapas: błąd HTTP Mailjeta → bez zapasu (Mailjet dostał treść)', ($w['blad'] ?? null) !== null && $ileSmtp() === 1 && ($w['mailjet'][0]['droga'] ?? '') === 'mailjet', json_encode($w));
     [$w, $b] = $wyslijZ(array_replace($kZ, ['mail_zapas' => false]), 'ord_zapas_wyl', 3);
@@ -671,5 +673,5 @@ function bon_testy(array $kBaza, PDO $pdo): array {
     foreach (glob($katW . '/*') ?: [] as $f) is_dir($f) ? @rmdir($f) : @unlink($f);
     @rmdir($katW);
 
-    return array_merge($wyniki, bon_testy_panel($k, $pdo), bon_testy_sync($k, $pdo), bon_testy_krok1($k, $pdo), bon_testy_krok4($k, $pdo), bon_testy_obsluga($k, $pdo), bon_testy_rezygnacja($k, $pdo), bon_testy_p10($k, $pdo), bon_testy_zwroty($k, $pdo), bon_testy_konta($k, $pdo), bon_testy_raport($k, $pdo), bon_testy_zwrot_szukaj($k, $pdo), bon_testy_dostep($k, $pdo), bon_testy_bledy($k, $pdo), bon_testy_maile_tresc($k, $pdo), bon_testy_numer_zamowienia($k, $pdo), bon_testy_straznik($k, $pdo));
+    return array_merge($wyniki, bon_testy_panel($k, $pdo), bon_testy_sync($k, $pdo), bon_testy_krok1($k, $pdo), bon_testy_krok4($k, $pdo), bon_testy_obsluga($k, $pdo), bon_testy_rezygnacja($k, $pdo), bon_testy_p10($k, $pdo), bon_testy_zwroty($k, $pdo), bon_testy_konta($k, $pdo), bon_testy_raport($k, $pdo), bon_testy_zwrot_szukaj($k, $pdo), bon_testy_dostep($k, $pdo), bon_testy_bledy($k, $pdo), bon_testy_maile_tresc($k, $pdo), bon_testy_numer_zamowienia($k, $pdo), bon_testy_straznik($k, $pdo), bon_testy_segment($k, $pdo));
 }

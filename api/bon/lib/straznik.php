@@ -14,6 +14,60 @@ const BON_STRAZNIK_CRON_MIN = 75;  // ostatnia synchronizacja z crona (co godzin
 const BON_STRAZNIK_DNI = 2;        // okno wstecz: przebieg o 7:00 musi widzieć zakupy z całej nocy
 const BON_STRAZNIK_CRON_PLIK = '/bony-cron-ok.txt'; // w konfig/ obok bony.php; pisze lib/cron.php po każdej synchronizacji
 
+const BON_STRAZNIK_MAIL_PLIK = '/bony-straznik-mail.json'; // stan maila z crona: ostatni klucz alarmu i chwila wysłania
+
+/**
+ * Zapas (Bartek 27.11 „A”, harmonogram GitHuba nie ruszał): cron po synchronizacji pyta strażnika i przy alarmie wysyła mail
+ * (bon_powiadom → mail_powiadomienie, alerty@) w godzinach 7–22. Ten sam alarm najwyżej raz na 24 h, zmiana alarmu – od razu,
+ * powrót do normy – jeden mail „w normie”. Martwego crona to nie złapie (od tego jest workflow GitHuba). Zwraca, co zrobiono.
+ */
+function bon_straznik_cron(array $k, PDO $pdo, ?DateTimeImmutable $teraz = null): array {
+    if (($k['straznik'] ?? true) === false) return ['akcja' => 'wyłączony'];
+    $teraz ??= bon_teraz();
+    $godz = (int)$teraz->format('G');
+    if ($godz < 7 || $godz > 22) return ['akcja' => 'poza godzinami'];
+    $w = bon_straznik($k, $pdo, $teraz);
+    $plik = (string)($k['_katalog'] ?? '') . BON_STRAZNIK_MAIL_PLIK;
+    $stan = is_file($plik) ? (json_decode((string)@file_get_contents($plik), true) ?: []) : [];
+    $poprzedni = (string)($stan['klucz'] ?? '');
+    $zapisz = static fn(string $klucz) => @file_put_contents($plik, json_encode(['klucz' => $klucz, 'czas' => $teraz->getTimestamp()]), LOCK_EX);
+    if (!$w['alarm']) {
+        if ($poprzedni === '' || $poprzedni === 'ok') return ['akcja' => 'w normie'];
+        $ok = bon_powiadom($k, 'Strażnik sprzedaży bonów: w normie', "Strażnik nie widzi już problemu (sprawdzono {$teraz->format('d.m H:i')}).\n\n"
+            . "Wcześniejszy alarm: $poprzedni\n\nSystem bonów · ewa-gabinet.pl\n");
+        $zapisz('ok');
+        return ['akcja' => 'mail w normie', 'wyslano' => $ok];
+    }
+    $klucz = bon_straznik_klucz($w);
+    if ($klucz === $poprzedni && $teraz->getTimestamp() - (int)($stan['czas'] ?? 0) < 86400) return ['akcja' => 'ten sam alarm – mail był', 'klucz' => $klucz];
+    $pierwszy = explode(':', (string)$w['powody'][0])[0];
+    $temat = 'Pilne: strażnik sprzedaży bonów – ' . $pierwszy . (count($w['powody']) > 1 ? ' (+' . (count($w['powody']) - 1) . ')' : '');
+    $tresc = "Strażnik sprzedaży bonów – sprawdzono {$teraz->format('d.m.Y H:i')}\n\n" . implode("\n", array_map(static fn($p) => '• ' . $p, $w['powody']))
+        . "\n\nCo zrobić:\n1. Panel bonów → menu ☰ → „Pobierz nowe zamówienia”.\n2. Jeśli dalej brak bonu: Easytools → Zamówienia; daj znać Backendowi (sesja Code).\n"
+        . "3. Ten sam alarm przyjdzie znów najwcześniej za 24 h; po naprawie przyjdzie mail „w normie”.\n\nSzczegóły bez danych osobowych: log.php.\nSystem bonów · ewa-gabinet.pl\n";
+    $ok = bon_powiadom($k, $temat, $tresc);
+    $zapisz($klucz);
+    bon_zdarzenie($k, 'straznik-mail', ['klucz' => $klucz, 'wyslano' => $ok]);
+    return ['akcja' => 'mail alarm', 'klucz' => $klucz, 'wyslano' => $ok];
+}
+
+/** Klucz alarmu bez minut i liczb, które rosną same (jak scripts/straznik.mjs): rodzaj + id zamówień bez bonu + liczba bonów bez maila. */
+function bon_straznik_klucz(array $w): string {
+    $czesci = [];
+    foreach ((array)($w['powody'] ?? []) as $p) {
+        $rodzaj = explode(':', (string)$p)[0];
+        $czesci[] = match ($rodzaj) {
+            'sprzedaż' => 'sprzedaż:' . implode(',', (static function (array $a) { sort($a); return $a; })((array)($w['bez_bonu_id'] ?? []))),
+            'mail' => 'mail:' . (int)($w['bez_maila'] ?? 0),
+            'konfiguracja' => (string)$p,
+            default => $rodzaj,
+        };
+    }
+    $czesci = array_values(array_unique($czesci));
+    sort($czesci);
+    return implode(' | ', $czesci);
+}
+
 /** Token strażnika: pochodna log_token (HMAC), więc bez nowego wpisu w konfigu; wyciek z GitHuba = dostęp tylko do tych liczb. */
 function bon_straznik_token(array $k): ?string {
     $t = (string)($k['log_token'] ?? '');

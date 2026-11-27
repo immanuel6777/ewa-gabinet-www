@@ -562,11 +562,14 @@ const BON_PANEL_SZUKAJ_MAX = 20;
 const BON_PANEL_FRAGMENT_MIN = 3;
 
 /** [kod HTTP, odpowiedź]: {typ: kod, kod} albo {typ: email|zamowienie|fragment, bony: [...], wiecej}. */
-function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $teraz = null, ?array $sesja = null, bool $fragment = false): array {
+function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $teraz = null, ?array $sesja = null, bool $fragment = false, mixed $segment = null): array {
     $q = trim($q);
     $tab = bon_tabela($k, 'vouchers');
     $parametr = [];
     $kolumna = '';
+    // Bartek 27.11 (przez Front 1): `segment` 1|2 = szukanie po 4 znakach numeru bonu NA ZADANEJ POZYCJI (pierwszy / drugi człon
+    // po prefiksie) – tylko kolumna `code`, bez e-maila i zamówienia; tylko z `fragment` (te same uprawnienia i wspólny limit).
+    if ($segment !== null && !$fragment) return [400, ['ok' => false, 'blad' => 'Szukanie po części numeru bonu tylko w trybie Gabinet.']];
     if ($fragment) {
         // karta #201 (Bartek 2026-11-26 18:04): kupujący pomylił się w adresie – szukanie po FRAGMENCIE e-maila albo id zamówienia
         // Easytools. Tylko admin i Gabinet (konto z uprawnieniem rezygnacji), nigdy tryb Bon (Karolina); min. 3 znaki, „zawiera”,
@@ -575,23 +578,36 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
             return [403, ['ok' => false, 'blad' => 'Szukanie po fragmencie adresu jest dla Bartka i Ewy.']];
         }
         $wartosc = mb_strtolower($q, 'UTF-8');
-        if (mb_strlen($wartosc) < BON_PANEL_FRAGMENT_MIN) return [400, ['ok' => false, 'blad' => 'Wpisz co najmniej ' . BON_PANEL_FRAGMENT_MIN . ' znaki adresu albo numeru zamówienia.']];
-        if (mb_strlen($wartosc) > 100) return [400, ['ok' => false, 'blad' => 'Za długi tekst – wpisz fragment adresu.']];
+        if ($segment !== null) {
+            $czlon = strtoupper($q);
+            if ($segment !== 1 && $segment !== 2) return [400, ['ok' => false, 'blad' => 'Wybierz pierwszą albo drugą część numeru bonu.']];
+            if (strlen($czlon) !== 4 || strspn($czlon, BON_ALFABET) !== 4) return [400, ['ok' => false, 'blad' => 'Wpisz 4 znaki z numeru bonu (bez 0, O, 1 i I).']];
+        } else {
+            if (mb_strlen($wartosc) < BON_PANEL_FRAGMENT_MIN) return [400, ['ok' => false, 'blad' => 'Wpisz co najmniej ' . BON_PANEL_FRAGMENT_MIN . ' znaki adresu albo numeru zamówienia.']];
+            if (mb_strlen($wartosc) > 100) return [400, ['ok' => false, 'blad' => 'Za długi tekst – wpisz fragment adresu.']];
+        }
         $k = bon_panel_konfig($k);
         if (!bon_limit_ok($pdo, $k, 'login|' . $sesja['login'], 'panel-fragment', (int)$k['panel_limit_fragment'], (int)$k['panel_limit_okno_min'] * 60)) {
             return [429, ['ok' => false, 'blad' => 'Za dużo wyszukiwań w krótkim czasie. Spróbuj za kwadrans.']];
         }
         $typ = 'fragment';
-        $wzor = '%' . strtr($wartosc, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
-        // Bartek 27.11 00:40: także fragment numeru bonu (np. 4 ostatnie znaki „9PHZ”) – tylko tu, czyli Gabinet i admin;
-        // w trybie Bon 4 ostatnie znaki to dowód od pacjenta (P-10), więc tam szukania po nich nie ma
-        $warunek = "(LOWER(buyer_email) LIKE ? ESCAPE '!' OR LOWER(easytools_order_id) LIKE ? ESCAPE '!' OR LOWER(code) LIKE ? ESCAPE '!')";
-        $parametr = [$wzor, $wzor, $wzor];
-        // #219: w trybie Gabinet panel wysyła tu każdy wpis, więc „#1604262” / „1604262” = dokładny numer zamówienia Easytools
-        // (przed migracją kolumny – bez tego warunku, szukanie jak dotąd)
-        if (($nr = bon_numer_z_wpisu($q)) !== null && bon_numer_kolumna_jest($k, $pdo)) {
-            $warunek = '(' . $warunek . ' OR easytools_order_nr = ?)';
-            $parametr[] = $nr;
+        if ($segment !== null) {
+            // pozycyjnie: <prefix>-XXXX-____ albo <prefix>-____-XXXX (prefiks z konfigu, dosłownie – ESCAPE jak niżej)
+            $p = strtr((string)$k['kod_prefix'], ['!' => '!!', '%' => '!%', '_' => '!_']);
+            $warunek = "code LIKE ? ESCAPE '!'";
+            $parametr = [$segment === 1 ? "$p-$czlon-____" : "$p-____-$czlon"];
+        } else {
+            $wzor = '%' . strtr($wartosc, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+            // Bartek 27.11 00:40: także fragment numeru bonu (np. 4 ostatnie znaki „9PHZ”) – tylko tu, czyli Gabinet i admin;
+            // w trybie Bon 4 ostatnie znaki to dowód od pacjenta (P-10), więc tam szukania po nich nie ma
+            $warunek = "(LOWER(buyer_email) LIKE ? ESCAPE '!' OR LOWER(easytools_order_id) LIKE ? ESCAPE '!' OR LOWER(code) LIKE ? ESCAPE '!')";
+            $parametr = [$wzor, $wzor, $wzor];
+            // #219: w trybie Gabinet panel wysyła tu każdy wpis, więc „#1604262” / „1604262” = dokładny numer zamówienia Easytools
+            // (przed migracją kolumny – bez tego warunku, szukanie jak dotąd)
+            if (($nr = bon_numer_z_wpisu($q)) !== null && bon_numer_kolumna_jest($k, $pdo)) {
+                $warunek = '(' . $warunek . ' OR easytools_order_nr = ?)';
+                $parametr[] = $nr;
+            }
         }
     } elseif (($kod = bon_normalizuj_kod($q, (string)$k['kod_prefix'])) !== null) {
         return [200, ['ok' => true, 'typ' => 'kod', 'kod' => $kod]];

@@ -65,6 +65,13 @@ try {
     } catch (Throwable $e) {
         bon_zdarzenie($k, 'blad', ['plik' => 'cron (sprzątanie dzienników)'] + bon_opis_bledu($e));
     }
+    // #259 zapas (Bartek 27.11 „A”): strażnik sprzedaży z crona – mail na alerty@ w godzinach 7–22 (na końcu: po zwrotach i dostępie)
+    try {
+        require_once __DIR__ . '/straznik.php';
+        bon_straznik_cron($k, $pdo);
+    } catch (Throwable $e) {
+        bon_zdarzenie($k, 'blad', ['plik' => 'cron (strażnik)'] + bon_opis_bledu($e));
+    }
     echo json_encode($raport, JSON_UNESCAPED_UNICODE), "\n";
 } catch (Throwable $e) {
     error_log('bony/cron: ' . $e->getMessage());

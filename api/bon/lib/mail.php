@@ -32,7 +32,7 @@ function bon_mail_tresc(array $k, array $bony): array {
     // wpis 21:47: ważność zależy od kamienia (wartości) – przy koszyku z różnymi bonami „6 albo 12 miesięcy”, data przy każdym bonie
     $miesiace = bon_miesiace_lista(array_map(static fn($b) => (int)bon_kamien_bonu($k, $b)['waznosc_miesiecy'], $bony));
     $n = count($bony);
-    $temat = $n === 1 ? 'Twój bon podarunkowy – Gabinet EWA' : "Twoje bony podarunkowe ($n) – Gabinet EWA";
+    $temat = $n === 1 ? 'Twój bon podarunkowy – ' . BON_MARKA['mian'] : "Twoje bony podarunkowe ($n) – " . BON_MARKA['mian'];
     $lista = [];
     foreach ($bony as $b) {
         $lista[] = [
@@ -48,7 +48,7 @@ function bon_mail_tresc(array $k, array $bony): array {
         ? 'Dziękujemy za zakup bonu podarunkowego. Bon jest w załączniku jako plik PDF – można go wydrukować albo przesłać dalej.'
         : "Dziękujemy za zakup bonów podarunkowych. Każdy z $n bonów jest w załączniku jako osobny plik PDF – można je wydrukować albo przesłać dalej.";
     $zasady = [
-        'Bon jest na zabiegi podologiczne w Gabinecie EWA, ' . $kontakt['ulica'] . ' w Pabianicach.',
+        'Bon jest na zabiegi podologiczne w ' . BON_MARKA['miejsc'] . ', ' . $kontakt['ulica'] . ' w Pabianicach.',
         "Niewykorzystana kwota zostaje na bonie na kolejną wizytę. Bon jest ważny $miesiace od dnia zakupu.", // wpis 10:10 (25.11): „od zakupu” w tekstach; liczone nadal od dnia zapłaty
         'Termin wizyty można zarezerwować przez Booksy albo telefonicznie: ' . $kontakt['telefon'] . '. Przy rezerwacji wystarczy podać numer bonu.',
     ];
@@ -71,7 +71,7 @@ function bon_mail_tresc(array $k, array $bony): array {
 
     $tekst = "Dzień dobry,\n\n$wstep\n\n";
     foreach ($lista as $l) $tekst .= "{$l['nazwa']} o wartości {$l['kwota']}, numer {$l['kod']}, ważny do {$l['do']}" . ($l['dla'] !== '' ? ", dla: {$l['dla']}" : '') . "\n";
-    $tekst .= "\n" . implode("\n", $zasady) . "\n" . $regulamin . "\n\nPozdrawiamy serdecznie\nEWA Gabinet podologiczny\nhttps://www.ewa-gabinet.pl\n";
+    $tekst .= "\n" . implode("\n", $zasady) . "\n" . $regulamin . "\n\nPozdrawiamy serdecznie\n" . BON_MARKA['mian'] . "\nhttps://www.ewa-gabinet.pl\n";
 
     $e = static fn(string $s) => htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
     $wiersze = '';

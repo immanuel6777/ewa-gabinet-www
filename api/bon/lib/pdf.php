@@ -88,7 +88,7 @@ function bon_pdf(array $bon, array $k): string {
 
     $pdf = new BonTCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
     $pdf->SetCreator('ewa-gabinet.pl');
-    $pdf->SetAuthor('EWA Gabinet podologiczny');
+    $pdf->SetAuthor(BON_MARKA['mian']);
     $pdf->SetTitle('Bon podarunkowy ' . $kod);
     $pdf->setPrintHeader(false);
     $pdf->setPrintFooter(false);
@@ -103,7 +103,7 @@ function bon_pdf(array $bon, array $k): string {
     $pdf->SetTextColor(...BON_PDF_MUTED);
     $pdf->SetFont('lato', '', 10.5);
     $pdf->SetXY(15, 12);
-    $pdf->Cell(180, 6, 'Bon podarunkowy · EWA Gabinet podologiczny', 0, 1, 'L');
+    $pdf->Cell(180, 6, 'Bon podarunkowy · ' . BON_MARKA['mian'], 0, 1, 'L');
     // karta z kodem: tło jak --c-chip, kod 50 mm, obok numer, nazwa, kwota, ważność
     $pdf->SetFillColor(246, 239, 233);
     $pdf->RoundedRect(15, 22, 180, 70, 4, '1111', 'F');
@@ -147,7 +147,7 @@ function bon_pdf(array $bon, array $k): string {
     $pdf->SetX(15);
     $pdf->MultiCell(180, 6, '•  Telefonicznie: ' . implode(' albo ', $telefony) . '. Przy rezerwacji podaj numer bonu.', 0, 'L', false, 1);
     $pdf->SetX(15);
-    $pdf->MultiCell(180, 6, '•  Gabinet EWA, ' . $kontakt['ulica'] . ', ' . ($kontakt['miasto'] ?? 'Pabianice') . '.', 0, 'L', false, 1);
+    $pdf->MultiCell(180, 6, '•  ' . BON_MARKA['mian'] . ', ' . $kontakt['ulica'] . ', ' . ($kontakt['miasto'] ?? 'Pabianice') . '.', 0, 'L', false, 1);
 
     $pdf->SetXY(15, $pdf->GetY() + 5);
     $pdf->SetFont('latob', '', 13);

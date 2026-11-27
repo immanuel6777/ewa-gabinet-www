@@ -166,7 +166,7 @@ function bon_rezygnacja_potwierdzenie(array $k, ?PDO $pdo, array $bon, int $kwot
             . "a zostawimy bon aktywny. Możesz też odpisać na tę wiadomość$tel.",
         'przycisk' => ['Zmieniam zdanie / to nie ja – zostaw bon aktywny', $mailto],
     ];
-    $tekst = bon_powiadom_tekst($d) . "\nPozdrawiamy serdecznie\nEWA Gabinet podologiczny\nhttps://www.ewa-gabinet.pl\n";
+    $tekst = bon_powiadom_tekst($d) . "\nPozdrawiamy serdecznie\n" . BON_MARKA['mian'] . "\nhttps://www.ewa-gabinet.pl\n";
     $adres = (string)$bon['buyer_email'];
     $blad = bon_mail_prosty($k, $adres, "Rezygnacja z bonu $kod – potwierdzenie", $tekst, [
         'html' => bon_powiadom_html_dane($k, 'Rezygnacja z bonu', $d),
@@ -227,7 +227,7 @@ function bon_rezygnacja_wycofanie_mail(array $k, PDO $pdo, array $bon, string $z
     if (!$stan || !$stan['wyslane']) return null; // kupujący nie dostał potwierdzenia – nie ma czego odwoływać
     $kod = (string)$bon['code'];
     $tekst = "Dzień dobry,\n\nrezygnacja z bonu $kod została wycofana. Bon znów działa – saldo i data ważności bez zmian.\n\n"
-        . "Jeśli to pomyłka, odpisz na tę wiadomość.\n\nPozdrawiamy serdecznie\nEWA Gabinet podologiczny\nhttps://www.ewa-gabinet.pl\n";
+        . "Jeśli to pomyłka, odpisz na tę wiadomość.\n\nPozdrawiamy serdecznie\n" . BON_MARKA['mian'] . "\nhttps://www.ewa-gabinet.pl\n";
     $blad = bon_mail_prosty($k, (string)$bon['buyer_email'], "Bon $kod znów działa – rezygnacja wycofana", $tekst, ['naglowek' => 'Bon znów działa']);
     bon_historia($k, $pdo, (int)$bon['id'], 'potwierdzenie', $blad === null ? 'wycofanie: wysłane na adres ' . $bon['buyer_email'] : 'wycofanie: NIE wysłane: ' . mb_substr($blad, 0, 150), $kto);
     if ($blad !== null) {

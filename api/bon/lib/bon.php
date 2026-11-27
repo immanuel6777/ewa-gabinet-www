@@ -13,6 +13,8 @@ declare(strict_types=1);
 
 const BON_ALFABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 znaki, bez 0/O/1/I
 const BON_STREFA = 'Europe/Warsaw';
+// marka (Bartek 27.11 – jak firma.marka w src/data/kontakt.yaml): podpisy, tematy maili, PDF, panel. NAP (firma.nazwa) zostaje w stopce
+const BON_MARKA = ['mian' => 'Gabinet Podologiczny EWA', 'dop' => 'Gabinetu Podologicznego EWA', 'miejsc' => 'Gabinecie Podologicznym EWA'];
 
 function bon_konfig(): array {
     $plik = getenv('BONY_KONFIG') ?: dirname(__DIR__, 4) . '/konfig/bony.php';
@@ -380,7 +382,7 @@ function bon_mail_szablon(string $naglowek, string $trescHtml, array $przyciski 
     }
     $podpis = $wewnetrzny
         ? '<p style="margin:22px 0 0;font-size:14px;line-height:1.5;color:#3E6863">System bonów · ewa-gabinet.pl</p>'
-        : '<p style="margin:8px 0 0;font-size:17px;line-height:1.6;color:#17504B">Pozdrawiamy serdecznie<br>EWA Gabinet podologiczny<br>'
+        : '<p style="margin:8px 0 0;font-size:17px;line-height:1.6;color:#17504B">Pozdrawiamy serdecznie<br>' . $e(BON_MARKA['mian']) . '<br>'
           . '<a href="https://www.ewa-gabinet.pl" style="color:#17504B;text-decoration:underline">www.ewa-gabinet.pl</a></p>';
     $podKarta = $wewnetrzny ? '' : '<p style="margin:14px 0 0;font-family:' . $e($f) . ';font-size:13px;line-height:1.5;color:#3E6863">'
         . 'EWA Gabinet Kosmetyczno-Podologiczny, ul. ks. Piotra Skargi 72, 95-200 Pabianice</p>';

@@ -134,6 +134,49 @@ function bon_testy_straznik(array $k, PDO $pdo): array {
         json_encode([$u, $zostaly]));
     $t('#264 sprzątanie: drugi przebieg nic nie usuwa; bez katalogu konfigu – pusto', bon_sprzatanie_dziennikow($ks) === [] && bon_sprzatanie_dziennikow(['_katalog' => '']) === []);
 
+    // #259 zapas (Bartek 27.11 „A”): strażnik z crona – mail na alerty@ w 7–22, ten sam alarm raz na 24 h, „w normie” raz
+    foreach (glob($kat . '/bony-zdarzenia/*.log') ?: [] as $f) @unlink($f); // bez powiadomienie-blad z testów wyżej
+    @unlink($kat . '/bony-powiadomienia.txt');
+    $db->exec('DELETE FROM vouchers');
+    $zamowienia = [];
+    $o10 = new DateTimeImmutable($teraz->format('Y-m-d') . ' 10:00:00', new DateTimeZone(BON_STREFA));
+    $kc = array_replace($ks, ['sync_od' => $o10->modify('-1 day')->format('Y-m-d H:i:s')]);
+    $zam = static function (DateTimeImmutable $czas) use (&$zamowienia, $produkt): string {
+        $id = bon_test_uuid();
+        $zamowienia[$id] = ['id' => $id, 'status' => 'completed', 'amount' => 20000, 'currency' => 'pln', 'quantity' => 1, 'product_name' => 'Bon',
+            'customer_email' => 'straznik@example.com', '_produkt' => $produkt, 'created_at' => $czas->format('c')];
+        return $id;
+    };
+    $cron = static function (DateTimeImmutable $chwila, array $kk = []) use ($kc, $db, $kat): array {
+        file_put_contents($kat . BON_STRAZNIK_CRON_PLIK, (string)($chwila->getTimestamp() - 120)); // cron właśnie zsynchronizował
+        return bon_straznik_cron(array_replace($kc, $kk), $db, $chwila);
+    };
+    $maile = static fn(string $temat) => substr_count(is_file($kat . '/bony-powiadomienia.txt') ? (string)file_get_contents($kat . '/bony-powiadomienia.txt') : '', '== ' . $temat);
+    $z1 = $zam($o10->modify('-45 minutes'));
+    $r = $cron($o10->setTime(23, 30));
+    $t('#259 cron: 23:30 – poza godzinami, bez maila', $r['akcja'] === 'poza godzinami' && $maile('Pilne') === 0, json_encode($r, JSON_UNESCAPED_UNICODE));
+    $r = $cron($o10);
+    $t('#259 cron: 10:00, zapłacone 45 min temu bez bonu → mail „Pilne: strażnik sprzedaży bonów – sprzedaż”', $r['akcja'] === 'mail alarm'
+        && $maile('Pilne: strażnik sprzedaży bonów – sprzedaż') === 1, json_encode($r, JSON_UNESCAPED_UNICODE));
+    $tekst = (string)@file_get_contents($kat . '/bony-powiadomienia.txt');
+    $t('#259 cron: mail bez e-maila kupującego i bez pełnego id zamówienia', !str_contains($tekst, 'straznik@example.com') && !str_contains($tekst, $z1), $tekst);
+    $r = $cron($o10->modify('+1 hour'));
+    $t('#259 cron: 11:00 ten sam alarm → bez drugiego maila', $r['akcja'] === 'ten sam alarm – mail był' && $maile('Pilne') === 1, json_encode($r, JSON_UNESCAPED_UNICODE));
+    $r = $cron($o10->modify('+25 hours'));
+    $t('#259 cron: po 25 h ten sam alarm → mail znowu', $r['akcja'] === 'mail alarm' && $maile('Pilne') === 2, json_encode($r, JSON_UNESCAPED_UNICODE));
+    $z2 = $zam($o10->modify('+25 hours')->modify('-40 minutes'));
+    $r = $cron($o10->modify('+26 hours'));
+    $t('#259 cron: drugie zamówienie bez bonu (zmiana alarmu) → mail od razu', $r['akcja'] === 'mail alarm' && $maile('Pilne') === 3, json_encode($r, JSON_UNESCAPED_UNICODE));
+    foreach ([$z1, $z2] as $z) $bon($z);
+    $r = $cron($o10->modify('+27 hours'));
+    $r2 = $cron($o10->modify('+28 hours'));
+    $t('#259 cron: bony są → jeden mail „w normie”, potem cisza', $r['akcja'] === 'mail w normie' && $r2['akcja'] === 'w normie'
+        && $maile('Strażnik sprzedaży bonów: w normie') === 1, json_encode([$r, $r2], JSON_UNESCAPED_UNICODE));
+    $t('#259 cron: wyłącznik → nic', $cron($o10, ['straznik' => false]) === ['akcja' => 'wyłączony']);
+    $t('#259 klucz: minuty nie zmieniają klucza, id zamówień tak', bon_straznik_klucz(['powody' => ['cron: brak synchronizacji od 80 min'], 'bez_bonu_id' => []])
+        === bon_straznik_klucz(['powody' => ['cron: brak synchronizacji od 140 min'], 'bez_bonu_id' => []])
+        && bon_straznik_klucz(['powody' => ['sprzedaż: 1 …'], 'bez_bonu_id' => ['aaaa']]) !== bon_straznik_klucz(['powody' => ['sprzedaż: 1 …'], 'bez_bonu_id' => ['bbbb']]));
+
     foreach (['bony-zdarzenia', 'bony-webhook-log', 'bony-mail-bledy'] as $pod) {
         foreach (glob($kat . '/' . $pod . '/*') ?: [] as $f) @unlink($f);
         @rmdir($kat . '/' . $pod);
