@@ -147,7 +147,7 @@
           <p class="n-menu-poz n-menu-pomoc" data-p-menu-poz="pomoc" data-n-pomoc="bez-instrukcji" hidden data-astro-cid-lkdlr2dg></p>
           <button class="n-menu-poz n-menu-wyloguj" type="button" data-p-menu-poz="wyloguj" data-astro-cid-lkdlr2dg>Wyloguj</button>
         </nav>
-        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu a0baf2e · 27.11.2026</p>
+        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu fe729b9 · 27.11.2026</p>
       </div>
     </dialog>
   </header>
@@ -221,35 +221,6 @@
       <!-- projekt pkt 2 (wpis 18:14): „Zalogowano…”, Instrukcja, Zmień hasło, Wyloguj i „Pobierz nowe zamówienia” są w menu ☰ ramki
            (NarzedzieRamka.astro, [data-p-menu-poz]); tu zostaje tylko wynik automatycznego pobrania zamówień przy wejściu (Gabinet) -->
       <p class="podpowiedz sync-wynik tylko-biuro" aria-live="polite" data-p-sync-wynik hidden></p>
-
-      <!-- wpis 01:51 (Bartek 26.11): „Zrealizowano z bonów” – suma odjęć z sald po cofnięciach za okres; tylko Gabinet i Admin
-           (poziom Bon: serwer 403, kafelek schowany). Domyślnie bieżący miesiąc. Dane: /api/bon/raport.php (Backend, #158). -->
-      <section class="karta zrealizowano tylko-biuro" aria-labelledby="zr-tytul" data-p-zr hidden>
-        <h2 id="zr-tytul">Zrealizowano z bonów</h2>
-        <p class="zr-kwota" aria-live="polite" data-p-zr-kwota></p>
-        <!-- #210 (Bartek 26.11 ok. 23:00): „N realizacji” w podpisie to przycisk – pod kafelkiem rozwija się lista z wybranego okresu;
-             saldo pozostałe na bonach na koniec okresu (pola lista / saldo z raport.php, #234) -->
-        <p class="zr-podpis" data-p-zr-podpis></p>
-        <p class="zr-saldo" data-p-zr-saldo hidden></p>
-        <div class="zr-okresy" role="group" aria-label="Okres" data-p-zr-okresy>
-          <button type="button" data-p-zr-okres="dzis" aria-pressed="false">Dziś</button>
-          <button type="button" data-p-zr-okres="tydzien" aria-pressed="false">Tydzień</button>
-          <button type="button" data-p-zr-okres="miesiac" aria-pressed="true">Miesiąc</button>
-          <button type="button" data-p-zr-okres="rok" aria-pressed="false">Rok</button>
-          <button type="button" data-p-zr-okres="zakres" aria-pressed="false">Zakres dat</button>
-        </div>
-        <form class="zr-zakres formularz" data-p-zr-zakres hidden>
-          <label class="pole"><span class="etykieta">Od</span><input name="od" type="date" required></label>
-          <label class="pole"><span class="etykieta">Do</span><input name="do" type="date" required></label>
-          <button class="przycisk obrys" type="submit">Pokaż</button>
-        </form>
-        <p class="blad" data-p-zr-blad hidden></p>
-        <!-- #210: lista realizacji z okresu (najnowsze u góry); wiersz otwiera bon; cofnięte przekreślone, poza sumą -->
-        <div class="zr-lista-blok" id="zr-lista" data-p-zr-lista-blok hidden>
-          <ol class="zr-lista" aria-label="Realizacje z wybranego okresu" data-p-zr-lista></ol>
-          <p class="podpowiedz zr-obcieta" data-p-zr-obcieta hidden></p>
-        </div>
-      </section>
 
       <!-- KASA, ekran startowy: skan aparatem telefonu (kod QR otwiera panel z ?nr=), numer z maską, e-mail jako link -->
       <section class="kasa-start tylko-kasa" data-k-start>
@@ -1177,6 +1148,37 @@
           </div>
         </details>
       </section>
+
+      <!-- #330 (przegląd UX 27.11): raport POD szukaniem i kartami bonu – w Gabinecie pierwsze jest szukanie (pole numeru na
+           pierwszym ekranie 390×664), a otwarty bon nie jest spychany w dół przez raport -->
+      <!-- wpis 01:51 (Bartek 26.11): „Zrealizowano z bonów” – suma odjęć z sald po cofnięciach za okres; tylko Gabinet i Admin
+           (poziom Bon: serwer 403, kafelek schowany). Domyślnie bieżący miesiąc. Dane: /api/bon/raport.php (Backend, #158). -->
+      <section class="karta zrealizowano tylko-biuro" aria-labelledby="zr-tytul" data-p-zr hidden>
+        <h2 id="zr-tytul">Zrealizowano z bonów</h2>
+        <p class="zr-kwota" aria-live="polite" data-p-zr-kwota></p>
+        <!-- #210 (Bartek 26.11 ok. 23:00): „N realizacji” w podpisie to przycisk – pod kafelkiem rozwija się lista z wybranego okresu;
+             saldo pozostałe na bonach na koniec okresu (pola lista / saldo z raport.php, #234) -->
+        <p class="zr-podpis" data-p-zr-podpis></p>
+        <p class="zr-saldo" data-p-zr-saldo hidden></p>
+        <div class="zr-okresy" role="group" aria-label="Okres" data-p-zr-okresy>
+          <button type="button" data-p-zr-okres="dzis" aria-pressed="false">Dziś</button>
+          <button type="button" data-p-zr-okres="tydzien" aria-pressed="false">Tydzień</button>
+          <button type="button" data-p-zr-okres="miesiac" aria-pressed="true">Miesiąc</button>
+          <button type="button" data-p-zr-okres="rok" aria-pressed="false">Rok</button>
+          <button type="button" data-p-zr-okres="zakres" aria-pressed="false">Zakres dat</button>
+        </div>
+        <form class="zr-zakres formularz" data-p-zr-zakres hidden>
+          <label class="pole"><span class="etykieta">Od</span><input name="od" type="date" required></label>
+          <label class="pole"><span class="etykieta">Do</span><input name="do" type="date" required></label>
+          <button class="przycisk obrys" type="submit">Pokaż</button>
+        </form>
+        <p class="blad" data-p-zr-blad hidden></p>
+        <!-- #210: lista realizacji z okresu (najnowsze u góry); wiersz otwiera bon; cofnięte przekreślone, poza sumą -->
+        <div class="zr-lista-blok" id="zr-lista" data-p-zr-lista-blok hidden>
+          <ol class="zr-lista" aria-label="Realizacje z wybranego okresu" data-p-zr-lista></ol>
+          <p class="podpowiedz zr-obcieta" data-p-zr-obcieta hidden></p>
+        </div>
+      </section>
     </div>
 
     <!-- wpis 18:14 pkt 2 / 4D: ekran Konta (tylko admin) otwierany z menu ☰ – osobny ekran z „← Wróć” zamiast sekcji w Gabinecie -->
@@ -1235,7 +1237,7 @@
 
     <footer class="n-dol" data-astro-cid-lkdlr2dg>
     <span class="n-pomoc" data-n-pomoc hidden data-astro-cid-lkdlr2dg></span>
-    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu a0baf2e · 27.11.2026</span>
+    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu fe729b9 · 27.11.2026</span>
   </footer>
 
 
@@ -1247,7 +1249,7 @@
 </button>
     
 
-    <script type="module" src="/_astro/Baza.astro_astro_type_script_index_0_lang.Cd5EV7LZ.js"></script>
+    <script type="module" src="/_astro/Baza.astro_astro_type_script_index_0_lang.B1EfJOmh.js"></script>
   </body>
 </html>
 

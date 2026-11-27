@@ -366,7 +366,7 @@ function bon_tekst(?string $v, int $max): string {
  * $wewnetrzny – mail do gabinetu (bony@, alerty@): stopka „System bonów”, bez pozdrowień dla klienta.
  */
 // 2026-11-25 (wpis 01:12 pkt 3, propozycja frontu 23:30 przyjęta 1:1): wygląd jak mail-bon.tpl – tło #EAF2EE, biała karta 600 px
-// z promieniem 24 px (telefon: 100%, odstępy 22/18), głowa: logo 44 px + „EWA” / „Gabinet podologiczny”, tytuł 30 px waga 300,
+// z promieniem 24 px (telefon: 100%, odstępy 22/18), głowa: logo 44 px + „EWA” / „Gabinet Podologiczny” (marka, Bartek 27.11), tytuł 30 px waga 300,
 // tekst 17 px/1.6 #2E5C57, przycisk-pigułka #236E66, podpis, pod kartą adres gabinetu. Układ tabelami (Outlook).
 const BON_MAIL_FONT = "Lato, 'Segoe UI', Helvetica, Arial, sans-serif";
 const BON_MAIL_AKAPIT = 'margin:0 0 14px;font-size:17px;line-height:1.6;color:#2E5C57';
@@ -397,7 +397,7 @@ function bon_mail_szablon(string $naglowek, string $trescHtml, array $przyciski 
         . '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px"><tr>'
         . '<td style="padding:0 12px 0 0;vertical-align:middle"><img src="https://www.ewa-gabinet.pl/img/gabinet/logo.png" width="44" height="44" alt="EWA" style="display:block;width:44px;height:44px;border:0"></td>'
         . '<td style="vertical-align:middle;font-family:' . $e($f) . ';color:#17504B"><span style="font-size:19px;font-weight:700;letter-spacing:.04em">EWA</span><br>'
-        . '<span style="font-size:14px;color:#3E6863">Gabinet podologiczny</span></td></tr></table>'
+        . '<span style="font-size:14px;color:#3E6863">Gabinet Podologiczny</span></td></tr></table>'
         . '<h1 class="tytul" style="margin:0 0 14px;font-size:30px;line-height:1.2;font-weight:300;color:#17504B">' . $e($naglowek) . '</h1>'
         . $trescHtml . $guziki . $podpis
         . '</td></tr></table>' . $podKarta
