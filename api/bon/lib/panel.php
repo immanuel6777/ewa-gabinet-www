@@ -536,8 +536,13 @@ function bon_panel_rezygnacja(array $k, PDO $pdo, int $voucherId): ?array {
         'godzina' => $w['kanal'] === 'strona' ? substr((string)$w['zlozono_at'], 11, 5) : null, // P-12: zgłoszona na /bon – z godziną
         'zwrot_do' => (new DateTimeImmutable($otrzymano, new DateTimeZone(BON_STREFA)))->modify('+14 days')->format('Y-m-d'),
         'kanal' => (string)$w['kanal'], 'saldo' => bon_zl((int)bon_grosze($w['saldo_pln'])), 'kwota' => bon_zl((int)bon_grosze($w['kwota_pln'])),
-        // #226: wpisy sprzed poprawki – „Oznacz zwrot” zapisywał 'zlecony' + 'recznie', którego cron nie potwierdza
-        'stan' => $w['zwrot_stan'] === 'zlecony' && ($w['zwrot_ref'] ?? '') === 'recznie' ? 'potwierdzony' : (string)$w['zwrot_stan']];
+        'stan' => bon_panel_zwrot_stan($w)];
+}
+
+/** Stan zwrotu rezygnacji dla panelu (historia.php i szukaj.php – #227: ten sam słownik na karcie i na liście wyników). */
+function bon_panel_zwrot_stan(array $w): string {
+    // #226: wpisy sprzed poprawki – „Oznacz zwrot” zapisywał 'zlecony' + 'recznie', którego cron nie potwierdza
+    return $w['zwrot_stan'] === 'zlecony' && ($w['zwrot_ref'] ?? '') === 'recznie' ? 'potwierdzony' : (string)$w['zwrot_stan'];
 }
 
 // --- wyszukiwanie (krok 4): numer bonu, e-mail kupującego albo id zamówienia Easytools ---
@@ -628,9 +633,12 @@ function bon_panel_szukaj(array $k, PDO $pdo, string $q, ?DateTimeImmutable $ter
             'grupa' => substr(hash('sha256', (string)$b['easytools_order_id']), 0, 10),
             // P-15: rabat na karcie – tylko Ewa i admin (kasa liczy saldo, nie cenę zakupu); bez sesji (testy, stare wywołania) też
             'rabat' => ($sesja === null || $sesja['rola'] === 'admin' || !empty($sesja['rezygnacje'])) ? bon_panel_rabat($b) : null,
+            // #227: zwrot przy rezygnacji {kwota, stan, przeliczona} albo null (brak rezygnacji / anulowana) – jak `rezygnacja` w historia.php;
+            // tylko admin i Gabinet (kasa – bez pola, niżej)
+            'zwrot' => $d['zwrot'] ?? null,
         ] + ($fragment ? ['email' => (string)$b['buyer_email']] : []); // #201: widać, który adres pasuje (tylko admin i Ewa)
     }, $wiersze20);
-    if ($kasa) $bony = array_map(static function ($c) { unset($c['rabat']); return $c; }, $bony); // wpis 19:33: kasa bez pola rabatu
+    if ($kasa) $bony = array_map(static function ($c) { unset($c['rabat'], $c['zwrot']); return $c; }, $bony); // wpis 19:33: kasa bez rabatu; #227: bez zwrotu
     // kolejność: najpierw bony, którymi można płacić, potem pozostałe; w każdej grupie najnowsze pierwsze (zapytanie już tak sortuje)
     usort($bony, static fn($a, $b) => ($a['status'] === 'valid' ? 0 : 1) <=> ($b['status'] === 'valid' ? 0 : 1));
     return [200, ['ok' => true, 'typ' => $typ, 'bony' => $bony, 'wiecej' => count($wiersze) > BON_PANEL_SZUKAJ_MAX]];
@@ -646,7 +654,7 @@ function bon_panel_rabat(array $bon): ?array {
     return ['zaplacono' => bon_zl($zaplacono), 'rabat' => bon_zl($nominal - $zaplacono), 'kod' => $bon['promo_code'] ?: null];
 }
 
-/** Dla kart wyników: ostatnia realizacja (data) i znacznik „mail nie dotarł” – jednym zapytaniem na tabelę. */
+/** Dla kart wyników: ostatnia realizacja (data), znacznik „mail nie dotarł” i zwrot przy rezygnacji (#227) – jednym zapytaniem na tabelę. */
 function bon_panel_karty_dodatki(array $k, PDO $pdo, array $ids): array {
     if (!$ids) return [];
     $miejsca = implode(',', array_fill(0, count($ids), '?'));
@@ -659,6 +667,18 @@ function bon_panel_karty_dodatki(array $k, PDO $pdo, array $ids): array {
     foreach ($st->fetchAll() as $r) {
         $id = (int)$r['voucher_id'];
         if (!isset($wynik[$id]['mail_odbity'])) $wynik[$id]['mail_odbity'] = $r['akcja'] === 'mail-odbity';
+    }
+    // #227: zwrot przy rezygnacji (jedna nieanulowana na bon – UNIQUE voucher_id); przed migracją kroku 1 (brak tabeli) – bez pola
+    try {
+        $st = $pdo->prepare('SELECT voucher_id, saldo_pln, kwota_pln, zwrot_stan, zwrot_ref FROM ' . bon_tabela($k, 'voucher_withdrawals')
+            . " WHERE voucher_id IN ($miejsca) AND zwrot_stan <> 'anulowana'");
+        $st->execute($ids);
+        foreach ($st->fetchAll() as $w) {
+            $kwota = (int)bon_grosze($w['kwota_pln']);
+            $wynik[(int)$w['voucher_id']]['zwrot'] = ['kwota' => bon_zl($kwota), 'stan' => bon_panel_zwrot_stan($w),
+                'przeliczona' => $kwota < (int)bon_grosze($w['saldo_pln'])]; // „przeliczone do zapłaconej ceny” – jak w historia.php
+        }
+    } catch (PDOException) {
     }
     return $wynik;
 }
@@ -915,6 +935,7 @@ function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
             $stara = substr((string)$bon['expires_at'], 0, 10);
             // przedłużenie wygasłego bonu z saldem: status w bazie zostaje valid (wygasły liczony z daty), więc znów działa
             $pdo->prepare("UPDATE $tabB SET expires_at = ? WHERE id = ?")->execute([$data, $bon['id']]);
+            // prefiks „RRRR-MM-DD → RRRR-MM-DD” czyta lib/raport.php (saldo na koniec okresu, #210) – nie zmieniać
             $opis = "$stara → $data";
         } elseif ($akcja === 'zatwierdz') {
             if ($bon['status'] !== 'held') { $pdo->rollBack(); return [409, ['ok' => false, 'blad' => 'Zatwierdzić można tylko bon wstrzymany.']]; }
@@ -930,6 +951,7 @@ function bon_panel_admin(array $k, PDO $pdo, array $sesja, array $dane, ?DateTim
             $saldoZ = (int)bon_grosze($bon['balance_pln']);
             $rezZ = $bon['status'] === 'withdrawn' ? bon_panel_rezygnacja($k, $pdo, (int)$bon['id']) : null;
             $kwotaZ = $rezZ ? (int)bon_grosze($rezZ['kwota']) : bon_kwota_zwrotu($bon, $saldoZ);
+            // prefiks „<status> → zwrócony” czyta lib/raport.php (saldo na koniec okresu, #210) – nie zmieniać
             $opis = $bon['status'] . ' → zwrócony, saldo w chwili zwrotu ' . bon_zl($saldoZ) . ' zł, do zwrotu ' . bon_zl($kwotaZ) . ' zł'
                 . ($kwotaZ < $saldoZ ? ' (przeliczone do zapłaconej ceny)' : '');
             if ($bon['status'] === 'withdrawn') {

@@ -2,6 +2,8 @@
 // Panel realizacji bonów – wyszukiwanie (krok 4: 2026-11-23). Tylko po zalogowaniu (każda rola), JSON + X-CSRF.
 //   POST {q} – numer bonu (→ {typ: kod, kod}), e-mail kupującego albo id zamówienia Easytools (→ {typ, bony: [...], wiecej}).
 //   POST {q, fragment: true} – karta #201: fragment e-maila albo id zamówienia (min. 3 znaki, admin i Ewa) → {typ: fragment, bony (z „email”), wiecej}.
+//   #227: karta w `bony` dla admina i Gabinetu ma `zwrot: {kwota: "5.80", stan: oczekuje|zlecony|potwierdzony|nieudany, przeliczona}` albo null
+//   (bez rezygnacji / anulowana) – jak `rezygnacja` w historia.php; kasa (tryb Bon) – bez pola.
 // POST, nie GET: e-mail kupującego nie trafia do logów serwera ani historii przeglądarki. Logika: lib/panel.php.
 
 declare(strict_types=1);

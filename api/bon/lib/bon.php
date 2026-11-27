@@ -306,6 +306,7 @@ function bon_przedluz(array $k, PDO $pdo, array $bon, string $kto, ?DateTimeImmu
                          WHERE id = ? AND przedluzony_at IS NULL AND status = \'valid\'');
     $up->execute([$okno['nowa'], $stara, $teraz->format('Y-m-d H:i:s'), $bon['id']]);
     if ($up->rowCount() !== 1) return [409, ['ok' => false, 'blad' => 'Bon był już przedłużany – drugie bezpłatne przedłużenie nie przysługuje.']];
+    // prefiks „RRRR-MM-DD → RRRR-MM-DD” czyta lib/raport.php (saldo na koniec okresu, #210) – nie zmieniać
     $opis = "$stara → {$okno['nowa']} (o " . BON_PRZEDLUZENIE_MIESIECY . ' mies.)';
     bon_historia($k, $pdo, (int)$bon['id'], 'przedluzenie', $opis, $kto, $teraz);
     return [200, ['ok' => true, 'akcja' => 'przedluzenie', 'opis' => 'ważność przedłużona: ' . $opis, 'wazny_do' => $okno['nowa']]];
