@@ -13,7 +13,7 @@ return [
 
     // --- synchronizacja zamówień z API (bony bez webhooka) ---
     'sync_tryb' => 'bon',                // 'wylaczony' | 'raport' | 'bon'
-    'sync_od' => '2026-11-23 10:00:00',  // zamówienia starsze są pomijane; przed startem: chwila startu (PLAN-START, krok 16a)
+    'sync_od' => '2026-11-27 04:00:00',  // START SPRZEDAŻY (Bartek 27.11 03:05: „start 04:00”, czas Warszawy; wcześniej plan 8:00) – zamówienia starsze (testy) są pomijane (PLAN-START, krok 16a)
     'sync_dni' => 7,
     'sync_odstep_s' => 20,
 
@@ -57,7 +57,7 @@ return [
         'price_1UeMn8DJkxNsH4K3wXFIBCh4' => 200, 'price_1UeHCtDJkxNsH4K38JGuXhbj' => 300,
         'price_1UeMn9DJkxNsH4K38LqAGPRG' => 500, 'price_1UeMn8DJkxNsH4K3Y4D7uIaE' => 'dowolna',
     ],
-    'prog_wstrzymania' => 0,             // DO CZWARTKU 0 (testy z kodem rabatowym); na start 0.8 – osobnym PR
+    'prog_wstrzymania' => 0.8,           // START (PR „start”, 27.11): zapłacono < 80% nominału → bon wstrzymany (kody rabatowe tylko na 200/300/500)
     'min_dowolna_pln' => 180,
 
     // --- bon (ważność: „kamienie” wyżej) ---
