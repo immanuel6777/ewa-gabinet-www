@@ -13,6 +13,8 @@ try {
     $k = bon_konfig();
     $pdo = bon_pdo($k);
     [$raport, $zadania] = bon_synchronizuj($k, $pdo, 'cron');
+    // #259: znacznik „cron żyje” dla strażnika sprzedaży (api/bon/straznik.php) – także przy „pominięto”; wyjątek wyżej = bez znacznika
+    try { require_once __DIR__ . '/straznik.php'; bon_straznik_znacznik($k); } catch (Throwable) {}
     bon_zdarzenie($k, 'synchronizacja', $raport);
     bon_synchronizuj_wyslij($k, $zadania, 'cron');
     // kontrola dostarczenia wysłanych maili po MessageID (lib/mail.php); błąd tu nie przerywa crona

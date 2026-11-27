@@ -26,6 +26,9 @@ return [
     //     bon_zwroty_dostep); false = wyłączone bez zmiany kodu ---
     'easytools_odbieraj_dostep' => true,
 
+    // --- #259 (27.11): strażnik sprzedaży (api/bon/straznik.php, workflow GitHuba co godzinę 7–22) – false = wyłączony (odpowiada { wlaczony: false }, bez alarmu) ---
+    'straznik' => true,
+
     // --- konta panelu (wpis 13:20): false = konta z panel_konta w konfigu; true = z tabeli voucher_accounts (po migracji konta.sql
     //     i przeniesieniu kont – plan/BONY-KONTA-WDROZENIE.md). Włączenie po starcie, na słowo Bartka; wycofanie = false + wrzuta ---
     'konta_z_bazy' => true, // WŁĄCZONE 25.11 na słowo Bartka – po migracji konta.sql i przeniesieniu kont (log.php: voucher_accounts > 0)
