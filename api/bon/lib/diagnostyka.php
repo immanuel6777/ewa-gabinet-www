@@ -204,6 +204,14 @@ function bon_log_realizacje(array $k, PDO $pdo, int $ile): array {
 }
 
 /** Całość dla log.php. Błąd bazy nie przerywa reszty: zwraca klasę wyjątku i kod, bez treści (mogłaby zawierać login do bazy). */
+/** Nazwy tabel test_* w bazie (MySQL na OVH, SQLite w testach) – resztki po test-ovh.php (?zostaw=1 albo przerwany przebieg). */
+function bon_log_tabele_testowe(PDO $pdo): array {
+    $sql = $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite'
+        ? "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'test!_%' ESCAPE '!' ORDER BY name"
+        : "SHOW TABLES LIKE 'test\_%'";
+    return array_map('strval', $pdo->query($sql)->fetchAll(PDO::FETCH_COLUMN));
+}
+
 function bon_diagnostyka(array $k, int $ile = 10, int $dni = 2, int $bony = 20, int $zdarzen = 40, ?PDO $pdo = null): array {
     $wersja = is_file(__DIR__ . '/wersja.json') ? json_decode((string)file_get_contents(__DIR__ . '/wersja.json'), true) : null;
     $wynik = [
@@ -253,6 +261,8 @@ function bon_diagnostyka(array $k, int $ile = 10, int $dni = 2, int $bony = 20, 
             try { $wynik['baza']['tabele'][$t] = (int)$pdo->query('SELECT COUNT(*) FROM ' . bon_tabela($k, $t))->fetchColumn(); }
             catch (PDOException) { $wynik['baza']['tabele'][$t] = 'brak tabeli'; }
         }
+        // resztki po test-ovh.php (Backend 28.11): same nazwy tabel test_*, bez treści; pusta lista = sprzątanie zadziałało
+        $wynik['baza']['tabele_testowe'] = bon_log_tabele_testowe($pdo);
         $wynik['bony'] = bon_log_bony($k, $pdo, $bony);
         $wynik['realizacje'] = bon_log_realizacje($k, $pdo, 10);
         // każda nieudana próba to 2 wpisy (login+IP i samo IP)
