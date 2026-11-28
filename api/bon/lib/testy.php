@@ -77,6 +77,8 @@ function bon_test_konfig(array $k): array {
         'panel_konta' => [
             'ewa' => ['haslo' => password_hash('haslo-ewy-test', PASSWORD_DEFAULT), 'imie' => 'Ewa', 'rola' => 'realizacja'],
             'bartek' => ['haslo' => password_hash('haslo-bartka-test', PASSWORD_DEFAULT), 'imie' => 'Bartek', 'rola' => 'admin'],
+            // poziom Gabinet (jak Ewa na OVH: realizacja + rezygnacje) – kontrakt odpowiedzi panelu dla trzech ról (R4, tests/kontrakt-panelu.json)
+            'gabinet' => ['haslo' => password_hash('haslo-gabinetu-test', PASSWORD_DEFAULT), 'imie' => 'Gabinet', 'rola' => 'realizacja', 'rezygnacje' => true],
         ],
         'uslugi_plik' => bon_test_uslugi((string)($k['_katalog'] ?? sys_get_temp_dir())),
         'kontakt_plik' => bon_test_kontakt((string)($k['_katalog'] ?? sys_get_temp_dir())),
