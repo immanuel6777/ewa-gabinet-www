@@ -199,13 +199,19 @@ function bon_straznik_powiadomienia_blad(array $k, DateTimeImmutable $teraz): in
 function bon_sprzatanie_dziennikow(array $k, int $dni = 90, ?int $teraz = null): array {
     $kat = (string)($k['_katalog'] ?? '');
     if ($kat === '') return [];
-    $granica = ($teraz ?? time()) - $dni * 86400;
+    $chwila = $teraz ?? time();
+    $granica = $chwila - $dni * 86400;
+    // pliki dzienne mają w nazwie datę z kalendarza Warszawy – porównujemy daty, nie sekundy, bo strtotime() liczy w strefie PHP
+    // (UTC na serwerze) i tuż po północy albo przy zmianie czasu plik sprzed 91 dni zostawał (test padł 28.11 o 00:18)
+    $granicaDnia = (new DateTimeImmutable('@' . $chwila))->setTimezone(new DateTimeZone(BON_STREFA))->modify("-$dni days")->format('Y-m-d');
     $wynik = [];
     foreach (['bony-webhook-log/*.log', 'bony-zdarzenia/*.log', 'bony-mail-bledy/*.txt', 'bony-mailjet.jsonl', 'bony-smtp.jsonl', 'bony-powiadomienia.txt'] as $wzor) {
         foreach (glob($kat . '/' . $wzor) ?: [] as $plik) {
             // pliki dzienne: data z nazwy (RRRR-MM-DD.log) – odporna na dopisywanie; inne: data ostatniej zmiany
-            $d = preg_match('/(\d{4}-\d{2}-\d{2})\.log$/', $plik, $m) ? strtotime($m[1] . ' 23:59:59') : (int)@filemtime($plik);
-            if ($d !== false && $d > 0 && $d < $granica && @unlink($plik)) $wynik[strtok($wzor, '/')] = ($wynik[strtok($wzor, '/')] ?? 0) + 1;
+            $stary = preg_match('/(\d{4}-\d{2}-\d{2})\.log$/', $plik, $m)
+                ? $m[1] < $granicaDnia
+                : (($d = (int)@filemtime($plik)) > 0 && $d < $granica);
+            if ($stary && @unlink($plik)) $wynik[strtok($wzor, '/')] = ($wynik[strtok($wzor, '/')] ?? 0) + 1;
         }
     }
     return $wynik;

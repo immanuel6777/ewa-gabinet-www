@@ -130,9 +130,24 @@ function bon_testy_straznik(array $k, PDO $pdo): array {
     $t('#264 sprzątanie: usuwa dzienniki > 90 dni (webhooki 2, zdarzenia 1, znacznik 1, plik testowy 1), zostawia nowsze',
         $u === ['bony-webhook-log' => 2, 'bony-zdarzenia' => 1, 'bony-mail-bledy' => 1, 'bony-mailjet.jsonl' => 1]
         && $zostaly === [$dzien(89) . '.log', $dzien(1) . '.log'] && is_file($kat . '/bony-mail-bledy/nowy.txt')
-        && !is_file($kat . '/bony-mail-bledy/stary.txt') && !is_file($kat . '/bony-mailjet.jsonl') && is_file($kat . '/bony-zdarzenia/' . $teraz->format('Y-m-d') . '.log'),
+        && !is_file($kat . '/bony-mail-bledy/stary.txt') && !is_file($kat . '/bony-mailjet.jsonl')
+        // zdarzenie sprzed 1 h (#273 wyżej) zostaje – data jego pliku, nie dzisiejsza (tuż po północy to jeszcze wczoraj)
+        && is_file($kat . '/bony-zdarzenia/' . $teraz->modify('-1 hour')->format('Y-m-d') . '.log'),
         json_encode([$u, $zostaly]));
     $t('#264 sprzątanie: drugi przebieg nic nie usuwa; bez katalogu konfigu – pusto', bon_sprzatanie_dziennikow($ks) === [] && bon_sprzatanie_dziennikow(['_katalog' => '']) === []);
+    // #264: granica liczona w dniach kalendarza Warszawy, nie w sekundach UTC – tuż po północy i przy zmianie czasu
+    // (test padał 28.11 ok. 00:18: plik sprzed 91 dni zostawał, bo strtotime() liczył koniec jego dnia w strefie PHP)
+    foreach (['2026-11-28 00:10:00', '2026-11-28 01:30:00', '2027-06-20 00:10:00', '2027-01-15 23:50:00'] as $chwila) {
+        foreach (glob($kat . '/bony-webhook-log/*.log') ?: [] as $f) @unlink($f);
+        $t0 = new DateTimeImmutable($chwila, new DateTimeZone(BON_STREFA));
+        foreach ([91, 90, 89] as $d) file_put_contents($kat . '/bony-webhook-log/' . $t0->modify("-$d days")->format('Y-m-d') . '.log', "{}\n");
+        $u0 = bon_sprzatanie_dziennikow($ks, 90, $t0->getTimestamp());
+        $zost = array_map('basename', glob($kat . '/bony-webhook-log/*.log') ?: []);
+        sort($zost);
+        $t("#264 sprzątanie o $chwila (Warszawa): usuwa plik sprzed 91 dni, zostawia 90 i 89",
+            ($u0['bony-webhook-log'] ?? 0) === 1 && $zost === [$t0->modify('-90 days')->format('Y-m-d') . '.log', $t0->modify('-89 days')->format('Y-m-d') . '.log'],
+            json_encode([$u0, $zost]));
+    }
 
     // #259 zapas (Bartek 27.11 „A”): strażnik z crona – mail na alerty@ w 7–22, ten sam alarm raz na 24 h, „w normie” raz
     foreach (glob($kat . '/bony-zdarzenia/*.log') ?: [] as $f) @unlink($f); // bez powiadomienie-blad z testów wyżej
