@@ -40,11 +40,11 @@
   
     <!-- klasa .js przed malowaniem: elementy z animacją wejścia startują ukryte tylko gdy JS działa -->
     <script>document.documentElement.classList.add('js')</script>
-  <link rel="stylesheet" href="/_astro/logo.B0WK5N8t.css">
+  <link rel="stylesheet" href="/_astro/logo.CNfNzvHS.css">
 <style>.pasek-salda[data-astro-cid-5cigxnkc]{flex-direction:column;gap:8px;width:100%;display:flex}.pasek-salda[data-astro-cid-5cigxnkc][hidden]{display:none}.tor[data-astro-cid-5cigxnkc]{border-radius:var(--r-pill);background:var(--c-chip);height:10px;box-shadow:inset 0 0 0 1px var(--c-line-soft);overflow:hidden}.wypelnienie[data-astro-cid-5cigxnkc]{height:100%;width:var(--proc,0%);border-radius:inherit;background:var(--c-akcja);transition:width .6s var(--ease);display:block}.podpis[data-astro-cid-5cigxnkc]{font-size:var(--fs-small);color:var(--c-ink-muted);margin:0}@media (prefers-reduced-motion:reduce){.wypelnienie[data-astro-cid-5cigxnkc]{transition:none}}
 </style>
 <link rel="stylesheet" href="/_astro/panel-bonow.wUYB_tCn.css">
-<link rel="stylesheet" href="/_astro/Baza.CAfi0_Cm.css">
+<link rel="stylesheet" href="/_astro/Baza.T4qzkwyq.css">
 <link rel="stylesheet" href="/_astro/KartaBonu.G03djIBG.css"><script type="module" src="/_astro/page.TEh_1uMG.js"></script></head>
   <body class="bez-paska-kontaktu">
     <a class="przeskocz" href="#tresc">Przejdź do treści</a>
@@ -147,7 +147,7 @@
           <p class="n-menu-poz n-menu-pomoc" data-p-menu-poz="pomoc" data-n-pomoc="bez-instrukcji" hidden data-astro-cid-lkdlr2dg></p>
           <button class="n-menu-poz n-menu-wyloguj" type="button" data-p-menu-poz="wyloguj" data-astro-cid-lkdlr2dg>Wyloguj</button>
         </nav>
-        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu 9acbc82 · 28.11.2026</p>
+        <p class="n-menu-wersja" data-astro-cid-lkdlr2dg>wersja panelu 54ae3f8 · 28.11.2026</p>
       </div>
     </dialog>
   </header>
@@ -1072,7 +1072,11 @@
           </div>
           <p class="blad" data-p-platnosc-ostrzezenie hidden></p>
           <!-- REVIEW nr 5: stan płatności w Easytools na kliknięcie (otwarcie bonu przy kasie nie czeka na Easytools) -->
-          <button class="przycisk obrys maly" type="button" data-p-platnosc-sprawdz hidden>Sprawdź płatność w Easytools</button>
+          <!-- #347: błąd sprawdzenia tuż pod przyciskiem (układ .rez-potw: przycisk, pod nim błąd na całą szerokość) -->
+          <div class="rez-potw" data-p-platnosc-wiersz hidden>
+            <button class="przycisk obrys maly" type="button" data-p-platnosc-sprawdz>Sprawdź płatność w Easytools</button>
+            <p class="blad" data-p-blad-platnosc hidden></p>
+          </div>
           <!-- rezygnacja, która przyszła mailem albo na papierze (krok 4): admin i konto z 'rezygnacje' => true (Ewa) -->
           <div data-p-rez-sekcja hidden>
             <form class="admin-forma formularz" data-p-rez-forma>
@@ -1124,6 +1128,7 @@
           <div class="przedluz" data-p-przedluz hidden>
             <p data-p-przedluz-tekst></p>
             <button class="przycisk obrys" type="button" data-p-przedluz-przycisk>Przedłuż o 3 miesiące</button>
+            <p class="blad" data-p-blad-przedluz hidden></p><!-- #347: błąd przedłużenia pod przyciskiem, nie przy szukaniu -->
           </div>
           <form class="admin-forma formularz" data-p-waznosc hidden>
             <h3>Zmień datę ważności</h3>
@@ -1241,7 +1246,7 @@
 
     <footer class="n-dol" data-astro-cid-lkdlr2dg>
     <span class="n-pomoc" data-n-pomoc hidden data-astro-cid-lkdlr2dg></span>
-    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu 9acbc82 · 28.11.2026</span>
+    <span class="n-wersja" data-astro-cid-lkdlr2dg>wersja panelu 54ae3f8 · 28.11.2026</span>
   </footer>
 
 
@@ -1253,8 +1258,8 @@
 </button>
     
 
-    <script type="module" src="/_astro/Baza.astro_astro_type_script_index_0_lang.w-6VtRNR.js"></script>
+    <script type="module" src="/_astro/Baza.astro_astro_type_script_index_0_lang.D7DYnQJu.js"></script>
   </body>
 </html>
 
-<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.DpQePOk2.js"></script>
+<script type="module" src="/_astro/panel-bonow.astro_astro_type_script_index_0_lang.DtjmInjy.js"></script>
